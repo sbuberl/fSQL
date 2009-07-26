@@ -249,6 +249,9 @@ class fSQLWriteCursor extends fSQLTableCursor
 	}
 }
 
+/**
+ * Base class for fSQL tables
+ */
 class fSQLTable
 {
 	var $name = NULL;
@@ -285,6 +288,9 @@ class fSQLTable
 	function unlock() { return false; }
 }
 
+/**
+ * Class for temporary and in-memory tables.
+ */
 class fSQLTemporaryTable extends fSQLTable
 {
 	var $rcursor = NULL;
@@ -386,6 +392,9 @@ class fSQLTemporaryTable extends fSQLTable
 	function unlock() { return true; }
 }
 
+/**
+ * Class for the standard fSQL tables that are saved to the filesystem.
+ */
 class fSQLStandardTable extends fSQLTable
 {
 	var $cursor = NULL;
