@@ -170,8 +170,10 @@ class fSQLCursor
 
 	function first()
 	{
-		reset($this->entries);
-		$this->current_row_id = key($this->entries);
+		if(reset($this->entries) !== false)
+			$this->current_row_id = key($this->entries);
+		else
+			$this->current_row_id = false;
 		return $this->current_row_id;
 	}
 	
@@ -182,27 +184,33 @@ class fSQLCursor
 	
 	function isDone()
 	{
-		return $this->current_row_id !== false;
+		return $this->current_row_id === false;
 	}
 	
 	function last()
 	{
-		end($this->entries);
-		$this->current_row_id = key($this->entries);
+		if(end($this->entries) !== false)
+			$this->current_row_id = key($this->entries);
+		else
+			$this->current_row_id = false;
 		return $this->current_row_id;
 	}
 	
 	function previous()
 	{
-		prev($this->entries);
-		$this->current_row_id = key($this->entries);
+		if(prev($this->entries) !== false)
+			$this->current_row_id = key($this->entries);
+		else
+			$this->current_row_id = false;
 		return $this->current_row_id;
 	}
 	
 	function next()
 	{
-		next($this->entries);
-		$this->current_row_id = key($this->entries);
+		if(next($this->entries) !== false)
+			$this->current_row_id = key($this->entries);
+		else
+			$this->current_row_id = false;
 		return $this->current_row_id;		
 	}
 	
@@ -220,14 +228,20 @@ class fSQLCursor
 	}
 }
 
-class fSQLWriteCursor extends fSQLTableCursor
+class fSQLWriteCursor extends fSQLCursor
 {
-	var $uncommited = false;
+	var $uncommitted = false;
 
 	function fSQLWriteCursor(&$entries)
 	{
 		$this->entries =& $entries;
 		$this->first();
+	}
+	
+	function appendRow($entry)
+	{
+		$this->entries[] = $entry;
+		$this->uncommitted = true;
 	}
 
 	function updateField($column, $value)
@@ -235,7 +249,7 @@ class fSQLWriteCursor extends fSQLTableCursor
 		if($this->current_row_id !== false)
 		{
 			$this->entries[$this->current_row_id][$column] = $value;
-			$this->uncommited = true;
+			$this->uncommitted = true;
 		}
 	}
 
@@ -244,8 +258,13 @@ class fSQLWriteCursor extends fSQLTableCursor
 		if($this->current_row_id !== false)
 		{
 			unset($this->entries[$this->current_row_id]);
-			$this->uncommited = true;
+			$this->uncommitted = true;
 		}
+	}
+	
+	function isUncommitted()
+	{
+		return $this->uncommitted;
 	}
 }
 
@@ -298,7 +317,7 @@ class fSQLTemporaryTable extends fSQLTable
 	var $columns = NULL;
 	var $entries = NULL;
 	var $data_load =0;
-	var $uncommited = false;
+	var $uncommitted = false;
 
 	function fSQLTemporaryTable($name, &$database)
 	{
@@ -347,31 +366,15 @@ class fSQLTemporaryTable extends fSQLTable
 		return $this->wcursor;
 	}
 	
-	function insertRow($data) {
-		$this->entries[] = $data;
-		$this->uncommited = true;
-	}
-	
-	function updateRow($row, $data) {
-		foreach($data as $key=> $value)
-			$this->entries[$row][$key] = $value;
-		$this->uncommited = true;
-	}
-	
-	function deleteRow($row) {
-		unset($this->entries[$row]);
-		$this->uncommited = true;
-	}
-	
 	function commit()
 	{
-		$this->uncommited = false;
+		$this->uncommitted = false;
 	}
 	
 	function rollback()
 	{
 		$this->data_load = 0;
-		$this->uncommited = false;
+		$this->uncommitted = false;
 	}
 
 	// Free up all data
@@ -382,7 +385,7 @@ class fSQLTemporaryTable extends fSQLTable
 		$this->columns = NULL;
 		$this->entries = NULL;
 		$this->data_load = 0;
-		$this->uncommited = false;
+		$this->uncommitted = false;
 	}
 
 	/* Unnecessary for temporary tables */
@@ -397,12 +400,12 @@ class fSQLTemporaryTable extends fSQLTable
  */
 class fSQLStandardTable extends fSQLTable
 {
-	var $cursor = NULL;
+	var $rcursor = NULL;
+	var $wcursor = NULL;
 	var $columns = NULL;
 	var $entries = NULL;
 	var $columns_load = NULL;
 	var $data_load = NULL;
-	var $uncommited = false;
 	var $columnsLockFile = NULL;
 	var $columnsFile = NULL;
 	var $dataLockFile = NULL;
@@ -539,20 +542,20 @@ class fSQLStandardTable extends fSQLTable
 	{
 		$this->_loadEntries();
 
-		if($this->cursor === NULL)
-			$this->cursor = new fSQLCursor($this->entries);
+		if($this->rcursor === NULL)
+			$this->rcursor = new fSQLCursor($this->entries);
 		
-		return $this->cursor;
+		return $this->rcursor;
 	}
 	
 	function &getWriteCursor()
 	{
 		$this->_loadEntries();
 
-		if($this->cursor === NULL)
-			$this->cursor = new fSQLWriteCursor($this->entries);
+		if($this->wcursor === NULL)
+			$this->wcursor = new fSQLWriteCursor($this->entries);
 		
-		return $this->cursor;
+		return $this->wcursor;
 	}
 
 	function _loadEntries()
@@ -563,7 +566,6 @@ class fSQLStandardTable extends fSQLTable
 		$modified = fread($lock, 20);
 		if($this->data_load === NULL || $this->data_load < $modified)
 		{
-			$entries = NULL;
 			$this->data_load = $modified;
 
 			$this->dataFile->acquireRead();
@@ -578,12 +580,12 @@ class fSQLStandardTable extends fSQLTable
 			}
 	
 			$num_entries = rtrim($matches[1]);
-
+			$entries = array();
+			
 			if($num_entries != 0)
 			{
 				$columns = array_keys($this->getColumns());
 				$skip = false;
-				$entries = array();
 	
 				for($i = 0;  $i < $num_entries; $i++) {
 					$line = rtrim(fgets($dataHandle, 4096));
@@ -627,25 +629,6 @@ class fSQLStandardTable extends fSQLTable
 
 		return true;
 	}
-	
-	function insertRow($data) {
-		$this->_loadEntries();
-		$this->entries[] = $data;
-		$this->uncommited = true;
-	}
-	
-	function updateRow($row, $data) {
-		$this->_loadEntries();
-		foreach($data as $key=> $value)
-			$this->entries[$row][$key] = $value;
-		$this->uncommited = true;
-	}
-	
-	function deleteRow($row) {
-		$this->_loadEntries();
-		unset($this->entries[$row]);
-		$this->uncommited = true;
-	}
 
 	function setColumns($columnDefs)
 	{
@@ -673,7 +656,7 @@ class fSQLStandardTable extends fSQLTable
 	
 	function commit()
 	{
-		if($this->uncommited === false)
+		if($this->getWriteCursor()->isUncommitted() === false)
 			return;
 
 		$this->dataLockFile->acquireWrite();
@@ -714,7 +697,7 @@ class fSQLStandardTable extends fSQLTable
 		$this->dataFile->releaseWrite();
 		$this->dataLockFile->releaseWrite();
 
-		$this->uncommited = false;
+		$this->wcursor = null;
 	}
 	
 	function rollback()
@@ -725,7 +708,7 @@ class fSQLStandardTable extends fSQLTable
 
 	function drop()
 	{
-		if($this->lock !== null)
+		if($this->lock === null)
 		{
 			unlink($this->columnsFile->getPath());
 			unlink($this->columnsLockFile->getPath());
@@ -873,7 +856,7 @@ class fSQLDatabase
 		if($oldTable->exists()) {
 			if(!$oldTable->temporary()) {
 				$newTable =& $new_db->createTable($oldTable->getColumns());
-				copy($oldTable->dataFile->getPath(), $newTable-dataFile->getPath());
+				copy($oldTable->dataFile->getPath(), $newTable->dataFile->getPath());
 				copy($oldTable->dataLockFile->getPath(), $newTable->dataLockFile->getPath());
 				$this->dropTable($old_table_name);
 			} else {
@@ -1454,7 +1437,7 @@ class fSQLEnvironment
 		}
 
 		$tableColumns = $table->getColumns();
-		$tableCursor =& $table->getCursor();
+		$tableCursor =& $table->getWriteCursor();
 
 		$check_names = 1;
 		$replace = !strcasecmp($command, 'REPLACE');
@@ -1628,7 +1611,7 @@ class fSQLEnvironment
 			}
 		}
 
-		$table->insertRow($newentry);
+		$tableCursor->appendRow($newentry);
 		
 		if($this->auto)
 			$table->commit();
@@ -1664,7 +1647,7 @@ class fSQLEnvironment
 		
 			$columns = $table->getColumns();
 			$columnNames = array_keys($columns);
-			$cursor =& $table->getCursor();
+			$cursor =& $table->getWriteCursor();
 
 			if(preg_match_all("/`?((?:\S+)`?\s*=\s*(?:'(?:.*?)'|\S+))`?\s*(?:,|\Z)/is", $matches[3], $sets)) {
 				foreach($sets[1] as $set) {
@@ -1836,9 +1819,10 @@ class fSQLEnvironment
 		$randval = rand();
 		$selects = preg_split('/\s+UNION\s+/i', $query);
 		$e = 0;
-		foreach($selects as $select) {
-			unset($matches, $where, $tables, $Columns);
-			
+		foreach($selects as $select)
+		{
+			$matches = array();
+			$tables = array();
 			$simple = 1;
 			$distinct = 0;
 			if(preg_match('/(.+?)\s+(?:WHERE|ORDER\s+BY|LIMIT)\s+(.+?)/is',$select)) {
@@ -2155,7 +2139,6 @@ class fSQLEnvironment
 			}
 EOT;
 
-			echo $code;
 			eval($code);
 			
 			// Execute an ORDER BY
@@ -2660,7 +2643,7 @@ EOT;
 			}
 			
 			$columns = $table->getColumns();
-			$cursor =& $table->getCursor();
+			$cursor =& $table->getWriteCursor();
 			$columnNames = array_keys($columns);
 
 			if($cursor->isDone())
@@ -2679,7 +2662,6 @@ EOT;
 			
 				while(!$cursor->isDone()) {
 					$entry = $cursor->getRow();
-					var_dump($cursor);
 					if(eval($where))
 					{					
 						$cursor->deleteRow();
@@ -3328,7 +3310,6 @@ EOT;
 
 	function _nullcheck_left_eq($left, $right)
 	{
-		var_dump($left, $right);
 		return ($left !== null) ? (($left == $right) ? FSQL_TRUE : FSQL_FALSE) : FSQL_UNKNOWN;
 	}
 	
