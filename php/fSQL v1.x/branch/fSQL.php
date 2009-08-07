@@ -965,7 +965,7 @@ class fSQLEnvironment
 	
 	var $allow_func = array('abs','acos','asin','atan2','atan','ceil','cos','crc32','exp','floor',
 	   'ltrim','md5','pi','pow','rand','rtrim','round','sha1','sin','soundex','sqrt','strcmp','tan');
-	var $custom_func = array('bin', 'bit_length', 'char','concat','concat_ws','count','curdate','curtime','database','dayofweek',
+	var $custom_func = array('avg','bin', 'bit_length', 'char','concat','concat_ws','count','curdate','curtime','database','dayofweek',
 	   'dayofyear','elt','field','from_unixtime','last_insert_id', 'left','locate','log','log2','log10','lpad','max','min',
 	   'mod','now','repeat','right','row_count','sign','space','substring_index','sum','truncate','unix_timestamp',
 	   'weekday');
@@ -1825,10 +1825,10 @@ class fSQLEnvironment
 			$tables = array();
 			$simple = 1;
 			$distinct = 0;
-			if(preg_match('/(.+?)\s+(?:WHERE|ORDER\s+BY|LIMIT)\s+(.+?)/is',$select)) {
+			if(preg_match('/(.+?)\s+(?:WHERE|(?:GROUP|ORDER)\s+BY|LIMIT)\s+(.+?)/is',$select)) {
 				$simple = 0;
-				preg_match('/SELECT(?:\s+(ALL|DISTINCT(?:ROW)?))?(\s+RANDOM(?:\((?:\d+)\)?)?\s+|\s+)(.+?)\s+FROM\s+(.+?)\s+(?:WHERE|ORDER\s+BY|LIMIT)\s+/is', $select, $matches);
-				$matches[4] = preg_replace('/(.+?)\s+(WHERE|ORDER\s+BY|LIMIT)\s+(.+?)/is', '\\1', $matches[4]);
+				preg_match('/SELECT(?:\s+(ALL|DISTINCT(?:ROW)?))?(\s+RANDOM(?:\((?:\d+)\)?)?\s+|\s+)(.+?)\s+FROM\s+(.+?)\s+(?:WHERE|(?:GROUP|ORDER)\s+BY|LIMIT)\s+/is', $select, $matches);
+				$matches[4] = preg_replace('/(.+?)\s+(WHERE|(?:GROUP|ORDER)\s+BY|LIMIT)\s+(.+?)/is', '\\1', $matches[4]);
 			}
 			else if(preg_match('/SELECT(?:\s+(ALL|DISTINCT(?:ROW)?))?(\s+RANDOM(?:\((?:\d+)\)?)?\s+|\s+)(.*?)\s+FROM\s+(.+)/is', $select, $matches)) { /* I got the matches, do nothing else */ }
 			else { preg_match('/SELECT(?:\s+(ALL|DISTINCT(?:ROW)?))?(\s+RANDOM(?:\((?:\d+)\)?)?\s+|\s+)(.*)/is', $select, $matches); $matches[4] = 'FSQL'; }
@@ -2004,9 +2004,8 @@ class fSQLEnvironment
 			$selectedInfo = array();
 			foreach($Columns[1] as $column) {		
 				if(preg_match('/\A((?:[A-Z][A-Z0-9\_]*)\s*\((?:.+?)?\))(?:\s+(?:AS\s+)?([A-Z][A-Z0-9\_]*))?\Z/is', $column, $colmatches)) {
-					list(, $function_call, $alias, ) = $colmatches;
-					if(empty($alias))
-						$alias = $function_call;
+					$function_call = $colmatches[1];
+					$alias = !empty($colmatches[2]) ? $colmatches[2] : $function_call;
 					$ColumnList[] = $alias;
 					$selectedInfo[] = array('function', $function_call);
 				}
@@ -2066,6 +2065,7 @@ class fSQLEnvironment
 			$this_random = array();
 			$limit = null;
 			$tosort = array();
+			$group_list = array();
 			$where = null;
 			
 			if($matches[4] !== 'FSQL') {
@@ -2075,21 +2075,33 @@ class fSQLEnvironment
 					else if($additional[2] != -1) { $limit_stop += $limit_start; }
 					$limit = array($limit_start, $limit_stop);
 				}
-
+				
 				if(preg_match('/\s+ORDER\s+BY\s+(?:(.*)\s+LIMIT|(.*))?/is', $select, $additional)) {
 					if(!empty($additional[1])) { $ORDERBY = explode(',', $additional[1]); }
 					else { $ORDERBY = explode(',', $additional[2]); }
 					for($i = 0; $i < count($ORDERBY); ++$i) {
 						if(preg_match('/([A-Z][A-Z0-9\_]*)(?:\s+(ASC|DESC))?/is', $ORDERBY[$i], $additional)) {
-							$column_name = $additional[1];
-							$index = array_search($column_name, $ColumnList);
+							$index = array_search($additional[1], $joined_info['columns']);
 							if(empty($additional[2])) { $additional[2] = 'ASC'; }
 							$tosort[] = array('key' => $index, 'ascend' => !strcasecmp("ASC", $additional[2]));
 						}
 					}
 				}
+
+				if(preg_match('/\s+GROUP\s+BY\s+(?:(.*)\s+(?:HAVING|ORDER\s+BY|LIMIT)|(.*))?/is', $select, $additional)) {
+					$group_clause = !empty($additional[1]) ? $additional[1] : $additional[2];
+					$GROUPBY = explode(',', $group_clause);
+					foreach($GROUPBY as $group_item)
+					{
+						if(preg_match('/([A-Z][A-Z0-9\_]*)(?:\s+(ASC|DESC))?/is', $group_item, $additional)) {
+							$index = array_search($additional[1], $joined_info['columns']);
+							if(empty($additional[2])) { $additional[2] = 'ASC'; }
+							$group_list[] = array('key' => $index, 'ascend' => !strcasecmp("ASC", $additional[2]));
+						}
+					}
+				}
 				
-				if(preg_match('/\s+WHERE\s+((?:.+)(?:(?:((?:\s+)(?:AND|OR)(?:\s+))?(?:.+)?)*)?)(?:\s+(?:ORDER\s+BY|LIMIT))?/is', $select, $first_where)) {
+				if(preg_match('/\s+WHERE\s+((?:.+)(?:(?:((?:\s+)(?:AND|OR)(?:\s+))?(?:.+)?)*)?)(?:\s+(?:(?:GROUP|ORDER)\s+BY|LIMIT))?/is', $select, $first_where)) {
 					$where = $this->_build_where($first_where[1], $joined_info);
 					if(!$where) {
 						$this->_set_error('Invalid/Unsupported WHERE clause');
@@ -2112,31 +2124,86 @@ class fSQLEnvironment
 				unset($data);
 				$data = $results;
 			} */
-		
-			$line = "";
-			foreach($selectedInfo as $info) {
-				//$value = strtr($value, array("\\\"" => "\"", "\\\\\"" => "\\\""));
-				if($info[0] === 'column') {
-					$line .= '$entry[' . $info[1] .'], ';
-				}
-				else if($info[0] === 'number') {
-					$line .= $info[1].', ';
-				}
-				else if($info[0] === 'function') {
-					$expr = $this->_build_expr($info[1], $joined_info, false);
-					$line .= $expr['expression'].', ';
-				}
-			}
 			
-			$line = '$final_set[] = array('. substr($line, 0, -2) . ');';
+			$group_key = NULL;
+			$final_code = NULL;
+			if(!empty($group_list))
+			{
+				if(count($group_list) === 1)
+				{
+					$group_key = '$entry[' . $group_list[0]['key'] .']';
+					$group_array = array($group_key);
+				}
+				else
+				{
+					$group_array = array();
+					$group_key_list = '';
+					foreach($group_list as $group_item)
+					{
+						$group_col = $group_item['key'];
+						$group_array[] = $group_col;
+						$group_key_list .= '$entry[' . $group_col .'], ';
+					}
+					$group_key = 'serialize(array('. substr($group_key_list, 0, -2) . '))';
+				}
+				
+				$select_line = "";
+				foreach($selectedInfo as $info) {
+					if($info[0] === 'column') {
+						$column = $info[1];
+						if(in_array($column, $group_array)) {
+							$select_line .= '$group[0][' . $column .'], ';
+						} else {
+							return $this->_set_error("Selected column '{$joined_info['columns'][$column]}' is not a grouped column");
+						}
+					}
+					else if($info[0] === 'number') {
+						$select_line .= $info[1].', ';
+					}
+					else if($info[0] === 'function') {
+						$expr = $this->_build_expr($info[1], $joined_info, false);
+						$select_line .= $expr['expression'].', ';
+					}
+				}
+				
+				$line = '$grouped_set['.$group_key.'][] = $entry;';
+				$final_line = '$final_set[] = array('. substr($select_line, 0, -2) . ');';
+				$grouped_set = array();
+				
+				$final_code = <<<EOT
+			foreach(\$grouped_set as \$group) {
+				$final_line
+			}
+EOT;
+			}
+			else
+			{
+				$select_line = "";
+				foreach($selectedInfo as $info) {
+					if($info[0] === 'column') {
+						$select_line .= '$entry[' . $info[1] .'], ';
+					}
+					else if($info[0] === 'number') {
+						$select_line .= $info[1].', ';
+					}
+					else if($info[0] === 'function') {
+						$expr = $this->_build_expr($info[1], $joined_info, false);
+						$select_line .= $expr['expression'].', ';
+					}
+				}
+				$line = '$final_set[] = array('. substr($select_line, 0, -2) . ');';
+			}
+				
 			if($where !== null)
-				$line = "if($where) {\r\n$line\r\n}";
+				$line = "if($where) {\r\n\t\t\t\t\t$line\r\n\t\t\t\t}";
 			
 			$final_set = array();
 			$code = <<<EOT
 			foreach(\$data as \$entry) {
 				$line
 			}
+			
+$final_code
 EOT;
 
 			eval($code);
@@ -2272,49 +2339,6 @@ EOT;
 		}
 
 		return $new_join_data;
-	}
-
-	function _load_functions($section, $entry, $newentry) {
-		if(preg_match('/(.+?)\((.+?)?\)\s+AS\s+([A-Z][A-Z0-9\_]*)/is',$section,$functions)) {
-			$in_a_class = 0;
-			$is_grouping = 0;
-			$function = strtolower($functions[1]);
-
-			if(isset($this->renamed_func[$function])) {
-				$function = $this->renamed_func[$function];
-			} else if(in_array($function, $this->custom_func)) {
-				$in_a_class = 1;
-				if(in_array($function, array('count', 'max', 'min', 'sum')))
-					$is_grouping = 1;
-				$function = '_fsql_functions_'.$function;
-			} else if(!in_array($function, $this->allow_func)) {
-				$this->_set_error('Call to unknown SQL function');
-				continue;
-			}
-			
-			if(!empty($functions[2])) {
-				$parameter = explode(',', $functions[2]);
-				foreach($parameter as $param) {
-					if(!preg_match("/'(.+?)'/is", $param) && !is_numeric($param) && !$is_grouping) {
-						if(preg_match('/(?:\S+)\.(?:\S+)/', $param)) { list($name, $var) = explode('.', $param); }
-						else { $var = $param; }
-						$parameters[] = $entry[$var];
-					}
-					else { $parameters[] = $param; }
-					if($is_grouping) {
-						$parameters[] = $table;
-					}
-				}
-				if($in_a_class == 0) { $newentry[$functions[3]] = call_user_func_array($function, $parameters); }
-				else { $newentry[$functions[3]] = call_user_func_array(array($this,$function), $parameters); }
-			}
-			else {
-				if($in_a_class == 0) { $newentry[$functions[3]] = call_user_func($function); }
-				else { $newentry[$functions[3]] = call_user_func(array($this,$function)); }
-			}
-			return $newentry;
-		}
-		return NULL;
 	}
 
 	function _build_where($statement, $join_info, $isOnClause = false)
@@ -2454,7 +2478,7 @@ EOT;
 				$function = $this->renamed_func[$function];
 			} else if(in_array($function, $this->custom_func)) {
 				$in_a_class = true;
-				if(in_array($function, array('count', 'max', 'min', 'sum')))
+				if(in_array($function, array('avg', 'count', 'max', 'min', 'sum')))
 					$is_grouping = 1;
 				$function = '_fsql_functions_'.$function;
 			} else if(!in_array($function, $this->allow_func)) {
@@ -2466,9 +2490,18 @@ EOT;
 				$paramExprs = array();
 				$parameter = explode(',', $params);
 				foreach($parameter as $param) {
-					$paramExpr = $this->_build_expr(trim($param), $join_info, $isOnClause);
-					$paramExprs[] = $paramExpr['expression'];
+					if($is_grouping && $param === '*' )
+					{
+						$paramExprs[] = '"*"';
+					}
+					else
+					{	
+						$paramExpr = $this->_build_expr(trim($param), $join_info, $isOnClause);
+						$paramExprs[] = $paramExpr['expression'];
+					}
 				}
+				if($is_grouping)
+					$paramExprs[] = '$group';
 				$final_param_list = implode(",", $paramExprs);
 			}
 
@@ -2536,88 +2569,6 @@ EOT;
 			return null;
 		
 		return array('nullable' => $nullable, 'expression' => $expr);
-	}
-	
-	function _where_functions($statement, $entry = NULL, $tname = NULL)
-	{
-		$operator = $statement['operator'];	
-		foreach($statement as $name => $section) {
-			if($name === 'table' && $section && $section !== $tname) { return NULL; }
-			else if($name === 'table' || $name === 'next' || $name === 'operator') { continue; }
-
-			if(preg_match('/(.+?)\((.+?)?\)/is',$section,$functions)) {
-				$in_a_class = 0;
-				$function = strtolower($functions[1]);
-				$parameters = array();
-				
-				if(isset($this->renamed_func[$function])) {
-					$function = $this->renamed_func[$function];
-				} else if(in_array($function, $this->custom_func)) {
-					$in_a_class = 1;
-					$function = '_fsql_functions_'.$function;
-				} else if(!in_array($function, $this->allow_func)) {
-					$this->_set_error('Call to unknown SQL function');
-					continue;
-				}
-				
-				if(!empty($functions[2])) {
-					$parameter = explode(',', $functions[2]);
-					foreach($parameter as $param) {
-						$param = trim($param);
-						if(!preg_match("/'(.+)'/is", $param) && !is_numeric($param)) {
-							if(preg_match('/(?:\S+)\.(?:\S+)/', $param)) { list( , $new_var) = explode('.', $param); }
-							else { $new_var = $param; }
-							$parameters[] = $entry[$new_var];
-						} else {
-							$parameters[] = $param;
-						}
-					}
-					if($in_a_class == 0) { $$name = call_user_func_array($function, $parameters); }
-					else { $$name = call_user_func_array(array($this,$function), $parameters); }
-				} else { 
-					if($in_a_class == 0) { $$name = call_user_func_array($function, $parameters); }
-					else { $$name = call_user_func_array(array($this,$function), $parameters); }
-				}
-			}
-			else if($name === 'var') {
-				if(preg_match("/'(.*?)(?<!\\\\)'/is", $section, $matches))
-					$var = $matches[1];
-				else
-					$var = $entry[$section];
-			} else if($name === 'value') { $value = $section; }
-		}
-		if(preg_match("/'(.*?)(?<!\\\\)'/is", $var, $matches)) { $var = $matches[1]; }
-		if(preg_match("/'(.*?)(?<!\\\\)'/is", $value, $matches)) { $value = $matches[1]; }
-		if($operator === '=' || $operator === ' ~=~ ') { $operator = '=='; }
-		
-		$ops = preg_split('/\s+/', $operator);
-		if($ops[0] === 'NOT') {
-			$operator = $ops[1];
-			$not = 1;
-		} else {
-			$not = 0;
-		}
-		
-		if($operator === 'LIKE') {
-			$value = preg_quote($value);
-			$value = preg_replace('/(?<!\\\\)_/', '.', $value);
-			$value = preg_replace('/(?<!\\\\)%/', '.*', $value);
-			$value = str_replace('\\\\_', '_', $value);
-			$value = str_replace('\\\\%', '%', $value);
-			$return = (preg_match("/\A{$value}\Z/is", $var)) ? 1 : 0;
-			$return ^= $not;
-		} else if($operator === 'REGEXP' || $operator === 'RLIKE') {
-			$return = (eregi($value, $var)) ? 1 : 0;
-			$return ^= $not;
-		}
-		/*else if($operator === 'IN') {
-			eval("\$return = (in_array(\$var, array$value)) ? 1 : 0;");
-			$return ^= $not;
-		} */
-		else
-			eval("\$return = (\$var $operator \$value) ? 1 : 0;");
-
-		return $return;
 	}
 	
 	////Delete data from the DB
@@ -3431,16 +3382,39 @@ EOT;
 	 
 	 /////Grouping and other Misc. Functions
 	function _fsql_functions_count($column, $data) {
-		if($column == '*') { return count($data['entries']); }
-		else {   $i = 0;   foreach($data['entries'] as $entry) {  if($entry[$column]) { $i++; } }  return $i;  }
+		if($column == '*') { return count($data); }
+		else {   $i = 0;   foreach($data as $entry) {  if($entry[$column]) { $i++; } }  return $i;  }
 	}
 	function _fsql_functions_max($column, $data) {
-		foreach($data['entries'] as $entry){   if($entry[$column] > $i || !$i) { $i = $entry[$column]; }  }	return $i;
+		$max = null;
+		foreach($data as $entry){
+			if($entry[$column] > $max || $max === null) {
+				$max = $entry[$column];
+			} 
+		}
+		return $max;
 	}
 	function _fsql_functions_min($column, $data) {
-		foreach($data['entries'] as $entry){   if($entry[$column] < $i || !$i) { $i = $entry[$column]; }  }	return $i;
+		$min = null;
+		foreach($data as $entry){
+			if($entry[$column] < $min || $min === null) {
+				$min = $entry[$column];
+			} 
+		}
+		return $min;
 	}
-	function _fsql_functions_sum($column, $data) {  foreach($data['entries'] as $entry){ $i += $entry[$column]; }  return $i; }
+	function _fsql_functions_sum($column, $data) {
+		$i = null;
+		foreach($data as $entry)
+		{
+			$i += $entry[$column];
+		}
+		return $i;
+	}
+	function _fsql_functions_avg($column, $data) {
+		$sum = $this->_fsql_functions_sum($column, $data);
+		return $sum / count($data);
+	}
 	 
 	 /////String Functions
 	function _fsql_functions_bin($string) {
