@@ -4,7 +4,7 @@ define('FSQL_ASSOC',1,TRUE);
 define('FSQL_NUM',  2,TRUE);
 define('FSQL_BOTH', 3,TRUE);
 
-define('FSQL_TRUE', ~0, TRUE);
+define('FSQL_TRUE', 3, TRUE);
 define('FSQL_FALSE', 0,TRUE);
 define('FSQL_NULL', 1,TRUE);
 define('FSQL_UNKNOWN', 1,TRUE);
@@ -2087,6 +2087,14 @@ class fSQLEnvironment
 						}
 					}
 				}
+				
+				if(preg_match('/\s+HAVING\s+((?:.+)(?:(?:((?:\s+)(?:AND|OR)(?:\s+))?(?:.+)?)*)?)(?:\s+(?:ORDER\s+BY|LIMIT))?/is', $select, $additional)) {
+					$having = $this->_build_where($additional[1], $joined_info);
+					if(!$where) {
+						$this->_set_error('Invalid/Unsupported HAVING clause');
+						return null;
+					}
+				}
 
 				if(preg_match('/\s+GROUP\s+BY\s+(?:(.*)\s+(?:HAVING|ORDER\s+BY|LIMIT)|(.*))?/is', $select, $additional)) {
 					$group_clause = !empty($additional[1]) ? $additional[1] : $additional[2];
@@ -2136,10 +2144,12 @@ class fSQLEnvironment
 				}
 				else
 				{
+					$all_ascend = 1;
 					$group_array = array();
 					$group_key_list = '';
 					foreach($group_list as $group_item)
 					{
+						$all_ascend &= (int) $group_item['ascend'];
 						$group_col = $group_item['key'];
 						$group_array[] = $group_col;
 						$group_key_list .= '$entry[' . $group_col .'], ';
@@ -2344,40 +2354,27 @@ EOT;
 	function _build_where($statement, $join_info, $isOnClause = false)
 	{
 		if($statement) {
-			preg_match_all("/(\A\s*|\s+(?:AND|OR)\s+)(\S+?)\s*(!=|<>|>=|<=>?|>|<|=|IS(?:\s+NOT)?|(?:NOT\s+)?IN|(?:NOT\s+)?R?LIKE|(?:NOT\s+)?REGEXP)\s*('.*?'|\S+)/is", $statement, $WHERE);
+			preg_match_all("/(\A\s*|\s+(?:AND|OR)\s+)(NOT\s+)?(\S+?)\s*(!=|<>|>=|<=>?|>|<|=|IS(?:\s+NOT)?|(?:NOT\s+)?IN|(?:NOT\s+)?R?LIKE|(?:NOT\s+)?REGEXP)\s*('.*?'|\S+)/is", $statement, $WHERE);
 			
 			$where_count = count($WHERE[0]);
 			if($where_count === 0)
 				return null;
 			
 			$condition = "";
-			
-			for($i = 0; $i < $where_count; ++$i) {				
+						
+			for($i = 0; $i < $where_count; ++$i) {
+				$local_condition = "";
 				$logicalOp = trim($WHERE[1][$i]);
-				$leftStr = $WHERE[2][$i];
-				$operator = preg_replace("/\s+/", " ", strtoupper($WHERE[3][$i]));
-				$rightStr = $WHERE[4][$i];
-
-				$trueValue = FSQL_TRUE;
-				$falseValue = FSQL_FALSE;
-				
-				if(!strcasecmp($logicalOp, 'AND'))
-					$logicalOp = '&';
-				else if(!strcasecmp($logicalOp, 'OR'))
-					$logicalOp = '|';
-				else
-					$logicalOp = null;
-				
-				if($operator === '<>') { $operator = '!='; }
+				$not = !empty($WHERE[2][$i]);
+				$leftStr = $WHERE[3][$i];
+				$operator = preg_replace("/\s+/", " ", strtoupper($WHERE[4][$i]));
+				$rightStr = $WHERE[5][$i];
 				
 				$left = $this->_build_expr($leftStr, $join_info, $isOnClause);
 				$right = $this->_build_expr($rightStr, $join_info, $isOnClause);
 
 				$leftExpr = $left['expression'];
 				$rightExpr = $right['expression'];
-
-				if($logicalOp !== null) 
-					$condition .= " $logicalOp ";
 
 				if($left['nullable'] && $right['nullable'])
 					$nullcheck = "nullcheck";
@@ -2391,71 +2388,82 @@ EOT;
 				switch($operator) {
 					case '=':
 						if($nullcheck)
-							$condition .= "fSQLEnvironment::_{$nullcheck}_eq($leftExpr, $rightExpr)";
+							$local_condition = "fSQLEnvironment::_{$nullcheck}_eq($leftExpr, $rightExpr)";
 						else
-							$condition .= "(($leftExpr == $rightExpr) ? FSQL_TRUE : FSQL_FALSE)";
+							$local_condition = "(($leftExpr == $rightExpr) ? FSQL_TRUE : FSQL_FALSE)";
 						break;
 					case '!=':
+					case '<>':
 						if($nullcheck)
-							$condition .= "fSQLEnvironment::_{$nullcheck}_ne($leftExpr, $rightExpr)";
+							$local_condition = "fSQLEnvironment::_{$nullcheck}_ne($leftExpr, $rightExpr)";
 						else
-							$condition .= "(($leftExpr != $rightExpr) ? FSQL_TRUE : FSQL_FALSE)";
+							$local_condition = "(($leftExpr != $rightExpr) ? FSQL_TRUE : FSQL_FALSE)";
 						break;
 					case '>':
 						if($nullcheck)
-							$condition .= "fSQLEnvironment::_{$nullcheck}_gt($leftExpr, $rightExpr)";
+							$local_condition = "fSQLEnvironment::_{$nullcheck}_gt($leftExpr, $rightExpr)";
 						else
-							$condition .= "(($leftExpr > $rightExpr) ? FSQL_TRUE : FSQL_FALSE)";
+							$local_condition = "(($leftExpr > $rightExpr) ? FSQL_TRUE : FSQL_FALSE)";
 						break;
 					case '>=':
 						if($nullcheck)
-							$condition .= "fSQLEnvironment::_{$nullcheck}_ge($leftExpr, $rightExpr)";
+							$local_condition = "fSQLEnvironment::_{$nullcheck}_ge($leftExpr, $rightExpr)";
 						else
-							$condition .= "(($leftExpr >= $rightExpr) ? FSQL_TRUE : FSQL_FALSE)";
+							$local_condition = "(($leftExpr >= $rightExpr) ? FSQL_TRUE : FSQL_FALSE)";
 						break;
 					case '<':
 						if($nullcheck)
-							$condition .= "fSQLEnvironment::_{$nullcheck}_lt($leftExpr, $rightExpr)";
+							$local_condition = "fSQLEnvironment::_{$nullcheck}_lt($leftExpr, $rightExpr)";
 						else
-							$condition .= "(($leftExpr < $rightExpr) ? FSQL_TRUE : FSQL_FALSE)";
+							$local_condition = "(($leftExpr < $rightExpr) ? FSQL_TRUE : FSQL_FALSE)";
 						break;
 					case '<=':
 						if($nullcheck)
-							$condition .= "fSQLEnvironment::_{$nullcheck}_le($leftExpr, $rightExpr)";
+							$local_condition = "fSQLEnvironment::_{$nullcheck}_le($leftExpr, $rightExpr)";
 						else
-							$condition .= "(($leftExpr <= $rightExpr) ? FSQL_TRUE : FSQL_FALSE)";
+							$local_condition = "(($leftExpr <= $rightExpr) ? FSQL_TRUE : FSQL_FALSE)";
 						break;
 					case '<=>':
-						$condition .= "(($leftExpr == $rightExpr) ? FSQL_TRUE : FSQL_FALSE)";
+						$local_condition .= "(($leftExpr == $rightExpr) ? FSQL_TRUE : FSQL_FALSE)";
 						break;
 					case 'IS NOT':
-						$trueValue = FSQL_FALSE;
-						$falseValue = FSQL_TRUE;
+						$not = !$not;
 					case 'IS':
 						if($rightExpr === 'NULL')
-							$condition .= "($leftExpr === NULL ? $trueValue : $falseValue)";
+							$local_condition = "($leftExpr === NULL ? FSQL_TRUE : FSQL_FALSE)";
 						else if($rightExpr === 'TRUE')
-							$condition .= "($leftExpr == TRUE ? $trueValue : $falseValue)";
+							$local_condition = "($leftExpr == TRUE ? FSQL_TRUE : FSQL_FALSE)";
 						else if($rightExpr === 'FALSE')
-							$condition .= "(in_array($leftExpr, array(0, 0.0, ''), true) ? $trueValue : $falseValue)";
+							$local_condition = "(in_array($leftExpr, array(0, 0.0, ''), true) ? FSQL_TRUE : FSQL_FALSE)";
 						else
 							return null;
 						break;
+					case 'NOT LIKE':
+						$not = !$not;
 					case 'LIKE':
-						$condition .= "fSQLEnvironment::_fsql_like($leftExpr, $rightExpr)";
+						$local_condition = "fSQLEnvironment::_fsql_like($leftExpr, $rightExpr)";
 						break;
 					case 'NOT RLIKE':
 					case 'NOT REGEXP':
-						$trueValue = FSQL_FALSE;
-						$falseValue = FSQL_TRUE;
+						$not = !$not;
 					case 'RLIKE':
 					case 'REGEXP':
-						$condition .= "fSQLEnvironment::_fsql_regexp($leftExpr, $rightExpr)";
+						$local_condition = "fSQLEnvironment::_fsql_regexp($leftExpr, $rightExpr)";
 						break;
 					default:
-						$condition .= "$leftExpr $operator $rightExpr";
+						$local_condition = "$leftExpr $operator $rightExpr";
 						break;
 				}
+				
+				if(!strcasecmp($logicalOp, 'AND'))
+					$condition .= ' & ';
+				else if(!strcasecmp($logicalOp, 'OR'))
+					$condition .= ' | ';
+				
+				if($not)
+					$condition .= '$this->_fsql_not('.$local_condition.')';
+				else
+					$condition .= $local_condition;
 			}
 			return "($condition) === ".FSQL_TRUE;
 		}
@@ -3205,6 +3213,12 @@ EOT;
 	function free_result($id)
 	{
 		unset($this->Columns[$id], $this->data[$id], $this->cursors[$id]);
+	}
+
+	function _fsql_not($x)
+	{
+		$c = ~$x & 3;
+		return (($c << 1) ^ ($c >> 1)) & 3;
 	}
 
 	function _fsql_like($left, $right)
