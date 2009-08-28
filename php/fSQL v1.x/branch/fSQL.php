@@ -14,6 +14,12 @@ define('FSQL_JOIN_LEFT',1,TRUE);
 define('FSQL_JOIN_RIGHT',2,TRUE);
 define('FSQL_JOIN_FULL',3,TRUE);
 
+define('FSQL_WHERE_NORMAL',2,TRUE);
+define('FSQL_WHERE_NORMAL_AGG',3,TRUE);
+define('FSQL_WHERE_ON',4,TRUE);
+define('FSQL_WHERE_HAVING',8,TRUE);
+define('FSQL_WHERE_HAVING_AGG',9,TRUE);
+
 define('FSQL_EXTENSION', '.cgi',TRUE);
 
 // This function is in PHP5 but nowhere else so we're making it in case we're on PHP4
@@ -1933,7 +1939,7 @@ class fSQLEnvironment
 						$new_offset = count($joined_info['columns']);
 						$joined_info['columns'] = array_merge($joined_info['columns'], $join_table_columns);
 
-						$conditional = $this->_build_where($conditions, $joined_info, true);
+						$conditional = $this->_build_where($conditions, $joined_info, FSQL_WHERE_ON);
 						if(!$conditional) {
 							$this->_set_error('Invalid/Unsupported WHERE clause');
 							return null;
@@ -2066,6 +2072,7 @@ class fSQLEnvironment
 			$limit = null;
 			$tosort = array();
 			$group_list = array();
+			$having_clause = null;
 			$where = null;
 			
 			if($matches[4] !== 'FSQL') {
@@ -2087,14 +2094,6 @@ class fSQLEnvironment
 						}
 					}
 				}
-				
-				if(preg_match('/\s+HAVING\s+((?:.+)(?:(?:((?:\s+)(?:AND|OR)(?:\s+))?(?:.+)?)*)?)(?:\s+(?:ORDER\s+BY|LIMIT))?/is', $select, $additional)) {
-					$having = $this->_build_where($additional[1], $joined_info);
-					if(!$where) {
-						$this->_set_error('Invalid/Unsupported HAVING clause');
-						return null;
-					}
-				}
 
 				if(preg_match('/\s+GROUP\s+BY\s+(?:(.*)\s+(?:HAVING|ORDER\s+BY|LIMIT)|(.*))?/is', $select, $additional)) {
 					$group_clause = !empty($additional[1]) ? $additional[1] : $additional[2];
@@ -2107,6 +2106,10 @@ class fSQLEnvironment
 							$group_list[] = array('key' => $index, 'ascend' => !strcasecmp("ASC", $additional[2]));
 						}
 					}
+				}
+				
+				if(preg_match('/\s+HAVING\s+((?:.+)(?:(?:((?:\s+)(?:AND|OR)(?:\s+))?(?:.+)?)*)?)(?:\s+(?:ORDER\s+BY|LIMIT))?/is', $select, $additional)) {
+					$having_clause = $additional[1];
 				}
 				
 				if(preg_match('/\s+WHERE\s+((?:.+)(?:(?:((?:\s+)(?:AND|OR)(?:\s+))?(?:.+)?)*)?)(?:\s+(?:(?:GROUP|ORDER)\s+BY|LIMIT))?/is', $select, $first_where)) {
@@ -2137,10 +2140,14 @@ class fSQLEnvironment
 			$final_code = NULL;
 			if(!empty($group_list))
 			{
+				$joined_info['group_columns'] = array();
+				
 				if(count($group_list) === 1)
 				{
-					$group_key = '$entry[' . $group_list[0]['key'] .']';
+					$group_col = $group_list[0]['key'];
+					$group_key = '$entry[' . $group_col .']';
 					$group_array = array($group_key);
+					$joined_info['group_columns'][] = $group_col;
 				}
 				else
 				{
@@ -2153,6 +2160,7 @@ class fSQLEnvironment
 						$group_col = $group_item['key'];
 						$group_array[] = $group_col;
 						$group_key_list .= '$entry[' . $group_col .'], ';
+						$joined_info['group_columns'][] = $group_col;
 					}
 					$group_key = 'serialize(array('. substr($group_key_list, 0, -2) . '))';
 				}
@@ -2171,7 +2179,7 @@ class fSQLEnvironment
 						$select_line .= $info[1].', ';
 					}
 					else if($info[0] === 'function') {
-						$expr = $this->_build_expr($info[1], $joined_info, false);
+						$expr = $this->_build_expr($info[1], $joined_info);
 						$select_line .= $expr['expression'].', ';
 					}
 				}
@@ -2179,6 +2187,15 @@ class fSQLEnvironment
 				$line = '$grouped_set['.$group_key.'][] = $entry;';
 				$final_line = '$final_set[] = array('. substr($select_line, 0, -2) . ');';
 				$grouped_set = array();
+				
+				if($having_clause !== null) {
+					$having = $this->_build_where($having_clause, $joined_info, FSQL_WHERE_HAVING);
+					if(!$having) {
+						$this->_set_error('Invalid/Unsupported HAVING clause');
+						return null;
+					}
+					$final_line = "if($having) {\r\n\t\t\t\t\t$final_line\r\n\t\t\t\t}";
+				}
 				
 				$final_code = <<<EOT
 			foreach(\$grouped_set as \$group) {
@@ -2217,7 +2234,7 @@ $final_code
 EOT;
 
 			eval($code);
-			
+						
 			// Execute an ORDER BY
 			if(!empty($tosort))
 			{
@@ -2351,10 +2368,10 @@ EOT;
 		return $new_join_data;
 	}
 
-	function _build_where($statement, $join_info, $isOnClause = false)
+	function _build_where($statement, $join_info, $where_type = FSQL_WHERE_NORMAL)
 	{
 		if($statement) {
-			preg_match_all("/(\A\s*|\s+(?:AND|OR)\s+)(NOT\s+)?(\S+?)\s*(!=|<>|>=|<=>?|>|<|=|IS(?:\s+NOT)?|(?:NOT\s+)?IN|(?:NOT\s+)?R?LIKE|(?:NOT\s+)?REGEXP)\s*('.*?'|\S+)/is", $statement, $WHERE);
+			preg_match_all("/(\A\s*|\s+(?:AND|OR)\s+)(NOT\s+)?(\S+?)\s*(!=|<>|>=|<=>?|>|<|=|\s+(?:IS(?:\s+NOT)?|(?:NOT\s+)?IN|(?:NOT\s+)?R?LIKE|(?:NOT\s+)?REGEXP))\s+('.*?'|\S+)/is", $statement, $WHERE);
 			
 			$where_count = count($WHERE[0]);
 			if($where_count === 0)
@@ -2367,11 +2384,11 @@ EOT;
 				$logicalOp = trim($WHERE[1][$i]);
 				$not = !empty($WHERE[2][$i]);
 				$leftStr = $WHERE[3][$i];
-				$operator = preg_replace("/\s+/", " ", strtoupper($WHERE[4][$i]));
+				$operator = preg_replace("/\s+/", " ", trim(strtoupper($WHERE[4][$i])));
 				$rightStr = $WHERE[5][$i];
 				
-				$left = $this->_build_expr($leftStr, $join_info, $isOnClause);
-				$right = $this->_build_expr($rightStr, $join_info, $isOnClause);
+				$left = $this->_build_expr($leftStr, $join_info, $where_type);
+				$right = $this->_build_expr($rightStr, $join_info, $where_type);
 
 				$leftExpr = $left['expression'];
 				$rightExpr = $right['expression'];
@@ -2470,7 +2487,7 @@ EOT;
 		return NULL;
 	}
  
-	function _build_expr($exprStr, $join_info, $isOnClause = false)
+	function _build_expr($exprStr, $join_info, $where_type = FSQL_WHERE_NORMAL)
 	{
 		$nullable = true;
 		$expr = null;
@@ -2504,8 +2521,12 @@ EOT;
 					}
 					else
 					{	
-						$paramExpr = $this->_build_expr(trim($param), $join_info, $isOnClause);
-						$paramExprs[] = $paramExpr['expression'];
+						$paramExpr = $this->_build_expr(trim($param), $join_info, $where_type | 1);
+						$pexp = $paramExpr['expression'];
+						if($is_grouping && preg_match('/\\$entry\[(\d+)\]/', $pexp, $pexp_matches))
+							$paramExprs[] = $pexp_matches[1];
+						else
+							$paramExprs[] = $pexp;
 					}
 				}
 				if($is_grouping)
@@ -2527,9 +2548,8 @@ EOT;
 						$nullable = $table_columns[ $column ]['null'] == 1;
 						if( isset($join_info['offsets'][$table_name]) ) {
 							$colIndex = array_search($column,  $join_info['columns']) + $join_info['offsets'][$table_name];
-							$expr = $isOnClause === true ? "\$left_entry[$colIndex]" : "\$entry[$colIndex]";
-						} else {
-							$colIndex = array_search($column, array_keys($table_columns));
+							$expr = ($where_type & FSQL_WHERE_ON) ? "\$left_entry[$colIndex]" : "\$entry[$colIndex]";
+						} else {							$colIndex = array_search($column, array_keys($table_columns));
 							$expr = "\$right_entry[$colIndex]";
 						}
 					}
@@ -2544,6 +2564,21 @@ EOT;
 				$expr = strtoupper($exprStr);
 				$nullable = false;
 			}
+			else if($where_type === FSQL_WHERE_HAVING) { // column/alias in grouping clause
+				$colIndex = array_search($column, $join_info['columns']);
+				if(in_array($colIndex, $join_info['group_columns'])) {
+					$owner_table_name = null;
+					foreach($join_info['tables'] as $join_table_name => $join_table)
+					{
+						if($colIndex >= $join_info['offsets'][$join_table_name])
+							$owner_table_name = $join_table_name;
+						else
+							break;
+					}
+					$nullable = $join_info['tables'][$owner_table_name][$column]['null'] == 1;
+					$expr = "\$group[0][$colIndex]";
+				}
+			}
 			else {  // column/alias
 				$colIndex = array_search($column, $join_info['columns']);
 				$owner_table_name = null;
@@ -2555,7 +2590,7 @@ EOT;
 						break;
 				}
 				$nullable = $join_info['tables'][$owner_table_name][$column]['null'] == 1;
-				$expr = $isOnClause === true ? "\$left_entry[$colIndex]" : "\$entry[$colIndex]";
+				$expr = $where_type === FSQL_WHERE_ON ? "\$left_entry[$colIndex]" : "\$entry[$colIndex]";
 			}
 		}
 		// number
@@ -2568,7 +2603,7 @@ EOT;
 			$expr = $exprStr;
 			$nullable = false;
 		}
-		else if($isOnClause && preg_match("/\A{{left}}\.([A-Z][A-Z0-9\_]*)/is", $exprStr, $matches)) {
+		else if($where_type === FSQL_WHERE_ON && preg_match("/\A{{left}}\.([A-Z][A-Z0-9\_]*)/is", $exprStr, $matches)) {
 			if(($colIndex = array_search($matches[1], $join_info['columns']))) {
 				$expr = "\$left_entry[$colIndex]";
 			}
