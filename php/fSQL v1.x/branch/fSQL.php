@@ -1,4 +1,6 @@
-<?php 
+<?php
+
+define('FSQL_VERSION', '1.4.0');
 
 define('FSQL_ASSOC',1,TRUE);
 define('FSQL_NUM',  2,TRUE);
@@ -640,12 +642,13 @@ class fSQLStandardTable extends fSQLTable
 				
 					preg_match_all("#(-?\d+(?:\.\d+)?|'(.*?(?<!\\\\))'|NULL);#s", $data, $matches);
 					for($m = 0; $m < count($matches[0]); $m++) {
-						if($matches[1][$m] == 'NULL')
+						$value = $matches[1][$m];
+						if($value === 'NULL')  // null
 							$entries[$row][$m] = NULL;
-						else if(!empty($matches[2][$m]))
+						else if($value{0} === '\'') //string
 							$entries[$row][$m] = $matches[2][$m];
-						else
-							$entries[$row][$m] = $matches[1][$m];
+						else // number
+							$entries[$row][$m] = $value;
 					}
 				}
 			}
@@ -1286,7 +1289,9 @@ class fSQLEnvironment
 						$keycolumns = explode(',', $Columns[3][$c]);
 						foreach($keycolumns as $keycolumn)
 						{
-							$new_columns[trim($keycolumn)]['key'] = $keytype{0}; 
+							$keycolumn = trim($keycolumn);
+							if($new_columns[$keycolumn]['key'] !== 'p')
+								$new_columns[$keycolumn]['key'] = $keytype{0}; 
 						}
 					}
 					else
@@ -1423,6 +1428,14 @@ class fSQLEnvironment
 		}
 	}
 	
+	function _prep_for_insert($value)
+	{
+		if(is_string($value)) {
+			$value = "'$value'";
+		}
+		return $value;
+	}
+	
 	function _query_insert($query)
 	{
 		$this->affected = 0;
@@ -1436,11 +1449,14 @@ class fSQLEnvironment
 		}
 
 		// INSERT...SELECT
-		if(preg_match('/^SELECT\s+.+/is', $the_rest)) { 
-			$id = $this->_query_select($the_rest);
-			while($values = $this->fetch_array($id)) {
-				$this->query_count--;
-				$this->_query_insert($beginning." VALUES('".join("', '", $values)."')");
+		if(preg_match('/^(\(.*?\)\s*)?(SELECT\s+.+)/is', $the_rest, $is_matches)) {
+			$insert_query = $beginning.' '.$is_matches[1].'VALUES(%s)';
+			$id = $this->_query_select($is_matches[2]);
+				
+			while($values = $this->fetch_row($id)) {
+				$values = array_map(array($this, '_prep_for_insert'), $values);
+				$full_insert_query = sprintf($insert_query, implode(',', $values));
+				$this->_query_insert($full_insert_query);
 			}
 			$this->free_result($id);
 			unset ($id, $values);
@@ -2256,6 +2272,7 @@ EOT;
 					}
 				}
 				$line = '$final_set[] = array('. substr($select_line, 0, -2) . ');';
+				$group = $data;
 			}
 			
 			if(!$isTableless) {
@@ -2412,7 +2429,7 @@ EOT;
 	function _build_where($statement, $join_info, $where_type = FSQL_WHERE_NORMAL)
 	{
 		if($statement) {
-			preg_match_all("/(\A\s*|\s+(?:AND|OR)\s+)(NOT\s+)?(\S+?)\s*(!=|<>|>=|<=>?|>|<|=|\s+(?:IS(?:\s+NOT)?|(?:NOT\s+)?IN|(?:NOT\s+)?R?LIKE|(?:NOT\s+)?REGEXP))\s+('.*?'|\S+)/is", $statement, $WHERE);
+			preg_match_all("/(\A\s*|\s+(?:AND|OR)\s+)(NOT\s+)?(\S+?)\s*(!=|<>|>=|<=>?|>|<|=|\s+(?:IS(?:\s+NOT)?|(?:NOT\s+)?IN|(?:NOT\s+)?R?LIKE|(?:NOT\s+)?REGEXP))\s+(\((.*?)\)|'.*?'|\S+)/is", $statement, $WHERE);
 			
 			$where_count = count($WHERE[0]);
 			if($where_count === 0)
@@ -2429,88 +2446,110 @@ EOT;
 				$rightStr = $WHERE[5][$i];
 				
 				$left = $this->_build_expr($leftStr, $join_info, $where_type);
-				$right = $this->_build_expr($rightStr, $join_info, $where_type);
-
 				$leftExpr = $left['expression'];
-				$rightExpr = $right['expression'];
-
-				if($left['nullable'] && $right['nullable'])
-					$nullcheck = "nullcheck";
-				else if($left['nullable'])
-					$nullcheck = "nullcheck_left";
-				else if($right['nullable'])
-					$nullcheck = "nullcheck_right";
-				else
-					$nullcheck = null;
 				
-				switch($operator) {
-					case '=':
-						if($nullcheck)
-							$local_condition = "fSQLEnvironment::_{$nullcheck}_eq($leftExpr, $rightExpr)";
-						else
-							$local_condition = "(($leftExpr == $rightExpr) ? FSQL_TRUE : FSQL_FALSE)";
-						break;
-					case '!=':
-					case '<>':
-						if($nullcheck)
-							$local_condition = "fSQLEnvironment::_{$nullcheck}_ne($leftExpr, $rightExpr)";
-						else
-							$local_condition = "(($leftExpr != $rightExpr) ? FSQL_TRUE : FSQL_FALSE)";
-						break;
-					case '>':
-						if($nullcheck)
-							$local_condition = "fSQLEnvironment::_{$nullcheck}_gt($leftExpr, $rightExpr)";
-						else
-							$local_condition = "(($leftExpr > $rightExpr) ? FSQL_TRUE : FSQL_FALSE)";
-						break;
-					case '>=':
-						if($nullcheck)
-							$local_condition = "fSQLEnvironment::_{$nullcheck}_ge($leftExpr, $rightExpr)";
-						else
-							$local_condition = "(($leftExpr >= $rightExpr) ? FSQL_TRUE : FSQL_FALSE)";
-						break;
-					case '<':
-						if($nullcheck)
-							$local_condition = "fSQLEnvironment::_{$nullcheck}_lt($leftExpr, $rightExpr)";
-						else
-							$local_condition = "(($leftExpr < $rightExpr) ? FSQL_TRUE : FSQL_FALSE)";
-						break;
-					case '<=':
-						if($nullcheck)
-							$local_condition = "fSQLEnvironment::_{$nullcheck}_le($leftExpr, $rightExpr)";
-						else
-							$local_condition = "(($leftExpr <= $rightExpr) ? FSQL_TRUE : FSQL_FALSE)";
-						break;
-					case '<=>':
-						$local_condition .= "(($leftExpr == $rightExpr) ? FSQL_TRUE : FSQL_FALSE)";
-						break;
-					case 'IS NOT':
-						$not = !$not;
-					case 'IS':
-						if($rightExpr === 'NULL')
-							$local_condition = "($leftExpr === NULL ? FSQL_TRUE : FSQL_FALSE)";
-						else if($rightExpr === 'TRUE')
-							$local_condition = "($leftExpr == TRUE ? FSQL_TRUE : FSQL_FALSE)";
-						else if($rightExpr === 'FALSE')
-							$local_condition = "(in_array($leftExpr, array(0, 0.0, ''), true) ? FSQL_TRUE : FSQL_FALSE)";
-						else
-							return null;
-						break;
-					case 'NOT LIKE':
-						$not = !$not;
-					case 'LIKE':
-						$local_condition = "fSQLEnvironment::_fsql_like($leftExpr, $rightExpr)";
-						break;
-					case 'NOT RLIKE':
-					case 'NOT REGEXP':
-						$not = !$not;
-					case 'RLIKE':
-					case 'REGEXP':
-						$local_condition = "fSQLEnvironment::_fsql_regexp($leftExpr, $rightExpr)";
-						break;
-					default:
-						$local_condition = "$leftExpr $operator $rightExpr";
-						break;
+				if($operator !== "IN" && $operator !== "NOT IN")
+				{
+					$right = $this->_build_expr($rightStr, $join_info, $where_type);
+					$rightExpr = $right['expression'];
+
+					if($left['nullable'] && $right['nullable'])
+						$nullcheck = "nullcheck";
+					else if($left['nullable'])
+						$nullcheck = "nullcheck_left";
+					else if($right['nullable'])
+						$nullcheck = "nullcheck_right";
+					else
+						$nullcheck = null;
+					
+					switch($operator) {
+						case '=':
+							if($nullcheck)
+								$local_condition = "fSQLEnvironment::_{$nullcheck}_eq($leftExpr, $rightExpr)";
+							else
+								$local_condition = "(($leftExpr == $rightExpr) ? FSQL_TRUE : FSQL_FALSE)";
+							break;
+						case '!=':
+						case '<>':
+							if($nullcheck)
+								$local_condition = "fSQLEnvironment::_{$nullcheck}_ne($leftExpr, $rightExpr)";
+							else
+								$local_condition = "(($leftExpr != $rightExpr) ? FSQL_TRUE : FSQL_FALSE)";
+							break;
+						case '>':
+							if($nullcheck)
+								$local_condition = "fSQLEnvironment::_{$nullcheck}_gt($leftExpr, $rightExpr)";
+							else
+								$local_condition = "(($leftExpr > $rightExpr) ? FSQL_TRUE : FSQL_FALSE)";
+							break;
+						case '>=':
+							if($nullcheck)
+								$local_condition = "fSQLEnvironment::_{$nullcheck}_ge($leftExpr, $rightExpr)";
+							else
+								$local_condition = "(($leftExpr >= $rightExpr) ? FSQL_TRUE : FSQL_FALSE)";
+							break;
+						case '<':
+							if($nullcheck)
+								$local_condition = "fSQLEnvironment::_{$nullcheck}_lt($leftExpr, $rightExpr)";
+							else
+								$local_condition = "(($leftExpr < $rightExpr) ? FSQL_TRUE : FSQL_FALSE)";
+							break;
+						case '<=':
+							if($nullcheck)
+								$local_condition = "fSQLEnvironment::_{$nullcheck}_le($leftExpr, $rightExpr)";
+							else
+								$local_condition = "(($leftExpr <= $rightExpr) ? FSQL_TRUE : FSQL_FALSE)";
+							break;
+						case '<=>':
+							$local_condition .= "(($leftExpr == $rightExpr) ? FSQL_TRUE : FSQL_FALSE)";
+							break;
+						case 'IS NOT':
+							$not = !$not;
+						case 'IS':
+							if($rightExpr === 'NULL')
+								$local_condition = "($leftExpr === NULL ? FSQL_TRUE : FSQL_FALSE)";
+							else if($rightExpr === 'TRUE')
+								$local_condition = "($leftExpr == TRUE ? FSQL_TRUE : FSQL_FALSE)";
+							else if($rightExpr === 'FALSE')
+								$local_condition = "(in_array($leftExpr, array(0, 0.0, ''), true) ? FSQL_TRUE : FSQL_FALSE)";
+							else
+								return null;
+							break;
+						case 'NOT LIKE':
+							$not = !$not;
+						case 'LIKE':
+							$local_condition = "fSQLEnvironment::_fsql_like($leftExpr, $rightExpr)";
+							break;
+						case 'NOT RLIKE':
+						case 'NOT REGEXP':
+							$not = !$not;
+						case 'RLIKE':
+						case 'REGEXP':
+							$local_condition = "fSQLEnvironment::_fsql_regexp($leftExpr, $rightExpr)";
+							break;
+						default:
+							$local_condition = "$leftExpr $operator $rightExpr";
+							break;
+					}
+				}
+				else
+				{
+					if(!empty($WHERE[6][$i])) {
+						$array_values = explode(',', $WHERE[6][$i]);
+						$valuesExpressions = array();
+						foreach($array_values as $value)
+						{
+							$valueExpr = $this->_build_expr(trim($value), $join_info, $where_type);
+							$valuesExpressions[] = $valueExpr['expression'];
+						}
+						$valuesString = implode(',', $valuesExpressions);
+						$local_condition = "fSQLEnvironment::_fsql_in($leftExpr, array($valuesString))";
+						
+						if($operator === 'NOT IN')
+							$not = !$not;
+					}
+					else
+						return null;
 				}
 				
 				if(!strcasecmp($logicalOp, 'AND'))
@@ -2564,13 +2603,14 @@ EOT;
 			if(!empty($params)) {
 				$parameter = explode(',', $params);
 				foreach($parameter as $param) {
+					$param = trim($param);
 					if($function_type === FSQL_FUNC_AGGREGATE && $param === '*' )
 					{
 						$paramExprs[] = '"*"';
 					}
 					else
 					{	
-						$paramExpr = $this->_build_expr(trim($param), $join_info, $where_type | 1);
+						$paramExpr = $this->_build_expr($param, $join_info, $where_type | 1);
 						$pexp = $paramExpr['expression'];
 						if($function_type === FSQL_FUNC_AGGREGATE && preg_match('/\\$entry\[(\d+)\]/', $pexp, $pexp_matches))
 							$paramExprs[] = $pexp_matches[1];
@@ -3317,6 +3357,16 @@ EOT;
 			return FSQL_UNKNOWN;
 	}
 	
+	function _fsql_in($needle, $haystack)
+	{
+		if($needle !== null)
+		{
+			return (in_array($needle, $haystack)) ? FSQL_TRUE : FSQL_FALSE;
+		}
+		else
+			return FSQL_UNKNOWN;
+	}
+	
 	function _fsql_regexp($left, $right)
 	{
 		if($left !== null && $right !== null)
@@ -3548,6 +3598,7 @@ class fSQLFunctions
 			'unhex' => array(FSQL_FUNC_NORMAL, FSQL_TYPE_INTEGER, true),
 			'unix_timestamp'  => array(FSQL_FUNC_NORMAL, FSQL_TYPE_TIMESTAMP, true),
 			'upper' => array(FSQL_FUNC_NORMAL, FSQL_TYPE_STRING, true),
+			'version' => array(FSQL_FUNC_NORMAL, FSQL_TYPE_STRING, false),
 			'weekday' => array(FSQL_FUNC_NORMAL, FSQL_TYPE_STRING, true)
 		);
 		
@@ -3600,6 +3651,10 @@ class fSQLFunctions
 	function sha1($string)
 	{
 		return ($string !== null) ? sha1($string) : null;
+	}
+	function version()
+	{
+		return FSQL_VERSION;
 	}
 	/////Math Functions
 	function abs($arg)
