@@ -2272,7 +2272,8 @@ EOT;
 					}
 				}
 				$line = '$final_set[] = array('. substr($select_line, 0, -2) . ');';
-				$group = $data;
+				if(!$isTableless)
+					$group = $data;
 			}
 			
 			if(!$isTableless) {
@@ -2429,7 +2430,7 @@ EOT;
 	function _build_where($statement, $join_info, $where_type = FSQL_WHERE_NORMAL)
 	{
 		if($statement) {
-			preg_match_all("/(\A\s*|\s+(?:AND|OR)\s+)(NOT\s+)?(\S+?)\s*(!=|<>|>=|<=>?|>|<|=|\s+(?:IS(?:\s+NOT)?|(?:NOT\s+)?IN|(?:NOT\s+)?R?LIKE|(?:NOT\s+)?REGEXP))\s+(\((.*?)\)|'.*?'|\S+)/is", $statement, $WHERE);
+			preg_match_all("/(\A\s*|\s+(?:AND|OR)\s+)(NOT\s+)?(\S+?)(\s*(?:!=|<>|>=|<=>?|>|<|=)\s*|\s+(?:IS(?:\s+NOT)?|(?:NOT\s+)?IN|(?:NOT\s+)?R?LIKE|(?:NOT\s+)?REGEXP)\s+)(\((.*?)\)|'.*?'|\S+)/is", $statement, $WHERE);
 			
 			$where_count = count($WHERE[0]);
 			if($where_count === 0)
