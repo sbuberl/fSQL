@@ -2638,9 +2638,10 @@ EOT;
 					if(isset($table_columns[ $column ])) {
 						$nullable = $table_columns[ $column ]['null'] == 1;
 						if( isset($join_info['offsets'][$table_name]) ) {
-							$colIndex = array_search($column,  $join_info['columns']) + $join_info['offsets'][$table_name];
+							$colIndex = array_search($column,  array_keys($table_columns)) + $join_info['offsets'][$table_name];
 							$expr = ($where_type & FSQL_WHERE_ON) ? "\$left_entry[$colIndex]" : "\$entry[$colIndex]";
-						} else {							$colIndex = array_search($column, array_keys($table_columns));
+						} else {
+							$colIndex = array_search($column, array_keys($table_columns));
 							$expr = "\$right_entry[$colIndex]";
 						}
 					}
