@@ -993,7 +993,7 @@ class fSQLEnvironment
 	
 	function _query_create($query)
 	{	
-		if(preg_match("/\ACREATE(?:\s+(TEMPORARY))?\s+TABLE\s+(?:(IF\s+NOT\s+EXISTS)\s+)?`?(?:([A-Z][A-Z0-9\_]*)`?\.`?)?([A-Z][A-Z0-9\_]*?)`?(?:\s*\((.+)\)|\s+LIKE\s+(?:([A-Z][A-Z0-9\_]*)\.)?([A-Z][A-Z0-9\_]*))/is", $query, $matches)) { 
+		if(preg_match("/\ACREATE(?:\s+(TEMPORARY))?\s+TABLE\s+(?:(IF NOT EXISTS)\s+)?`?(?:([A-Z][A-Z0-9\_]*)`?\.`?)?([A-Z][A-Z0-9\_]*?)`?\s+(?:\((.+)\)|LIKE (?:([A-Z][A-Z0-9\_]*)\.)?([A-Z][A-Z0-9\_]*))/is", $query, $matches)) {
 			
 			list(, $temporary, $ifnotexists, $db_name, $table_name, $column_list) = $matches;
 	
@@ -1634,20 +1634,20 @@ class fSQLEnvironment
 			$simple = 1;
 			$distinct = 0;
 			
-			if(preg_match("/(.*?)(?:WHERE|(LEFT|RIGHT|INNER)\s+JOIN|ORDER\s+BY|LIMIT)(.*?)/is",$select)) {
+			if(preg_match("/(.*?)(?:WHERE|(LEFT|RIGHT|INNER) JOIN|ORDER BY|LIMIT)(.*?)/is",$select)) {
 				$simple = 0;
-				preg_match("/SELECT(?:\s+(ALL|DISTINCT(?:ROW)?))?(\s+RANDOM(?:\((?:\d+)\)?)?\s+|\s+)(.*?) FROM\s+((?:\w+(?:\s+)(?:AS\s+)?(?:\w+)?)(?:(?:\s)?(?:,)(?:\s)?(?:\w+\s+(?:AS\s+)?(?:\w+)?)(?:\s+WHERE|\s+(?:LEFT|RIGHT|INNER)\s+JOIN|\s+ORDER\s+BY|\s+LIMIT)?)*)/is", $select, $matches);
-				$matches[4] = preg_replace("/(.+?)\s+(WHERE|(LEFT|RIGHT|INNER)|ORDER\s+BY|LIMIT)(.*)?/is", "\\1", $matches[4]);
+				preg_match("/SELECT(?:\s+(ALL|DISTINCT(?:ROW)?))?( RANDOM(?:\((?:\d+)\)?)?\s+| )(.*?) FROM ((?:\w+(?:\s+)(?:AS )?(?:\w+)?)(?:(?:\s)?(?:,)(?:\s)?(?:\w+(?:\s+)(?:AS )?(?:\w+)?)(?: WHERE| (?:LEFT|RIGHT|INNER) JOIN| ORDER BY| LIMIT)?)*)/is", $select, $matches);
+				$matches[4] = preg_replace("/(.+?)( WHERE| (LEFT|RIGHT|INNER)| ORDER BY| LIMIT)(.*)?/is", "\\1", $matches[4]);
 			}
-			else if(preg_match("/SELECT(?:\s+(ALL|DISTINCT(?:ROW)?))?(\s+RANDOM(?:\((?:\d+)\)?)?\s+|\s+)(.*?)\s+FROM\s+(.+)/is", $select, $matches)) { /* I got the matches, do nothing else */ }
-			else { preg_match("/SELECT(?:\s+(ALL|DISTINCT(?:ROW)?))?(\s+RANDOM(?:\((?:\d+)\)?)?\s+|\s+)(.*)/is", $select, $matches); $matches[4] = "FSQL"; }
-
+			else if(preg_match("/SELECT(?:\s+(ALL|DISTINCT(?:ROW)?))?( RANDOM(?:\((?:\d+)\)?)?\s+| )(.*?) FROM (.+)/is", $select, $matches)) { /* I got the matches, do nothing else */ }
+			else { preg_match("/SELECT(?:\s+(ALL|DISTINCT(?:ROW)?))?( RANDOM(?:\((?:\d+)\)?)?\s+| )(.*)/is", $select, $matches); $matches[4] = "FSQL"; }
+	
 			$distinct = !strncasecmp($matches[1], "DISTINCT", 8);
 			$has_random = $matches[2] != " ";
 			
 			if($simple == 0) {
-				if(preg_match("/(LEFT|RIGHT|INNER)\s+JOIN/is",$select)) {
-					@preg_match_all("/\s+(LEFT|RIGHT|INNER)?\s+JOIN\s+(.+?)\s+(USING|ON)\s*(?:(?:\((.*?)\))|(?:(?:\()?((?:\S+)\s*=\s*(?:\S+)(?:\))?)))/is", $select, $join);
+				if(preg_match("/(LEFT|RIGHT|INNER) JOIN/is",$select)) {
+					@preg_match_all("/(LEFT |RIGHT |INNER | )JOIN (.+?) (USING|ON)(?:\s+)?(?:(?:\((.*?)\))|(?:(?:\()?((?:\S+)(?:\s+)?=(?:\s+)?(?:\S+)(?:\))?)))/is", $select, $join);
 					
 					$join_name = trim($join[1][0]);
 					if(!strcasecmp($join_name, "LEFT")) {
@@ -1727,7 +1727,7 @@ class fSQLEnvironment
 			}
 			
 			if($simple == 0) {
-				if(isset($join_where) && preg_match("/\s+WHERE\s+((?:.+)(?:(?:(\s+(?:AND|OR)\s+)?(?:.+)?)*)?)(?:\s+ORDER\s+BY|\s+LIMIT)?/is", $select, $first_where)) {
+				if(isset($join_where) && preg_match("/ WHERE ((?:.+)(?:(?:((?:\s+)(?:AND|OR)(?:\s+))?(?:.+)?)*)?)(?: (LEFT|RIGHT|INNER) JOIN| ORDER BY| LIMIT)?/is", $select, $first_where)) {
 					$change = true;
 					$first_where[1] .= $join_where;
 				}
@@ -1735,7 +1735,7 @@ class fSQLEnvironment
 					$first_where[1] = "WHERE ".substr($join_where, 5);
 					$change = true;
 				}
-				else if(preg_match("/\s+WHERE\s+((?:.+)(?:(?:(\s+(?:AND|OR)\s+)?(?:.+)?)*)?)(?:\s+ORDER\s+BY|\s+LIMIT)?/is", $select, $first_where)) {
+				else if(preg_match("/ WHERE ((?:.+)(?:(?:((?:\s+)(?:AND|OR)(?:\s+))?(?:.+)?)*)?)(?: (LEFT|RIGHT|INNER) JOIN| ORDER BY| LIMIT)?/is", $select, $first_where)) {
 					$change = false;
 				}
 	
@@ -1748,21 +1748,21 @@ class fSQLEnvironment
 				}
 			}
 
-			if(preg_match_all("/(?:\A|\s*,\s*)((?:(?:[A-Z][A-Z0-9\_]*\s*\(.*?\))|(?:(?:(?:[A-Z][A-Z0-9\_]*)\.)?(?:(?:[A-Z][A-Z0-9\_]*)|\*)))(?:\s+(?:AS\s+)?[A-Z][A-Z0-9\_]*)?)/is", trim($matches[3]), $columns)) {
-				$Columns = $columns[1];
+			if(@preg_match_all("/(?:((?:(?:\S+)(?:\((?:.*?)?\))? AS (?:\w+)))|(?:(?:((?:\w+)|\*)(?:\.\w+|\*))?)(?:,)?))/is", $matches[3], $columns)) {
+				$Columns = array_unique(array_merge(array_unique($columns[1]),array_unique($columns[2])));
 			}
 			else { $Columns = explode(",", $matches[3]); }
 			if(!$Columns) { return NULL; }
-
+			
 			$ColumnList = array();
 			foreach($Columns as $column) {
 				$column = trim($column);
 				if($column == "") { continue; }
 		
-				if(preg_match("/[A-Z][A-Z0-9\_]*\s*\(.+?\)(\s+(?:AS\s+)?[A-Z][A-Z0-9\_]*)?/is", $column, $colmatches)) {
+				if(preg_match("/(.+?)\((.+?)?\)\s+AS\s+([A-Z][A-Z0-9\_]*)/is", $column, $colmatches)) {
 					$ColumnList[] = $colmatches[0];
 				}
-				else if(preg_match("/(?:([A-Z][A-Z0-9\_]*)\.)?((?:[A-Z][A-Z0-9\_]*)|\*)(?:\s+(?:AS\s+)?([A-Z][A-Z0-9\_]*))?/is",$column, $colmatches)) {
+				else if(preg_match("/(?:([A-Z][A-Z0-9\_]*)\.)?((?:[A-Z][A-Z0-9\_]*)|\*)(?:\s+AS\s+([A-Z][A-Z0-9\_]*))?/is",$column, $colmatches)) {
 					list(, $name, $column) = $colmatches;
 					if(isset($colmatches[3])) {
 						$ColumnList[] = $colmatches[0];
@@ -1781,19 +1781,19 @@ class fSQLEnvironment
 				}
 			}
 			$this->Columns[$randval] = $ColumnList;
-
+	
 			$this_random = array();
 			$this->tosort = array();
 			
 			if($matches[4] != "FSQL") {
-				if(preg_match("/\s+LIMIT\s+(?:(?:(\d+)\s*,\s*(\-1|\d+))|(\d+))/is", $select, $additional)) {
+				if(preg_match("/ LIMIT (?:(?:(\d+)(?:\s)?,(?:\s)?(\-1|\d+))|(\d+))/is", $select, $additional)) {
 					list(, $limit_start, $limit_stop) = $additional;
 					if($additional[3]) { $limit_stop = $additional[3]; $limit_start = 0; }
 					else if($additional[2] != -1) { $limit_stop += $limit_start; }
 				}
 				else { $limit_start = 0; $limit_stop = -1; }
 
-				if(preg_match("/\s+ORDER\s+BY\s+(?:(.*)\s+LIMIT|(.*))?/is", $select, $additional)) {
+				if(preg_match("/ ORDER BY (?:(.*) LIMIT|(.*))?/is", $select, $additional)) {
 					if($additional[1] != "") { $ORDERBY = explode(", ", $additional[1]); }
 					else { $ORDERBY = explode(", ", $additional[2]); }
 					for($i = 0; $i < count($ORDERBY); $i++) {
@@ -1923,7 +1923,7 @@ class fSQLEnvironment
 			}
 			else { $data[$e++] = $entry; }
 
-			if(!empty($data) && $has_random && preg_match("/\s+RANDOM(?:\((\d+)\)?)?\s+/is", $select, $additional)) {
+			if(!empty($data) && $has_random && preg_match("/ RANDOM(?:\((\d+)\)?)?\s+/is", $select, $additional)) {
 				if(!$additional[1]) { $additional[1] = 1; }
 				if($additional[1] >= count($this_random)) { $results = $data; }
 				else {
@@ -1941,19 +1941,14 @@ class fSQLEnvironment
 		return $randval;
 	}
 	
-	function _load_functions($result_id, $section, $entry, $newentry) {
-		if(preg_match("/([A-Z][A-Z0-9\_]*)\s*\((.+?)?\)(?:\s+(?:AS\s+)?([A-Z][A-Z0-9\_]*))?/is",$section,$functions)) {
+	function _load_functions($section, $entry, $newentry) {
+		if(preg_match("/(.+?)\((.+?)?\)\s+AS\s+([A-Z][A-Z0-9\_]*)/is",$section,$functions)) {
 			$in_a_class = 0;
-			$is_grouping = 0;
 			$function = strtolower($functions[1]);
-
-			$alias = (!empty($functions[3])) ? $functions[3] : $functions[0];
 
 			if(isset($this->renamed_func[$function])) {
 				$function = $this->renamed_func[$function];
 			} else if(in_array($function, $this->custom_func)) {
-				if(in_array($function, array("sum", "max", "min", "count")))
-					$is_grouping = 1;
 				$in_a_class = 1;
 				$function = "_fsql_functions_".$function;
 			} else if(!in_array($function, $this->allow_func)) {
@@ -1964,23 +1959,22 @@ class fSQLEnvironment
 			if($functions[2] != "") {
 				$parameter = explode(",", $functions[2]);
 				foreach($parameter as $param) {
-					if(!preg_match("/'(.+?)'/is", $param) && !is_numeric($param) && $is_grouping == 0) {
-						var_dump($param, $function); 
+					if(!preg_match("/'(.+?)'/is", $param) && !is_numeric($param) && $function != "sum" && $function != "max" && $function != "min" && $function != "count") {
 						if(preg_match("/(?:\S+)\.(?:\S+)/", $param)) { list($name, $var) = explode(".", $param); }
 						else { $var = $param; }
 						$parameters[] = $entry[$var];
 					}
 					else { $parameters[] = $param; }
+					if($function == "count" || $function == "max" || $function == "sum" || $function == "min") {
+						$parameters[] = $table;
+					}
 				}
-				if($is_grouping) {
-					$parameters[] = $result_id;
-				}
-				if($in_a_class == 0) { $newentry[$alias] = call_user_func_array($function, $parameters); }
-				else { $newentry[$alias] = call_user_func_array(array($this,$function), $parameters); }
+				if($in_a_class == 0) { $newentry[$functions[3]] = call_user_func_array($function, $parameters); }
+				else { $newentry[$functions[3]] = call_user_func_array(array($this,$function), $parameters); }
 			}
 			else {
-				if($in_a_class == 0) { $newentry[$alias] = call_user_func($function); }
-				else { $newentry[$alias] = call_user_func(array($this,$function)); }
+				if($in_a_class == 0) { $newentry[$functions[3]] = call_user_func($function); }
+				else { $newentry[$functions[3]] = call_user_func(array($this,$function)); }
 			}
 			return $newentry;
 		}
@@ -2702,20 +2696,18 @@ class fSQLEnvironment
 	{
 		if(!$id || !isset($this->cursors[$id]) || !isset($this->data[$id][$this->cursors[$id][0]]))
 			return NULL;
-
+		
 		$entry = $this->data[$id][$this->cursors[$id][0]];
 		if(!$entry)
 			return NULL;
-
+		
 		foreach($this->Columns[$id] as $column) {
 			$column = trim($column);
 			if($column == "")
 				continue;
 
-			if(preg_match("/\A(?:([A-Z][A-Z0-9\_]*)\.)?([A-Z][A-Z0-9\_]*)(?:\s+(?:AS\s+)?([A-Z][A-Z0-9\_]*))?\Z/is",$column,$matches)) {
+			if(preg_match("/(?:([A-Z][A-Z0-9\_]*)\.)?([A-Z][A-Z0-9\_]*)\s+AS\s+([A-Z][A-Z0-9\_]*)/is",$column,$matches)) {
 				list(, $name, $column, $as) = $matches;
-				if(empty($as))
-					$as = $column;
 				$load = $entry[$column];
 				$load = strtr($load, array("\\\"" => "\"", "\\\\\"" => "\\\""));
 				if($load) {
@@ -2724,8 +2716,8 @@ class fSQLEnvironment
 					eval("\$newentry[\$as] = $load;");
 				}
 			}
-			else if(preg_match("/(.+?)\((.+?)?\)(?:\s+(?:AS\s+)?([A-Z][A-Z0-9\_]*))?/is",$column,$functions)) {
-				$newentry = $this->_load_functions($id, $column, $entry, $newentry);
+			else if(preg_match("/(.+?)\((.+?)?\)\s+AS\s+([A-Z][A-Z0-9\_]*)/is",$column,$functions)) {
+				$newentry = $this->_load_functions($column, $entry, $newentry);
 			}
 			else {
 				$load = $entry[$column];
@@ -2866,17 +2858,17 @@ class fSQLEnvironment
 	}
 	 
 	 /////Grouping and other Misc. Functions
-	function _fsql_functions_count($column, $id) {
-		if($column == "*") { return count($this->data[$id]); }
-		else {   $i = 0;   foreach($this->data[$id] as $entry) {  if($entry[$column]) { $i++; } }  return $i;  }
+	function _fsql_functions_count($column, $data) {
+		if($column == "*") { return count($data['entries']); }
+		else {   $i = 0;   foreach($data['entries'] as $entry) {  if($entry[$column]) { $i++; } }  return $i;  }
 	}
-	function _fsql_functions_max($column, $id) {
-		foreach($this->data[$id] as $entry){   if($entry[$column] > $i || !$i) { $i = $entry[$column]; }  }	return $i;
+	function _fsql_functions_max($column, $data) {
+		foreach($data['entries'] as $entry){   if($entry[$column] > $i || !$i) { $i = $entry[$column]; }  }	return $i;
 	}
-	function _fsql_functions_min($column, $id) {
-		foreach($this->data[$id] as $entry){   if($entry[$column] < $i || !$i) { $i = $entry[$column]; }  }	return $i;
+	function _fsql_functions_min($column, $data) {
+		foreach($data['entries'] as $entry){   if($entry[$column] < $i || !$i) { $i = $entry[$column]; }  }	return $i;
 	}
-	function _fsql_functions_sum($column, $id) {  foreach($this->data[$id] as $entry){ $i += $entry[$column]; }  return $i; }
+	function _fsql_functions_sum($column, $data) {  foreach($data['entries'] as $entry){ $i += $entry[$column]; }  return $i; }
 	 
 	 /////String Functions
 	function _fsql_functions_concat_ws($string) {
