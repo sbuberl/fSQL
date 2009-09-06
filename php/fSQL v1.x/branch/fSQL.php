@@ -1502,7 +1502,8 @@ class fSQLEnvironment
 
 		$check_names = 1;
 		$replace = !strcasecmp($command, 'REPLACE');
-
+		$ignore = !empty($ignore);
+		
 		// Column List present and VALUES list
 		if(preg_match('/^\(`?(.+?)`?\)\s+VALUES\s*\((.+)\)/is', $the_rest, $matches)) { 
 			$Columns = preg_split('/`?\s*,\s*`?/s', $matches[1]);
@@ -1574,6 +1575,7 @@ class fSQLEnvironment
 			}
 		}
 		
+		$unique_keys = array(0 => array('type' => 'p', 'columns' => array()));
 		$newentry = array();
 		$col_index = -1;
 		
@@ -1654,33 +1656,40 @@ class fSQLEnvironment
 
 			
 			////See if it is a PRIMARY KEY or UNIQUE
-			if($columnDef['key'] === 'p' || $columnDef['key'] === 'u') {
-				if($replace) {
-					$tableCursor->first();
-					while(!$tableCursor->isDone()) {
-						$row = $tableCursor->getRow();
-						if($row[$col_index] == $newentry[$col_index]) {
-							$tableCursor->deleteRow();
-							$this->affected++;
-						}
-						else
-							$tableCursor->next();
+			if($columnDef['key'] === 'p')
+				$unique_keys[0]['columns'][] = $col_index;
+			else if($columnDef['key'] === 'u')
+				$unique_keys[] = array('type' => 'u', 'columns' => array($col_index));	
+		}
+		
+		if(!empty($unique_keys[0]['columns']) || count($unique_keys) > 1) {
+			$tableCursor->first();
+			while(!$tableCursor->isDone()) {
+				$row = $tableCursor->getRow();
+				$do_delete = false;
+				foreach($unique_keys as $unique_key) {
+					$match_found = true;
+					foreach($unique_key['columns'] as $col_index) {
+						$match_found = $match_found && $row[$col_index] == $newentry[$col_index];
 					}
-				} else {
-					$tableCursor->first();
-					while(!$tableCursor->isDone()) {
-						$row = $tableCursor->getRow();
-						if($row[$col_index] == $newentry[$col_index]) {
-							if(empty($ignore)) {
-								$this->_set_error("Duplicate value for unique column '{$col_name}'");
-								return NULL;
-							} else {
-								return TRUE;
-							}
+					if($match_found) {
+						if($replace)
+							$do_delete = true;
+						else if(!$ignore) {
+							$this->_set_error("Duplicate value found on key");
+							return NULL;
+						} else {
+							return TRUE;
 						}
-						$tableCursor->next();
 					}
 				}
+				
+				if($do_delete) {
+					$tableCursor->deleteRow();
+					$this->affected++;
+				}
+				else
+					$tableCursor->next();
 			}
 		}
 
@@ -1699,11 +1708,12 @@ class fSQLEnvironment
 	////Update data in the DB
 	function _query_update($query) {
 		$this->affected = 0;
-		if(preg_match('/\AUPDATE\s+`?(?:([A-Z][A-Z0-9\_]*)`?\.`?)?([A-Z][A-Z0-9\_]*)`?\s+SET\s+(.*)(?:\s+WHERE\s+.+)?\s*[;]?\Z/is', $query, $matches)) {
-			$matches[3] = preg_replace('/(.+?)(\s+WHERE\s+)(.*)/is', '\\1', $matches[3]);
-			$table_name = $matches[2];
+		if(preg_match('/\AUPDATE(?:\s+(IGNORE))?\s+`?(?:([A-Z][A-Z0-9\_]*)`?\.`?)?([A-Z][A-Z0-9\_]*)`?\s+SET\s+(.*)(?:\s+WHERE\s+.+)?\s*[;]?\Z/is', $query, $matches)) {
+			list(,$ignore,$db_name,$table_name,$set_clause) = $matches;
+			$ignore = !empty($ignore);
+			$set_clause = preg_replace('/(.+?)(\s+WHERE\s+)(.*)/is', '\\1', $set_clause);
 
-			$db =& $this->_get_database($matches[1]);
+			$db =& $this->_get_database($db_name);
 			if($db === null)
 				return null;
 				
@@ -1721,7 +1731,7 @@ class fSQLEnvironment
 			$columnNames = array_keys($columns);
 			$cursor =& $table->getWriteCursor();
 
-			if(preg_match_all("/`?((?:\S+)`?\s*=\s*(?:'(?:.*?)'|\S+))`?\s*(?:,|\Z)/is", $matches[3], $sets)) {
+			if(preg_match_all("/`?((?:\S+)`?\s*=\s*(?:'(?:.*?)'|\S+))`?\s*(?:,|\Z)/is", $set_clause, $sets)) {
 				foreach($sets[1] as $set) {
 					$s = preg_split('/`?\s*=\s*`?/', $set);
 					$SET[] = $s;
@@ -1746,7 +1756,6 @@ class fSQLEnvironment
 				$where = "return ($where);";
 			}
 			
-			$newentry = array();
 			$col_indicies = array_flip($columnNames);
 			
 			for( $cursor->first(); !$cursor->isDone(); $cursor->next())
