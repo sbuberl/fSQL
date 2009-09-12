@@ -19,20 +19,28 @@ class fSQLTable
 		return $this->name;
 	}
 
-	function getDatabase()
+	function &getDatabase()
 	{
 		return $this->database;
 	}
-
-	function exists() { return false; }
 
 	function rename($new_name)
 	{
 		$this->name = $new_name;
 	}
-
+	
 	function drop() { return false; }
+	function exists() { return false; }
+	function temporary() { return false; }
 
+	function getColumnNames() { return false; }
+	function getColumns() { return false; }
+	function setColumns($columns) { }
+	
+	function getCursor() { return null; }
+	function getWriteCursor() { return null; }
+	function getEntries() { return null; }
+	
 	function isReadLocked() { return false; }
 	function readLock() { return false; }
 	function writeLock() { return false; }
@@ -44,12 +52,11 @@ class fSQLTable
  */
 class fSQLTemporaryTable extends fSQLTable
 {
+	var $exists = false;
 	var $rcursor = NULL;
 	var $wcursor = NULL;
 	var $columns = NULL;
 	var $entries = NULL;
-	var $data_load =0;
-	var $uncommitted = false;
 
 	function fSQLTemporaryTable($name, &$database)
 	{
@@ -59,11 +66,13 @@ class fSQLTemporaryTable extends fSQLTable
 
 	function create($columnDefs)
 	{
-		$table->columns = $columnDefs;
+		$this->exists = true;
+		$this->columns = $columnDefs;
+		$this->entries = array();
 	}
 	
 	function exists() {
-		return true;
+		return $this->exists;
 	}
 
 	function temporary() {
@@ -84,7 +93,7 @@ class fSQLTemporaryTable extends fSQLTable
 	
 	function &getCursor()
 	{
-		if($this->rcursor == NULL)
+		if($this->rcursor === NULL)
 			$this->rcursor =& new fSQLCursor($this->entries);
 
 		return $this->rcursor;
@@ -92,21 +101,25 @@ class fSQLTemporaryTable extends fSQLTable
 
 	function &getWriteCursor()
 	{
-		if($this->wcursor == NULL)
+		if($this->wcursor === NULL)
 			$this->wcursor =& new fSQLWriteCursor($this->entries);
 		
 		return $this->wcursor;
 	}
 	
+	function getEntries()
+	{
+		return $this->entries;
+	}
+	
 	function commit()
 	{
-		$this->uncommitted = false;
+
 	}
 	
 	function rollback()
 	{
-		$this->data_load = 0;
-		$this->uncommitted = false;
+
 	}
 
 	// Free up all data
@@ -116,8 +129,6 @@ class fSQLTemporaryTable extends fSQLTable
 		$this->wcursor = NULL;
 		$this->columns = NULL;
 		$this->entries = NULL;
-		$this->data_load = 0;
-		$this->uncommitted = false;
 	}
 
 	/* Unnecessary for temporary tables */
@@ -198,12 +209,16 @@ class fSQLStandardTable extends fSQLTable
 	{
 		$toprint = count($columnDefs)."\r\n";
 		foreach($columnDefs as $name => $column) {
-			if(!is_array($column['restraint'])) {
-				$toprint .= $name.': '.$column['type'].';;'.$column['auto'].';'.$column['default'].';'.$column['key'].';'.$column['null'].";\r\n";
-			} else {
-				$toprint .= $name.': '.$column['type'].';'.implode(',', $column['restraint']).';'.$column['auto'].';'.$column['default'].';'.$column['key'].';'.$column['null'].";\r\n";
-			}
-		};
+			$default = $column['default'];
+			if($default === NULL)
+				$default = 'NULL';
+			else if(is_string($default))
+				$default = "'".$default."'";
+			
+			$restraint = is_array($column['restraint']) ? implode(',', $column['restraint']) : '';
+			
+			$toprint .= sprintf("%s: %s;%s;%d;%s;%s;%d;\r\n", $name, $column['type'], $restraint, $column['auto'], $default, $column['key'], $column['null']);
+		}
 		return $toprint;
 	}
 	
@@ -243,17 +258,19 @@ class fSQLStandardTable extends fSQLTable
 
 			for($i = 0; $i < $num_columns; $i++) {
 				$line =	fgets($columnsHandle);
-				if(preg_match("/(\S+): ([a-z][a-z]?);(.*);(0|1);(-?\d+(?:\.\d+)?|'.*'|NULL);(p|u|k|n);(0|1);/", $line, $matches)) {
+				if(preg_match("/(\S+): ([a-z][a-z]?);(.*);(0|1);(-?\d+(?:\.\d+)?|'(.*)'|NULL);(p|u|k|n);(0|1);/", $line, $matches)) {
 					$type = $matches[2];
 					$default = $matches[5];
 					if($default === "NULL")
 						$default = NULL;
+					else if($default{0} === '\'')
+						$default = $matches[6];
 					else if($type === FSQL_TYPE_INTEGER)
 						$default = (int) $default;
 					else if($type === FSQL_TYPE_FLOAT)
 						$default = (float) $default;
 					$this->columns[$matches[1]] = array(
-						'type' => $type, 'auto' => $matches[4], 'default' => $default, 'key' => $matches[6], 'null' => $matches[7]
+						'type' => $type, 'auto' => (bool) $matches[4], 'default' => $default, 'key' => $matches[7], 'null' => (bool) $matches[8]
 					);
 					preg_match_all("/'.*?(?<!\\\\)'/", $matches[3], $this->columns[$matches[1]]['restraint']);
 					$this->columns[$matches[1]]['restraint'] = $this->columns[$matches[1]]['restraint'][0];
@@ -288,6 +305,12 @@ class fSQLStandardTable extends fSQLTable
 			$this->wcursor = new fSQLWriteCursor($this->entries);
 		
 		return $this->wcursor;
+	}
+	
+	function getEntries()
+	{
+		$this->_loadEntries();
+		return $this->entries;
 	}
 
 	function _loadEntries()
@@ -342,14 +365,18 @@ class fSQLStandardTable extends fSQLTable
 						$skip = false;
 					}
 				
-					preg_match_all("#(-?\d+(?:\.\d+)?|'(.*?(?<!\\\\))'|NULL);#s", $data, $matches);
+					preg_match_all("#((-?\d+(\.\d+)?)|'(.*?(?<!\\\\))'|NULL);#s", $data, $matches);
 					for($m = 0; $m < count($matches[0]); $m++) {
 						$value = $matches[1][$m];
 						if($value === 'NULL')  // null
 							$entries[$row][$m] = NULL;
 						else if($value{0} === '\'') //string
-							$entries[$row][$m] = $matches[2][$m];
-						else // number
+							$entries[$row][$m] = $matches[4][$m];
+						else if(!empty($matches[3])) //float
+							$entries[$row][$m] = (float) $value;
+						else if(!empty($matches[2])) //int
+							$entries[$row][$m] = (int) $value;
+						else // other?
 							$entries[$row][$m] = $value;
 					}
 				}
@@ -405,9 +432,8 @@ class fSQLStandardTable extends fSQLTable
 				$toprint .= $number.': ';
 				foreach($entry as $key => $value) {
 					if($value === NULL)
-						$value = 'NULL';
-					
-					if(is_string($value))
+						$toprint .= 'NULL;';
+					else if(is_string($value))
 						$toprint .= "'$value';";
 					else
 						$toprint .= $value.';';
