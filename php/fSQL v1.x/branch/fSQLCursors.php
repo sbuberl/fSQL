@@ -89,7 +89,7 @@ class fSQLWriteCursor extends fSQLCursor
 	
 	function appendRow($entry)
 	{
-		$this->entries[] = $entry;
+		array_push($this->entries, $entry);
 		$this->uncommitted = true;
 	}
 
@@ -109,8 +109,10 @@ class fSQLWriteCursor extends fSQLCursor
 			$this->num_rows--;
 			unset($this->entries[$this->current_row_id]);
 			$this->current_row_id = key($this->entries);
-			if($this->current_row_id === null)  // key on an empty array is null?
+			if($this->current_row_id === null) { // key on an empty array is null?
 				$this->current_row_id = false;
+				$this->entries = array();
+			}
 			$this->uncommitted = true;
 		}
 	}

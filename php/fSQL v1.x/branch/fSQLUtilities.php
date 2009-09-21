@@ -13,6 +13,44 @@ if (!function_exists('array_combine')) {
 	}
 }
 
+if(!function_exists('is_a'))
+{
+	function is_a($anObject, $aClass)
+	{
+	   return !strcasecmp(get_class($anObject), $aClass) || is_subclass_of($anObject, $aClass);
+	}
+}
+
+function create_directory($original_path, $type, $environment)
+{
+	$paths = pathinfo($original_path);
+	
+	$dirname = realpath($paths['dirname']);
+	if(!$dirname || !is_dir($dirname) || !is_readable($dirname)) {
+		return $this->environment->_set_error(ucfirst($type)." parent path '$path' does not exist.  Please correct the path or create the directory.");
+	}
+	
+	$path = $dirname.'/'.$paths['basename'];
+	$realpath = realpath($path);
+	if($realpath === false) {
+		if(@mkdir($path, 0777) === true)
+			$realpath = $path;
+		else
+			return $environment->_set_error("Unable to create directory '$path'.  Please make the directory manually or check the permissions of the parent directory.");
+	} else if(!is_readable($path) || !is_writeable($path)) {
+		chmod($path, 0777);
+	}
+
+	if(substr($realpath, -1) != '/')
+		$realpath .= '/';
+	
+	if(is_dir($realpath) && is_readable($realpath) && is_writeable($realpath)) {
+		return $realpath;
+	} else {
+		return $environment->_set_error("Path to directory for $type is not valid.  Please correct the path or create the directory and check that is readable and writable.");
+	}
+}
+
 /**
  *  A reentrant read/write lock system for opening a file
  * 

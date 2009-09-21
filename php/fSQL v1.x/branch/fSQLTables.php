@@ -6,12 +6,12 @@
 class fSQLTable
 {
 	var $name = NULL;
-	var $database = NULL;
+	var $schema = NULL;
 
-	function fSQLTable($name, &$database)
+	function fSQLTable($name, &$schema)
 	{
 		$this->name = $name;
-		$this->database =& $database;
+		$this->schema =& $schema;
 	}
 
 	function getName()
@@ -19,9 +19,9 @@ class fSQLTable
 		return $this->name;
 	}
 
-	function &getDatabase()
+	function &getSchema()
 	{
-		return $this->database;
+		return $this->schema;
 	}
 
 	function rename($new_name)
@@ -58,10 +58,10 @@ class fSQLTemporaryTable extends fSQLTable
 	var $columns = NULL;
 	var $entries = NULL;
 
-	function fSQLTemporaryTable($name, &$database)
+	function fSQLTemporaryTable($name, &$schema)
 	{
 		$this->name = $name;
-		$this->database =& $database;
+		$this->schema =& $schema;
 	}
 
 	function create($columnDefs)
@@ -69,6 +69,9 @@ class fSQLTemporaryTable extends fSQLTable
 		$this->exists = true;
 		$this->columns = $columnDefs;
 		$this->entries = array();
+		$masterSchema = $this->schema->getDatabase()->getEnvironment()->_get_master_schema();
+		if($masterSchema != $this->schema)
+			$masterSchema->addSchema($this);
 	}
 	
 	function exists() {
@@ -129,6 +132,7 @@ class fSQLTemporaryTable extends fSQLTable
 		$this->wcursor = NULL;
 		$this->columns = NULL;
 		$this->entries = NULL;
+		$this->schema->getDatabase()->getEnvironment()->_get_master_schema()->removeTable($this);
 	}
 
 	/* Unnecessary for temporary tables */
@@ -154,14 +158,15 @@ class fSQLStandardTable extends fSQLTable
 	var $dataLockFile = NULL;
 	var $dataFile = NULL;
 	var $lock = NULL;
+	var $readFunction = null;
 	
-	function fSQLStandardTable($name, &$database)
+	function fSQLStandardTable($name, &$schema)
 	{
 		$this->name = $name;
-		$this->database =& $database;
-		$path_to_db = $database->getPath();
-		$columns_path = $path_to_db.$name.'.columns';
-		$data_path = $path_to_db.$name.'.data';
+		$this->schema =& $schema;
+		$path_to_schema = $schema->getPath();
+		$columns_path = $path_to_schema.$name.'.columns';
+		$data_path = $path_to_schema.$name.'.data';
 		$this->columnsLockFile = new fSQLFile($columns_path.'.lock.cgi');
 		$this->columnsFile = new fSQLFile($columns_path.'.cgi');
 		$this->dataLockFile = new fSQLFile($data_path.'.lock.cgi');
@@ -202,13 +207,32 @@ class fSQLStandardTable extends fSQLTable
 		$this->dataFile->releaseWrite();	
 		$this->dataLockFile->releaseWrite();
 		
+		$this->schema->getDatabase()->getEnvironment()->_get_master_schema()->addTable($this);
+		
 		return $this;
 	}
 
 	function _printColumns($columnDefs)
 	{
 		$toprint = count($columnDefs)."\r\n";
+		$this->readString = '^(\d+):\s*';
 		foreach($columnDefs as $name => $column) {
+			$nullable = $column['null'];
+			$typeMatch = "";
+			switch($column['type']) {
+				case FSQL_TYPE_INTEGER:
+				case FSQL_TYPE_ENUM:
+				case FSQL_TYPE_TIMESTAMP:
+					$typeMatch = '-?\d+';
+					break;
+				case FSQL_TYPE_FLOAT:
+					$typeMatch = '-?\d+\.\d+';
+					break;
+				default:
+					$typeMatch = "'.*?(?<!\\\\)'";
+					break;
+			}
+			$this->readString .= $nullable ? "($typeMatch|NULL);" : "($typeMatch);";
 			$default = $column['default'];
 			if($default === NULL)
 				$default = 'NULL';
@@ -255,13 +279,14 @@ class fSQLStandardTable extends fSQLTable
 			}
 			
 			$num_columns = $matches[1];
-
+			$readString = '^(\d+):\s*';
+			$translate = '';
 			for($i = 0; $i < $num_columns; $i++) {
 				$line =	fgets($columnsHandle);
 				if(preg_match("/(\S+): ([a-z][a-z]?);(.*);(0|1);(-?\d+(?:\.\d+)?|'(.*)'|NULL);(p|u|k|n);(0|1);/", $line, $matches)) {
 					$type = $matches[2];
 					$default = $matches[5];
-					if($default === "NULL")
+					if($default === 'NULL')
 						$default = NULL;
 					else if($default{0} === '\'')
 						$default = $matches[6];
@@ -269,6 +294,34 @@ class fSQLStandardTable extends fSQLTable
 						$default = (int) $default;
 					else if($type === FSQL_TYPE_FLOAT)
 						$default = (float) $default;
+						
+					$nullable = (bool) $matches[8];
+					$typeMatch = '';
+					$translateCode = '';
+					switch($type) {
+						case FSQL_TYPE_INTEGER:
+						case FSQL_TYPE_ENUM:
+						case FSQL_TYPE_TIMESTAMP:
+						case FSQL_TYPE_YEAR:
+							$typeMatch = '-?\d+';
+							$translateCode =  "((int) \$entry[$i])";
+							break;
+						case FSQL_TYPE_FLOAT:
+							$typeMatch = '-?\d+\.\d+';
+							$translateCode =  "((float) \$entry[$i])";
+							break;
+						default:
+							$typeMatch = "'.*?(?<!\\\\\\\\)'";
+							$translateCode = "substr(\$entry[$i], 1, -1)";
+							break;
+					}
+					if($nullable) {
+						$readString .= "($typeMatch|NULL);";
+						$translate[] = "((\$entry[$i] !== 'NULL') ? $translateCode : null)";
+					} else {
+						$readString .= "($typeMatch);";
+						$translate[] = $translateCode;
+					}
 					$this->columns[$matches[1]] = array(
 						'type' => $type, 'auto' => (bool) $matches[4], 'default' => $default, 'key' => $matches[7], 'null' => (bool) $matches[8]
 					);
@@ -278,6 +331,19 @@ class fSQLStandardTable extends fSQLTable
 					return NULL;
 				}
 			}
+
+			$fullTranslateCode = implode(',', $translate);
+			$readCode = <<<EOC
+\$line = rtrim(fgets(\$dataHandle, 4096));
+if(preg_match("/{$readString}/", \$line, \$entry))
+{
+	array_shift(\$entry);
+	\$row = (int) array_shift(\$entry);
+	\$entries[\$row] = array($fullTranslateCode); 
+}
+EOC;
+			
+			$this->readFunction = create_function('$dataHandle,&$entries', $readCode);
 
 			$this->columnsFile->releaseRead();
 		}
@@ -301,7 +367,7 @@ class fSQLStandardTable extends fSQLTable
 	{
 		$this->_loadEntries();
 
-		if($this->wcursor === NULL)
+		if($this->wcursor === null)
 			$this->wcursor = new fSQLWriteCursor($this->entries);
 		
 		return $this->wcursor;
@@ -319,7 +385,7 @@ class fSQLStandardTable extends fSQLTable
 		$lock = $this->dataLockFile->getHandle();
 		
 		$modified = fread($lock, 20);
-		if($this->data_load === NULL || $this->data_load < $modified)
+		if($this->data_load === null || $this->data_load < $modified)
 		{
 			$this->data_load = $modified;
 
@@ -334,18 +400,17 @@ class fSQLStandardTable extends fSQLTable
 				return NULL;
 			}
 	
-			$num_entries = rtrim($matches[1]);
+			$num_entries = (int) rtrim($matches[1]);
 			$entries = array();
 			
 			if($num_entries != 0)
 			{
-				$columns = array_keys($this->getColumns());
-				$skip = false;
-	
+			//	$columns = array_keys($this->getColumns());
+			//	$skip = false;
+				$readFunction = $this->readFunction;
 				for($i = 0;  $i < $num_entries; $i++) {
-					$line = rtrim(fgets($dataHandle, 4096));
-
-					if(!$skip) {
+					$readFunction($dataHandle, $entries);
+/*					if(!$skip) {
 						if(preg_match('/^(\d+):(.*)$/', $line, $matches))
 						{
 							$row = $matches[1];
@@ -378,7 +443,7 @@ class fSQLStandardTable extends fSQLTable
 							$entries[$row][$m] = (int) $value;
 						else // other?
 							$entries[$row][$m] = $value;
-					}
+					} */
 				}
 			}
 			
@@ -475,6 +540,7 @@ class fSQLStandardTable extends fSQLTable
 			unlink($this->columnsLockFile->getPath());
 			unlink($this->dataFile->getPath());
 			unlink($this->dataLockFile->getPath());
+			$this->schema->getDatabase()->getEnvironment()->_get_master_schema()->removeTable($this);
 			return true;
 		}
 		else
