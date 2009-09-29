@@ -69,9 +69,8 @@ class fSQLTemporaryTable extends fSQLTable
 		$this->exists = true;
 		$this->columns = $columnDefs;
 		$this->entries = array();
-		$masterSchema = $this->schema->getDatabase()->getEnvironment()->_get_master_schema();
-		if($masterSchema != $this->schema)
-			$masterSchema->addSchema($this);
+		if(!is_a($this->schema, 'fSQLMasterSchema'))
+			$this->schema->getDatabase()->getEnvironment()->_get_master_schema()->addTable($this);
 	}
 	
 	function exists() {

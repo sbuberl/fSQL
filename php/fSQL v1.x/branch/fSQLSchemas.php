@@ -28,6 +28,12 @@ class fSQLSchema
 		return $table;
 	}
 	
+	function &createView($view_name, $query, $columns = null)
+	{
+		$view = null;
+		return $view;
+	}
+	
 	function &getDatabase()
 	{
 		return $this->database;
@@ -100,20 +106,34 @@ class fSQLMemorySchema extends fSQLSchema
 	
 	function &createTable($table_name, $columns, $temporary = false)
 	{
-		$table = new fSQLTemporaryTable($table_name, $this);
+		$table =& new fSQLTemporaryTable($table_name, $this);
 		$this->tables[$table_name] =& $table;
+		//$table =& $this->tables[$table_name];
 		$table->create($columns);
 		return $table;
 	}
 	
+	function &createView($view_name, $query, $columns = null)
+	{
+		$table =& new fSQLTemporaryView($view_name, $this, $query, $columns);
+		$this->tables[$view_name] =& $table;
+		$table->create($columns);
+		return $this->tables[$view_name];
+	}
+	
 	function &getTable($table_name)
 	{
-		if(!isset($this->tables[$table_name])) {
-			$table = new fSQLStandardTable($table_name, $this);
-			$this->tables[$table_name] =& $table;
+		$rel = false;
+		if(isset($this->tables[$table_name]))
+		{
+			$rel =& $this->tables[$table_name];
+			if(is_a($rel, 'fSQLView')) {
+				$this->tables[$table_name]->execute();
+			}
+			return $this->tables[$table_name];
 		}
-		
-		return $this->tables[$table_name];
+	
+		return $rel;
 	}
 	
 	/**
@@ -197,9 +217,9 @@ class fSQLStandardSchema extends fSQLSchema
 		$table = NULL;
 		
 		if(!$temporary) {
-			$table = new fSQLStandardTable($table_name, $this);
+			$table =& new fSQLStandardTable($table_name, $this);
 		} else {
-			$table = new fSQLTemporaryTable($table_name, $this);
+			$table =& new fSQLTemporaryTable($table_name, $this);
 			$this->loadedTables[$table_name] =& $table;
 		}
 
@@ -211,8 +231,8 @@ class fSQLStandardSchema extends fSQLSchema
 	function &getTable($table_name)
 	{
 		if(!isset($this->loadedTables[$table_name])) {
-			$table = new fSQLStandardTable($table_name, $this);
-			$this->loadedTables[$table_name] = $table;
+			$table =& new fSQLStandardTable($table_name, $this);
+			$this->loadedTables[$table_name] =& $table;
 			unset($table);
 		}
 		
@@ -334,13 +354,13 @@ class fSQLMasterSchema extends fSQLMemorySchema
 		return true;
 	}
 	
-	function addDatabase($database)
+	function addDatabase(&$database)
 	{
 		$dbTable =& $this->getTable('databases');
 		$dbTable->getWriteCursor()->appendRow(array($database->getName(), $database->getPath()));
 	}
 	
-	function addSchema($schema)
+	function addSchema(&$schema)
 	{
 		$schemaTable =& $this->getTable('schemas');
 		$schemaTable->getWriteCursor()->appendRow(array($schema->getDatabase()->getName(), $schema->getName(), $schema->getPath()));
@@ -352,11 +372,13 @@ class fSQLMasterSchema extends fSQLMemorySchema
 		}
 	}
 	
-	function addTable($table)
+	function addTable(&$table)
 	{
 		$schema =& $table->getSchema();
 		$tablesTable =& $this->getTable('tables');
-		if($table->temporary()) {
+		if(is_a($table, 'fSQLView'))
+			$type = 'VIEW';
+		else if($table->temporary()) {
 			$type = 'LOCAL TEMPORARY';
 		} else {
 			$type = 'BASE TABLE';
@@ -366,7 +388,7 @@ class fSQLMasterSchema extends fSQLMemorySchema
 		$this->addColumns($table);
 	}
 	
-	function addColumns($table)
+	function addColumns(&$table)
 	{
 		$schema =& $table->getSchema();
 		$database =& $schema->getDatabase();
@@ -395,7 +417,7 @@ class fSQLMasterSchema extends fSQLMemorySchema
 		}
 	}
 	
-	function removeDatabase($database)
+	function removeDatabase(&$database)
 	{	
 		$db_name = $database->getName();
 		
@@ -416,7 +438,7 @@ class fSQLMasterSchema extends fSQLMemorySchema
 		}
 	}
 	
-	function removeSchema($schema)
+	function removeSchema(&$schema)
 	{	
 		$db_name = $schema->getDatabase()->getName();
 		$schema_name = $schema->getName();
@@ -438,7 +460,7 @@ class fSQLMasterSchema extends fSQLMemorySchema
 		}
 	}
 	
-	function removeTable($table)
+	function removeTable(&$table)
 	{
 		$schema =& $table->getSchema();
 		
@@ -460,7 +482,7 @@ class fSQLMasterSchema extends fSQLMemorySchema
 		$this->removeColumns($table);
 	}
 	
-	function removeColumns($table)
+	function removeColumns(&$table)
 	{
 		$schema =& $table->getSchema();
 		

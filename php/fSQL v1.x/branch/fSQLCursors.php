@@ -132,10 +132,12 @@ class fSQLResultSet
 	
 	function fSQLResultSet($columns, $data)
 	{
-		$this->columns = $columns;
+		$this->columns = array();
+		foreach($columns as $column)
+			$this->columns[$column['name']] = $column;
 		$this->data = $data;
-		$this->columnsCursor = new fSQLCursor($columns);
-		$this->dataCursor = new fSQLCursor($data);
+		$this->columnsCursor =& new fSQLCursor($columns);
+		$this->dataCursor =& new fSQLCursor($data);
 	}
 	
 	function free()

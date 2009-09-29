@@ -23,6 +23,7 @@ define('FSQL_WHERE_ON',4,TRUE);
 define('FSQL_WHERE_HAVING',8,TRUE);
 define('FSQL_WHERE_HAVING_AGG',9,TRUE);
 
+define('FSQL_TYPE_BOOLEAN','b',TRUE);
 define('FSQL_TYPE_DATE','d',TRUE);
 define('FSQL_TYPE_DATETIME','dt',TRUE);
 define('FSQL_TYPE_ENUM','e',TRUE);
@@ -53,6 +54,7 @@ require FSQL_INCLUDE_PATH.'/fSQLFunctions.php';
 require FSQL_INCLUDE_PATH.'/fSQLSchemas.php';
 require FSQL_INCLUDE_PATH.'/fSQLTables.php';
 require FSQL_INCLUDE_PATH.'/fSQLUtilities.php';
+require FSQL_INCLUDE_PATH.'/fSQLViews.php';
 
 class fSQLEnvironment
 {
@@ -68,6 +70,7 @@ class fSQLEnvironment
 	var $insert_id = 0;
 	var $auto = 1;
 	var $registered_functions = array();
+	var $resultSets = array();
 	
 	function fSQLEnvironment()
 	{
@@ -83,16 +86,19 @@ class fSQLEnvironment
 		$this->error_msg = null;
 		
 		if($path !== FSQL_MEMORY_DB_PATH)
-			$db =& new fSQLDatabase($this, $name, $path);
-		else
-			$db =& new fSQLMemoryDatabase($this, $name); 
-		
-		if($db->create()) {
+			$this->databases[$name] =& new fSQLDatabase($this, $name, $path);
+		else {
+			$db =& new fSQLMemoryDatabase($this, $name);
 			$this->databases[$name] =& $db;
+		} 
+		
+		if($this->databases[$name]->create()) {
 			return true;
 		}
-		else
+		else {
+			unset($this->databases[$name]);
 			return false;
+		}
 	}
 	
 	function define_schema($db_name, $schema_name)
@@ -130,7 +136,7 @@ class fSQLEnvironment
 			else
 				return false;
 		} else {
-			return $this->_set_error("No database called {$name} found");
+			return $this->_set_error("No database called {$db_name} found");
 		}
 	}
 	
@@ -138,10 +144,14 @@ class fSQLEnvironment
 	{
 		$this->_unlock_tables();
 		
-		foreach (array_keys($this->databases) as $db_name ) {
-			$this->databases[$db_name]->close();
-		}
+		foreach(array_keys($this->resultSets) as $rs_id)
+			$this->resultSets[$rs_id]->close();
 		
+		foreach (array_keys($this->databases) as $db_name)
+			$this->databases[$db_name]->close();
+		
+		$this->resultSets = array();
+		$this->databases = array();
 		$this->updatedTables = array();
 		$this->join_lambdas = array();
 		$this->databases = array();
@@ -176,7 +186,7 @@ class fSQLEnvironment
 		return $this->_set_error("Table {$table_name_pieces[0]}.{$table_name_pieces[1]}.{$table_name_pieces[2]} does not exist"); 
 	}
 
-	function _error_table_read_lock($table_name)
+	function _error_table_read_lock($table_name_pieces)
 	{
 		return $this->_set_error("Table {$table_name_pieces[0]}.{$table_name_pieces[1]}.{$table_name_pieces[2]} is locked for reading only"); 
 	}
@@ -275,6 +285,8 @@ class fSQLEnvironment
 			if($schema)
 			{
 				$table =& $schema->getTable($table_name);
+				if(!$table)
+					$this->_error_table_not_exists($name_pieces);
 			}
 		}
 		
@@ -392,18 +404,31 @@ class fSQLEnvironment
 	
 	function _query_create($query)
 	{
+		if(preg_match('/\ACREATE(?:\s+TEMPORARY)?\s+TABLE\s+/is', $query))
+			return $this->_query_create_table($query);
+		else if(preg_match('/\ACREATE(?:\s+OR\s+REPLACE)?\s+VIEW\s+/is', $query))
+			return $this->_query_create_view($query);
+		else
+			return $this->_set_error('Invalid CREATE query');
+	}
+	
+	function _query_create_table($query)
+	{
 		if(preg_match('/\ACREATE(?:\s+(TEMPORARY))?\s+TABLE\s+(?:(IF\s+NOT\s+EXISTS)\s+)?(`?(?:[^\W\d]\w*`?\.`?){0,2}[^\W\d]\w*`?)(?:\s*\((.+)\)|\s+LIKE\s+((?:[^\W\d]\w*\.){0,2}[^\W\d]\w*))/is', $query, $matches)) {
 			
-			list(, $temporary, $ifnotexists, $table_name, $column_list) = $matches;
+			list(, $temporary, $ifnotexists, $full_table_name, $column_list) = $matches;
 
-			$table_name_pieces = $this->_parse_table_name($table_name);
-			$table =& $this->_find_table($table_name_pieces);
-			$schema = $table->getSchema();
-			if($table === false) {
+			$table_name_pieces = $this->_parse_table_name($full_table_name);
+			if($table_name_pieces === false)
 				return false;
-			} else if($table->exists()) {
+			
+			$table_name = $table_name_pieces[2];
+			$schema =& $this->_find_schema($table_name_pieces[0], $table_name_pieces[1]);
+			if($schema === false) {
+				return false;
+			} else if($schema->getTable($table_name) !== false) {
 				if(empty($ifnotexists)) {
-					return $this->_set_error("Table {$table_name} already exists");
+					return $this->_set_error("A relation named {$table_name} already exists");
 				} else {
 					return true;
 				}
@@ -551,23 +576,41 @@ class fSQLEnvironment
 			} else {
 				$src_table_name_pieces = $this->_parse_table_name($matches[5]);
 				$src_table =& $this->_find_table($src_table_name_pieces);
-				$src_schema =& $src_table->getSchema();
-				if($src_table === false) {
+				if($src_table === false)
 					return false;
-				} else if($src_table->exists()) {
-					$new_columns = $src_table->getColumns();
-				} else {
-					return $this->_set_error("Table {$src_scchema->name}.{$src_table_name} doesn't exist");
-				}
+				
+				$new_columns = $src_table->getColumns();
 			}
 			
-			$schema->createTable($table->getName(), $new_columns, $temporary);
+			$schema->createTable($table_name, $new_columns, $temporary);
 	
 			return true;
 		} else {
-			return $this->_set_error('Invalid CREATE query');
+			return $this->_set_error('Invalid CREATE TABLE query');
 		}
 	}
+	
+	function _query_create_view($query)
+	{
+		if(preg_match('/\ACREATE(\s+OR\s+REPLACE)?\s+VIEW\s+(`?(?:[^\W\d]\w*`?\.`?){0,2}[^\W\d]\w*`?)\s+AS\s+(.*)\Z/is', $query, $matches))
+		{
+			$replace = !empty($matches[1]);
+			$table_name_pieces = $this->_parse_table_name($matches[2]);
+			$schema =& $this->_find_schema($table_name_pieces[0], $table_name_pieces[1]);
+			if($schema === false)
+				return false;
+			else if($schema->getTable($table_name_pieces[2]) !== false)
+				return $this->_set_error("A relation named {$table_name_pireces[2]} already exists");
+			$view_query = $matches[3];
+			
+			$schema->createView($table_name_pieces[2], $view_query, null);
+			
+			return true;
+		}
+		else
+			return $this->_set_error('Invalid CREATE VIEW query');
+	}
+	
 	
 	function _prep_for_insert($value)
 	{
@@ -610,10 +653,7 @@ class fSQLEnvironment
 		$table =& $this->_find_table($table_name_pieces);
 		if($table === false) {
 			return false;
-		} else if(!$table->exists()) {
-			return $this->_error_table_not_exists($table_name_pieces);
-		}
-		elseif($table->isReadLocked()) {
+		} else if($table->isReadLocked()) {
 			return $this->_error_table_read_lock($table_name_pieces);
 		}
 
@@ -781,10 +821,7 @@ class fSQLEnvironment
 			$table =& $this->_find_table($table_name_pieces);
 			if($table === false) {
 				return false;
-			} else if(!$table->exists()) {
-				return $this->_error_table_not_exists($table_name_pieces);
-			}
-			elseif($table->isReadLocked()) {
+			} else if($table->isReadLocked()) {
 				return $this->_error_table_read_lock($table_name_pieces);
 			}
 		
@@ -895,10 +932,8 @@ EOC
 						$table =& $this->_find_table($table_name_pieces);
 						if($table == false)
 							return false;
-						else if(!$table->exists())
-							return $this->_error_table_not_exists($table_name_pieces);
 						
-						$schema = $table->getSchema();
+						$schema =& $table->getSchema();
 						$saveas = $schema->getDatabase()->getName().'.'.$schema->getName().'.'.$table_name;
 	
 						if(preg_match('/\A\s+(?:AS\s+)?([^\W\d]\w*)(.*)/is', $the_rest, $alias_data)) {
@@ -940,8 +975,6 @@ EOC
 							$join_table =& $this->_find_table($join_table_name_pieces);
 							if($join_table === false)
 								return false;
-							else if(!$join_table->exists())
-								return $this->_error_table_not_exists($join_table_name_pieces);
 	
 							$join_table_name = $join_table->getName();
 							$join_table_alias = !empty($join[3][$i]) ? $join[3][$i] : $join_table_name;
@@ -1039,7 +1072,7 @@ EOC
 				}
 			}
 			
-			preg_match_all("/(?:\A|\s*)((?:(?:-?\d+(?:\.\d+)?)|(?:[^\W\d]\w*\s*\(.*?\))|(?:(?:(?:[^\W\d]\w*)\.)?(?:(?:[^\W\d]\w*)|\*)))(?:\s+(?:AS\s+)?[^\W\d]\w*)?)\s*(?:\Z|,)/is", trim($matches[3]), $Columns);
+			preg_match_all("/(?:\A|\s*)((?:(?:-?\d+(?:\.\d+)?)|'.*?(?<!\\\\)'|(?:[^\W\d]\w*\s*\(.*?\))|(?:(?:(?:[^\W\d]\w*)\.)?(?:(?:[^\W\d]\w*)|\*)))(?:\s+(?:AS\s+)?[^\W\d]\w*)?)\s*(?:\Z|,)/is", trim($matches[3]), $Columns);
 			
 			$ColumnList = array();
 			$selectedInfo = array();
@@ -1048,7 +1081,7 @@ EOC
 					$function_call = $colmatches[1];
 					$alias = !empty($colmatches[2]) ? $colmatches[2] : $function_call;
 					$ColumnList[] = $alias;
-					$selectedInfo[] = array('function', $function_call);
+					$selectedInfo[] = array('function', $function_call, $alias);
 				}
 				else if(preg_match('/\A(?:([^\W\d]\w*)\.)?((?:[^\W\d]\w*)|\*)(?:\s+(?:AS\s+)?([^\W\d]\w*))?\Z/is',$column, $colmatches)) {
 					list(, $table_name, $column) = $colmatches;
@@ -1056,47 +1089,54 @@ EOC
 						if(isset($colmatches[3])) 
 							return $this->_set_error('Unexpected alias after "*"');
 
-						if(!empty($table_name)) {
-							$start_index = $joined_info['offsets'][$table_name];
-							$column_names = $tables[$table_name]->getColumnNames();
+						$star_tables = !empty($table_name) ? array($table_name) : array_keys($tables);				
+						foreach($star_tables as $tname) {
+							$start_index = $joined_info['offsets'][$tname];
+							$table_columns = $tables[$tname]->getColumns();
+							$column_names = array_keys($table_columns);
 							$ColumnList = array_merge($ColumnList, $column_names);
 							foreach($column_names as $index => $column_name) {
-								$selectedInfo[] = array('column', $start_index + $index);
-							}
-						} else {
-							foreach(array_keys($tables) as $tname) {
-								$start_index = $joined_info['offsets'][$tname];
-								$column_names = $tables[$tname]->getColumnNames();
-								$ColumnList = array_merge($ColumnList, $column_names);
-								foreach($column_names as $index => $column_name) {
-									$selectedInfo[] = array('column', $start_index + $index);
-								}
+								$selectedInfo[] = array('column', $start_index + $index, $column_name, $table_columns[$column_name]);
 							}
 						}
 					} else {
 						if($table_name) {
-							$index = array_search($column, $tables[$table_name]->getColumnNames()) + $joined_info['offsets'][$table_name];
+							$table_columns = $tables[$table_name]->getColumns();
+							$column_names = array_keys($table_columns);
+							$index = array_search($column, $column_names) + $joined_info['offsets'][$table_name];
+							$columnData = $table_columns[$column];
 						} else {
 							$index = array_search($column, $joined_info['columns']);
+							$owner_table_name = null;
+							foreach($joined_info['tables'] as $join_table_name => $join_table)
+							{
+								if($index >= $joined_info['offsets'][$join_table_name])
+									$owner_table_name = $join_table_name;
+								else
+									break;
+							}
+							$columnData = $joined_info['tables'][$owner_table_name][$column];
 						}
 						
-						$selectedInfo[] = array('column', $index);
-						
-						if(!empty($colmatches[3])) {
-							$ColumnList[] = $colmatches[3];
-						} else {
-							$ColumnList[] = $column;
-						}
+						$alias = !empty($colmatches[3]) ? $colmatches[3] : $column;
+						$selectedInfo[] = array('column', $index, $alias, $columnData);
 					}
 				}
 				else if(preg_match("/\A(-?\d+(?:\.\d+)?)(?:\s+(?:AS\s+)?([^\W\d]\w*))?\Z/is", $column, $colmatches)) {
 					$value = $colmatches[1];
-					if(!empty($colmatches[2])) {
-						$ColumnList[] = $colmatches[2];
-					} else {
-						$ColumnList[] = $value;
-					}
-					$selectedInfo[] = array('number', $value);
+					$alias = !empty($colmatches[2]) ? $colmatches[2] : $value;
+					$number_type = strpos($value, '.') === false ? FSQL_TYPE_INTEGER : FSQL_TYPE_FLOAT;
+					$selectedInfo[] = array('number', $value, $alias,
+											array('type'=>$number_type,'null'=>false,'default'=>'','auto'=>false,'key'=>'n','restraint'=>array())
+										);
+				}
+				else if(preg_match("/\A('(.*?(?<!\\\\))')(?:\s+(?:AS\s+)?([^\W\d]\w*))?\Z/is", $column, $colmatches)) {
+					$value = $colmatches[2];
+					$alias = !empty($colmatches[3]) ? $colmatches[3] : $value;
+					$ColumnList[] = $alias;
+					$selectedInfo[] = array('string', $colmatches[1], $alias,
+											array('type'=>FSQL_TYPE_STRING,'null'=>false,'default'=>'','auto'=>false,'key'=>'n','restraint'=>array())
+										);
 				}
 				else {
 					$ColumnList[] = $column;
@@ -1108,6 +1148,7 @@ EOC
 			$group_list = array();
 			$having_clause = null;
 			$where = null;
+			$fullColumnsInfo = array();
 			
 			if(!$simple)
 			{
@@ -1186,21 +1227,27 @@ EOC
 				
 				$select_line = "";
 				foreach($selectedInfo as $info) {
-					if($info[0] === 'column') {
-						$column = $info[1];
-						if(in_array($column, $group_array)) {
-							$select_line .= '$group[0][' . $column .'], ';
-						} else {
-							return $this->_set_error("Selected column '{$joined_info['columns'][$column]}' is not a grouped column");
-						}
+					list($select_type, $select_value, $select_alias) = $info;
+					switch($select_type) {
+						case 'column':
+							if(!in_array($select_value, $group_array)) {
+								return $this->_set_error("Selected column '{$joined_info['columns'][$select_value]}' is not a grouped column");
+							}
+							$select_line .= "\$group[0][$select_value], ";
+							$fullColumnsInfo[$select_alias] = $info[3];
+							break;
+						case 'number':
+						case 'string':
+							$select_line .= $select_value.', ';
+							$fullColumnsInfo[$select_alias] = $info[3];
+							break;
+						case 'function':
+							$expr = $this->_build_expr($select_value, $joined_info);
+							$select_line .= $expr['expression'].', ';
+							$fullColumnsInfo[$select_alias] = $expr['type'];
+							break;
 					}
-					else if($info[0] === 'number') {
-						$select_line .= $info[1].', ';
-					}
-					else if($info[0] === 'function') {
-						$expr = $this->_build_expr($info[1], $joined_info);
-						$select_line .= $expr['expression'].', ';
-					}
+					$fullColumnsInfo[$select_alias]['name'] = $select_alias;
 				}
 				
 				$line = '$grouped_set['.$group_key.'][] = $entry;';
@@ -1225,18 +1272,24 @@ EOT;
 			{
 				$select_line = "";
 				foreach($selectedInfo as $info) {
-					switch($info[0]) {
+					list($select_type, $select_value, $select_alias) = $info;
+					switch($select_type) {
 						case  'column':
-							$select_line .= '$entry[' . $info[1] .'], ';
+							$select_line .= "\$entry[$select_value], ";
+							$fullColumnsInfo[$select_alias] = $info[3];
 							break;
 						case 'number':
-							$select_line .= $info[1].', ';
+						case 'string':
+							$select_line .= $select_value.', ';
+							$fullColumnsInfo[$select_alias] = $info[3];
 							break;
 						case 'function':
-							$expr = $this->_build_expr($info[1], $joined_info, false);
+							$expr = $this->_build_expr($select_value, $joined_info, false);
 							$select_line .= $expr['expression'].', ';
+							$fullColumnsInfo[$select_alias] = $expr['type'];
 							break;
 					}
+					$fullColumnsInfo[$select_alias]['name'] = $select_alias;
 				}
 				$line = '$final_set[] = array('. substr($select_line, 0, -2) . ');';
 				if(!$isTableless)
@@ -1273,7 +1326,7 @@ EOT;
 				$final_set = array_slice($final_set, $limit[0], $limit[1]);
 		}
 		
-		return new fSQLResultSet(array_values($ColumnList), $final_set);
+		return $this->_create_result_set($fullColumnsInfo, $final_set);
 	}
 
 	function _cross_product($left_data, $right_data)
@@ -1419,12 +1472,14 @@ EOT;
 						return null;
 
 					$rightExpr = $right['expression'];
+					$left_nullable = $left['type']['null'];
+					$right_nullable = $right['type']['null'];
 
-					if($left['nullable'] && $right['nullable'])
+					if($left_nullable && $right_nullable)
 						$nullcheck = "nullcheck";
-					else if($left['nullable'])
+					else if($left_nullable)
 						$nullcheck = "nullcheck_left";
-					else if($right['nullable'])
+					else if($right_nullable)
 						$nullcheck = "nullcheck_right";
 					else
 						$nullcheck = null;
@@ -1536,9 +1591,9 @@ EOT;
  
 	function _build_expr($exprStr, $join_info, $where_type = FSQL_WHERE_NORMAL)
 	{
-		$nullable = true;
 		$expr = null;
-
+		$columnData = null;
+		
 		// function call
 		if(preg_match("/\A([^\W\d]\w*)\s*\((.*?)\)/is", $exprStr, $matches)) {
 			$function = strtolower($matches[1]);
@@ -1549,10 +1604,12 @@ EOT;
 			
 			if(isset($this->registered_functions[$function])) {
 				$builtin = false;
+				$type = FSQL_TYPE_STRING; // ?
 				$function_type = FSQL_FUNC_NORMAL;
 			} else if(($function_info = fSQLFunctions::getFunctionInfo($function)) !== null) {
 				$builtin = true;
-				$function_type = $function_info[0];
+				list($function_type, $type, $nullable) = $function_info;
+				$columnData = array('type' => $type, 'default' => null, 'null' => $nullable, 'key' => 'n', 'auto' => false, 'restraint' => array());
 				switch($function_type)
 				{
 					case FSQL_FUNC_AGGREGATE:
@@ -1602,7 +1659,7 @@ EOT;
 				if(isset($join_info['tables'][$table_name])) {
 					$table_columns = $join_info['tables'][$table_name];
 					if(isset($table_columns[ $column ])) {
-						$nullable = $table_columns[ $column ]['null'];
+						$columnData = $table_columns[ $column ];
 						if( isset($join_info['offsets'][$table_name]) ) {
 							$colIndex = array_search($column,  array_keys($table_columns)) + $join_info['offsets'][$table_name];
 							$expr = ($where_type & FSQL_WHERE_ON) ? "\$left_entry[$colIndex]" : "\$entry[$colIndex]";
@@ -1633,7 +1690,7 @@ EOT;
 						else
 							break;
 					}
-					$nullable = $join_info['tables'][$owner_table_name][$column]['null'];
+					$columnData = $join_info['tables'][$owner_table_name][$column];
 					$expr = "\$group[0][$colIndex]";
 				}
 			}
@@ -1650,19 +1707,20 @@ EOT;
 					else
 						break;
 				}
-				$nullable = $join_info['tables'][$owner_table_name][$column]['null'];
+				$columnData = $join_info['tables'][$owner_table_name][$column];
 				$expr = ($where_type & FSQL_WHERE_ON) ? "\$left_entry[$colIndex]" : "\$entry[$colIndex]";
 			}
 		}
 		// number
 		else if(preg_match("/\A(?:[\+\-]\s*)?\d+(?:\.\d+)?\Z/is", $exprStr)) {
 			$expr = $exprStr;
-			$nullable = false;
+			$type = strpos($exprStr, '.') === false ? FSQL_TYPE_INTEGER : FSQL_TYPE_FLOAT;
+			$columnData = array('type' => $type, 'default' => null, 'null' => false, 'key' => 'n', 'auto' => false, 'restraint' => array());
 		}
 		// string
 		else if(preg_match("/\A'.*?(?<!\\\\)'\Z/is", $exprStr)) {
 			$expr = $exprStr;
-			$nullable = false;
+			$columnData = array('type' => FSQL_TYPE_STRING, 'default' => null, 'null' => false, 'key' => 'n', 'auto' => false, 'restraint' => array());
 		}
 		else if(($where_type & FSQL_WHERE_ON) && preg_match("/\A{{left}}\.([^\W\d]\w*)/is", $exprStr, $matches)) {
 			if(($colIndex = array_search($matches[1], $join_info['columns']))) {
@@ -1672,7 +1730,7 @@ EOT;
 		else
 			return null;
 		
-		return array('nullable' => $nullable, 'expression' => $expr);
+		return array('type' => $columnData, 'expression' => $expr);
 	}
 	
 	function _parse_value($columnDef, $value)
@@ -1778,10 +1836,8 @@ EOT;
 			$table =& $this->_find_table($table_name_pieces);
 			if($table === false)
 				return false;
-			else if(!$table->exists())
-				return $this->_error_table_not_exists($matches[1]);
-			elseif($table->isReadLocked())
-				return $this->_error_table_read_lock($matches[1]);
+			else if($table->isReadLocked())
+				return $this->_error_table_read_lock($table_name_pieces);
 			
 			$table_name = $table->getName();
 			$columns = $table->getColumns();
@@ -1791,26 +1847,28 @@ EOT;
 			if($cursor->isDone())
 				return true;
 			
-			if(isset($matches[2]) && preg_match('/^WHERE\s+((?:.+)(?:(?:(?:\s+(AND|OR)\s+)?(?:.+)?)*)?)/i', $matches[3], $first_where))
+			if(isset($matches[2]) && preg_match('/^WHERE\s+((?:.+)(?:(?:(?:\s+(AND|OR)\s+)?(?:.+)?)*)?)/i', $matches[2], $first_where))
 			{
 				$where = $this->_build_where($first_where[1], array('tables' => array($table_name => $columns), 'offsets' => array($table_name => 0), 'columns' => $columnNames));
 				if(!$where) {
 					return $this->_set_error('Invalid/Unsupported WHERE clause');
 				}
-				$where = "return ($where);";
 
 				$col_indicies = array_flip($columnNames);
-			
-				while(!$cursor->isDone()) {
-					$entry = $cursor->getRow();
-					if(eval($where))
-					{					
-						$cursor->deleteRow();
-						$this->affected++;
+				
+				$code = <<<EOC
+				while(!\$cursor->isDone()) {
+					\$entry = \$cursor->getRow();
+					if($where)
+					{
+						\$cursor->deleteRow();
+						\$this->affected++;
 					}
 					else
-						$cursor->next();
+						\$cursor->next();
 				}
+EOC;
+				eval($code);
 			} else {
 				while(!$cursor->isDone()) {
 					$cursor->deleteRow();
@@ -1841,13 +1899,10 @@ EOT;
 			$tableObj =& $this->_find_table($table_name_pieces);
 			if($tableObj === false)
 				return false;
-			$schema = $tableObj->getSchema();
-			if(!$tableObj->exists()) {
-				return $this->_error_table_not_exists($table_name_pieces);
-			}
-			elseif($tableObj->isReadLocked()) {
+			else if($tableObj->isReadLocked())
 				return $this->_error_table_read_lock($table_name_pieces);
-			}
+			
+			$schema = $tableObj->getSchema();
 			$columns =  $tableObj->getColumns();
 			
 			preg_match_all('/(?:ADD|ALTER|CHANGE|DROP|RENAME).*?(?:,|\Z)/is', trim($changes), $specs);
@@ -1926,16 +1981,7 @@ EOT;
 					}
 				}
 				else if(preg_match('/\ARENAME\s+(?:TO\s+)?(`?(?:[^\W\d]\w*`?\.`?){0,2}[^\W\d]\w*`?)/is', $specs[0][$i], $matches)) {
-					$new_table_name_pieces = $this->_parse_table_name($matches[1]);
-					$new_table =& $this->_find_table($new_table_name_pieces);
-					if($new_table === false)
-						return false;
-					$new_schema =& $new_table->getSchema();
-					if($new_table->exists()) {
-						return $this->_set_error("Destination table {$new_schema->name}.{$new_table_name} already exists");
-					}
-				
-					return $schema->renameTable($table->getName(), $new_table->getName(), $new_schema);
+					return $this->_do_rename($tableObj, $matches[1]);
 				}
 				else {
 					return $this->_set_error('Invalid ALTER query');
@@ -1953,41 +1999,47 @@ EOT;
 			foreach($tables as $table) {
 				list($old, $new) = preg_split('/\s+TO\s+/i', trim($table));
 				
-				if(preg_match('/(`?(?:[^\W\d]\w*`?\.`?){0,2}[^\W\d]\w*`?)/is', $old, $table_parts)) {
-					$old_table_name_pieces = $this->_parse_table_name($table_parts[1]);
-					$old_table =& $this->_find_table($old_table_name_pieces);
-				} else {
-					return $this->_set_error('Parse error in table listing');
-				}
-				
-				if(preg_match('/`?(?:([^\W\d]\w*)`?\.`?)?(?:([^\W\d]\w*)`?\.`?)?([^\W\d]\w*)`?/is', $new, $table_parts)) {
-					$new_table_name_pieces = $this->_parse_table_name($table_parts[1]);
-					$new_table =& $this->_find_table($new_table_name_pieces);
-				} else {
-					return $this->_set_error('Parse error in table listing');
-				}
-				
-				if($old_table === false || $new_table === false)
+				$old_table_name_pieces = $this->_parse_table_name($old);
+				$old_table =& $this->_find_table($old_table_name_pieces);
+				if($old_table === false)
 					return false;
-				
-				$old_schema = $old_table->getSchema();
-				if(!$old_table->exists()) {
-					return $this->_error_table_not_exists($old_table_name_pieces);
-				}
-				elseif($old_table->isReadLocked()) {
+				else if($old_table->isReadLocked())
 					return $this->_error_table_read_lock($old_table_name_pieces);
-				}
 				
-				$new_schema = $new_table->getSchema();
-				if($new_table->exists()) {
-					return $this->_set_error("Destination table {$new_schema->name}.{$new_table_name_pieces[2]} already exists");
-				}
-				
-				return $old_schema->renameTable($old_table->getName(), $new_table->getName(), $new_schema);
+				if($this->_do_rename($old_table, $new) === false)
+					return false;
 			}
-			return TRUE;
+			
+			return true;
 		} else {
 			return $this->_set_error('Invalid RENAME query');
+		}
+	}
+	
+	function _do_rename(&$old_table, $new_full_table_name)
+	{
+		$new_schema = false;
+		
+		if(preg_match('/`?(?:([^\W\d]\w*)`?\.`?)?(?:([^\W\d]\w*)`?\.`?)?([^\W\d]\w*)`?/is', $new_full_table_name, $table_parts)) {
+			$new_table_name_pieces = $this->_parse_table_name($table_parts[1]);
+			if($new_table_name_pieces === false)
+				return false;
+			
+			$new_schema =& $this->_find_schema($new_table_name_pieces[0], $new_table_name_pieces[1]);
+			$new_table_name = $new_table_name_pieces[2];
+			
+			if($new_schema === false)
+				return false;
+			
+			$new_table =& $new_schema->getTable($new_table_name);
+			if($new_table === false) {
+				$old_schema =& $old_table->getSchema();
+				return $old_schema->renameTable($old_table->getName(), $new_table_name, $new_schema);
+			} else {
+				return $this->_set_error("Destination table {$new_table_name_pieces[1]}.{$new_table_name} already exists");
+			}
+		} else {
+			return $this->_set_error('Parse error in table listing');
 		}
 	}
 	
@@ -2001,16 +2053,19 @@ EOT;
 			foreach($tables as $table) {
 				if(preg_match('/(`?(?:[^\W\d]\w*`?\.`?){0,2}[^\W\d]\w*`?)/is', $table, $table_parts)) {
 					$table_name_pieces = $this->_parse_table_name($table_parts[1]);
-					$table =& $this->_find_table($table_name_pieces);
-					if($table === false)
+					$schema =& $this->_find_schema($table_name_pieces[0], $table_name_pieces[1]);
+					if($schema === false)
 						return false;
-					$schema =& $table->getSchema();
-					if($table->isReadLocked()) {
-						return $this->_error_table_read_lock($table_name_pieces);
+					$table =& $schema->getTable($table_name_pieces[2]);
+					if($table !== false)
+					{
+						if($table->isReadLocked()) {
+							return $this->_error_table_read_lock($table_name_pieces);
+						}
+	
+						$schema->dropTable($table->getName());
 					}
-
-					$existed = $schema->dropTable($table->getName());
-					if(!$ifexists && !$existed) {
+					else if(!$ifexists) {
 						return $this->_error_table_not_exists($table_name_pieces); 
 					}
 				} else {
@@ -2053,19 +2108,15 @@ EOT;
 				if(preg_match('/(`?(?:[^\W\d]\w*`?\.`?){0,2}[^\W\d]\w*`?)/is', $table, $matches)) {
 					$table_name_pieces = $this->_parse_table_name($matches[1]);
 					$table =& $this->_find_table($table_name_pieces);
-					if($table === false) {
+					if($table === false)
 						return false;
-					} else if($table->exists()) {
-						if($table->isReadLocked()) {
-							return $this->_error_table_read_lock($table_name_pieces);
-						}
-						$columns = $table->getColumns();
-						$table_name = $table->getName();
-						$db->dropTable($table_name);
-						$db->createTable($table_name, $columns);
-					} else {
-						return $this->_error_table_not_exists($table_name_pieces); 
-					}
+					else if($table->isReadLocked())
+						return $this->_error_table_read_lock($table_name_pieces);
+					
+					$columns = $table->getColumns();
+					$table_name = $table->getName();
+					$db->dropTable($table_name);
+					$db->createTable($table_name, $columns);
 				} else {
 					return $this->_set_error('Parse error in table listing');
 				}
@@ -2127,34 +2178,48 @@ EOT;
  
 	function _query_show($query)
 	{
-		if(preg_match('/\ASHOW\s+(FULL\s+)?TABLES(?:\s+(?:FROM|IN)\s+(`?(?:[^\W\d]\w*`?\.`?)?[^\W\d]\w*`?)(?:\s+ORDER\s+BY\s+(.*?))?\s*[;]?\s*\Z/is', $query, $matches)) {
+		if(preg_match('/\ASHOW\s+(FULL\s+)?TABLES(?:\s+(?:FROM|IN)\s+(`?(?:[^\W\d]\w*`?\.`?)?[^\W\d]\w*`?))?(?:\s+ORDER\s+BY\s+(.*?))?\s*[;]?\s*\Z/is', $query, $matches)) {
 			
 			$full = !empty($matches[1]);
 			$schema_name = isset($matches[2]) ? $matches[2] : null;
 			$order_clause = isset($matches[3]) ? $matches[3] : null;
 			
-			$schema_name_pieces = $this->_parse_schema_name($schema_name);
-			if($schema_name_pieces !== false) {
-				$schema =& $this->_find_schema($schema_name_pieces[0], $schema_name_pieces[1]);
-				if($schema === false)
+			if(isset($matches[2]))
+			{
+				$schema_name_pieces = $this->_parse_schema_name($schema_name);
+				if($schema_name_pieces !== false) {
+					$schema =& $this->_find_schema($schema_name_pieces[0], $schema_name_pieces[1]);
+				}
+				else
 					return false;
+			} else {
+				$schema =& $this->currentSchema;
 			}
-			else
+			
+			if($schema === false)
 				return false;
-		
+			
+			$database =& $schema->getDatabase();
 			$tables = $schema->listTables();
 			$data = array();
 			
-			$base = $full ? array('BASE TABLE') : array();
-			foreach($tables as $table_name) {
-				$data[] = array_merge(array($table_name), $base);
+			$columns = array(
+							array('name' => 'Tables_in_'.$database->getName().'_'.$schema->getName(),'type'=>FSQL_TYPE_STRING,'default'=>'','null'=>false,'auto'=>'false','key'=>'n','restraint'=>null)
+						);
+			
+			if($full) {
+				$columns[] = array('name'=>'Table_type','type'=>FSQL_TYPE_STRING,'default'=>'','null'=>false,'auto'=>'false','key'=>'n','restraint'=>null);
+				foreach($tables as $table_name) {
+					$table =& $schema->getTable($table_name);
+					$table_type = !is_a($table, 'fSQLView') ? 'BASE TABLE' : 'VIEW';
+					$data[] = array($table_name, $table_type);
+				}
 			}
-			
-			$columns = array('Tables_in_'.$schema->name);
-			if($full)
-				$columns[] = 'Table_type';
-			
-			$rs =  new fSQLResultSet($columns, $data);
+			else
+			{
+				foreach($tables as $table_name)
+					$data[] = array($table_name);
+			}
 			
 			if($order_clause !== null) {
 				$ORDERBY = explode(',', $order_clause);
@@ -2176,15 +2241,19 @@ EOT;
 				}
 			}
 			
-			return new fSQLResultSet($columns, $data);
+			return $this->_create_result_set($columns, $data);
 		} else if(preg_match('/\ASHOW\s+DATABASES\s*[;]?\s*\Z/is', $query, $matches)) {
 			
-			$dbs = array_keys($this->databases);
-			foreach($dbs as $db) {
-				$data[] = array($db);
-			}
+			$data = array();
+			foreach(array_keys($this->databases) as $db_name)
+				$data[] = array($db_name);
 			
-			return new fSQLResultSet(array('Database'), $data);
+			return $this->_create_result_set(
+						array(
+							array('name'=>'Database','type'=>FSQL_TYPE_STRING,'default'=>'','null'=>false,'auto'=>'false','key'=>'n','restraint'=>null)
+						),
+						$data
+					);
 		} else if(preg_match('/\ASHOW\s+(FULL\s+)?COLUMNS\s+(?:FROM|IN)\s+`?([^\W\d]\w*)`?(?:\s+(?:FROM|IN)\s+`?(?:([^\W\d]\w*)`?\.`?)?([^\W\d]\w*)`?)?\s*[;]?\s*\Z/is', $query, $matches)) {
 			$db_name = isset($matches[3]) ? $matches[3] : null;
 			$schema_name = isset($matches[4]) ? $matches[4] : null;
@@ -2196,13 +2265,12 @@ EOT;
 	
 	function _show_columns($db_name, $schema_name, $table_name, $full)
 	{
-		$tableObj =& $this->_find_table($db_name, $schema_name, $table_name);
+		$table_name_pieces = array($db_name, $schema_name, $table_name);
+		$tableObj =& $this->_find_table($table_name_pieces);
 		if($tableObj === false)
 			return false;
-		else if(!$tableObj->exists())
-			return $this->_error_table_not_exists($schema->name, $table_name);
 		
-		$columns =  $tableObj->getColumns();
+		$columns = $tableObj->getColumns();
 			
 		$data = array();
 			
@@ -2231,13 +2299,25 @@ EOT;
 				$data[] = array($name, $type, $null, $default, $key, $extra);
 		}
 		
+		$columns = array(
+						array('name'=>'Field','type'=>FSQL_TYPE_STRING,'default'=>'','null'=>false,'auto'=>'false','key'=>'n','restraint'=>null),
+						array('name'=>'Type','type'=>FSQL_TYPE_STRING,'default'=>'','null'=>false,'auto'=>'false','key'=>'n','restraint'=>null),
+						array('name'=>'Null','type'=>FSQL_TYPE_STRING,'default'=>'','null'=>false,'auto'=>'false','key'=>'n','restraint'=>null),
+						array('name'=>'Default','type'=>FSQL_TYPE_STRING,'default'=>'','null'=>true,'auto'=>'false','key'=>'n','restraint'=>null),
+						array('name'=>'Key','type'=>FSQL_TYPE_STRING,'default'=>'','null'=>false,'auto'=>'false','key'=>'n','restraint'=>null),
+						array('name'=>'Extra','type'=>FSQL_TYPE_STRING,'default'=>'','null'=>false,'auto'=>'false','key'=>'n','restraint'=>null)
+					);
 		if($full)
-			$columns = array('Field','Type','Collation','Null','Default','Key','Extra','Privileges','Comments');
-		else
-			$columns = array('Field','Type','Null','Default','Key','Extra');
+		{
+			 array_splice($columns, 2, 0, array(
+						array('name'=>'Correlation','type'=>FSQL_TYPE_STRING,'default'=>'','null'=>false,'auto'=>'false','key'=>'n','restraint'=>null)
+					)
+				);
+			$columns[] = array('name'=>'Privileges','type'=>FSQL_TYPE_STRING,'default'=>'','null'=>false,'auto'=>'false','key'=>'n','restraint'=>null);
+			$columns[] = array('name'=>'Comment','type'=>FSQL_TYPE_STRING,'default'=>'','null'=>false,'auto'=>'false','key'=>'n','restraint'=>null);
+		}
 			
-			
-		return new fSQLResultSet($columns, $data);		
+		return $this->_create_result_set($columns, $data);		
 	}
 	
 	function _query_describe($query)
@@ -2269,8 +2349,6 @@ EOT;
 				$table =& $this->_find_table($table_name_pieces);
 				if($table === false)
 					return false;
-				else if(!$table->exists())
-					return $this->_error_table_not_exists($table_name_pieces);
 
 				if(!strncasecmp($rules[4][$r], 'READ', 4)) {
 					$table->readLock();
@@ -2281,7 +2359,7 @@ EOT;
 
 				$lockedTables[] =& $table;
 			}
-			return TRUE;
+			return true;
 		} else {
 			return $this->_set_error('Invalid LOCK query');
 		}
@@ -2297,19 +2375,34 @@ EOT;
 		}
 	}
 	
-	function _is_valid_result_set(&$rs) {
-		return is_object($rs) && !strcasecmp(get_class($rs), 'fSQLResultSet') && isset($rs->columns);
+	function _create_result_set($columns, $entries)
+	{
+		$rs_id = !empty($this->resultSets) ? max(array_keys($this->resultSets)) + 1 : 1;
+		$this->resultSets[$rs_id] =& new fSQLResultSet($columns, $entries);
+		return $rs_id;
 	}
 	
-	function fetch_all(&$rs, $type = 1)
+	function &get_result_set($rs_id)
 	{
-		if($this->_is_valid_result_set($rs)) {
+		$rs = $this->_is_valid_result_set($rs_id) ? $this->resultSets[$rs_id] : false;
+		return $rs;
+	}
+	
+	function _is_valid_result_set($rs_id) {
+		return $rs_id !== false && isset($this->resultSets[$rs_id]->columns);
+	}
+	
+	function fetch_all($rs_id, $type = 1)
+	{
+		if($this->_is_valid_result_set($rs_id)) {
+			$rs =& $this->resultSets[$rs_id];
+			
 			if($type === FSQL_NUM) {
 				return $rs->data;
 			}
 			
 			$result_array = array();
-			$columns = $rs->columns;
+			$columns = array_keys($rs->columns);
 			if($type === FSQL_ASSOC) {
 				foreach($rs->data as $entry)
 					$result_array[] = array_combine($columns, $entry);
@@ -2324,19 +2417,20 @@ EOT;
 		}
 	}
 	
-	function fetch_array(&$rs, $type = 1)
+	function fetch_array($rs_id, $type = 1)
 	{
-		if($this->_is_valid_result_set($rs)) {
-			
+		if($this->_is_valid_result_set($rs_id)) {
+			$rs =& $this->resultSets[$rs_id];
+
 			$entry = $rs->dataCursor->getRow();
 			if(!$entry)
 				return false;
-		
+			
 			$rs->dataCursor->next();
-	
-			if($type === FSQL_ASSOC) {  return array_combine($rs->columns, $entry); }
+
+			if($type === FSQL_ASSOC) {  return array_combine(array_keys($rs->columns), $entry); }
 			else if($type === FSQL_NUM) { return $entry; }
-			else{ return array_merge($entry, array_combine($rs->columns, $entry)); }
+			else{ return array_merge($entry, array_combine(array_keys($rs->columns), $entry)); }
 		} else {
 			return $this->_set_error('Bad results id passed in');
 		}
@@ -2346,9 +2440,9 @@ EOT;
 	function fetch_row	($results) { return $this->fetch_array($results, FSQL_NUM); }
 	function fetch_both	($results) { return $this->fetch_array($results, FSQL_BOTH); }
  
-	function fetch_object(&$rs)
+	function fetch_object($rs_id)
 	{
-		$row = $this->fetch_array($rs, FSQL_ASSOC);
+		$row = $this->fetch_array($rs_id, FSQL_ASSOC);
 		if($row === false)
 			return false;
 
@@ -2360,67 +2454,82 @@ EOT;
 		return $obj;
 	}
 	
-	function data_seek(&$rs, $i)
+	function data_seek($rs_id, $i)
 	{
-		if($this->_is_valid_result_set($rs)) {
-			return $rs->dataCursor->seek($i);
+		if($this->_is_valid_result_set($rs_id)) {
+			return $this->resultSets[$rs_id]->dataCursor->seek($i);
 		} else {
 			return $this->_set_error('Bad results id passed in');
 		}
 	}
 	
-	function num_rows(&$rs)
+	function num_rows($rs_id)
 	{
-		if($this->_is_valid_result_set($rs)) {
-			return $rs->dataCursor->numRows();
+		if($this->_is_valid_result_set($rs_id)) {
+			return $this->resultSets[$rs_id]->dataCursor->numRows();
 		} else {
 			return $this->_set_error('Bad results id passed in');
 		}
 	}
 	
-	function num_fields(&$rs)
+	function num_fields($rs_id)
 	{
-		if($rs->_is_valid_result_set($rs)) {
-			return $rs->columnsCursor->numRows();
+		if($this->_is_valid_result_set($rs_id)) {
+			return $this->resultSets[$rs_id]->columnsCursor->numRows();
 		} else {
 			return $this->_set_error('Bad results id passed in');
 		}
 	}
 	
-	function fetch_field(&$rs, $i = NULL)
+	function fetch_field($rs_id, $i = NULL)
 	{
-		if($this->_is_valid_result_set($rs)) {
-			$cursor =& $rs->columnsCursor;
+		if($this->_is_valid_result_set($rs_id)) {
+			$cursor =& $this->resultSets[$rs_id]>columnsCursor;
 			
 			if($i !== NULL)
 				$cursor->seek($i);
 			
-			$column_name = $cursor->getRow();
-			if(!$column_name)
+			$column = $cursor->getRow();
+			if(!$column)
 				return false;
 
+			$key = $column['key'];
+			$type = $column['type'];
+			
 			$cursor->next();
 			$field = new stdClass();
-			$field->name = $column_name;
+			$field->name = $column['name'];
+			$field->def = $column['default'];
+			$field->non_null = $column['null'] ? 0 : 1;
+			$field->primary_key = (int) ($key === 'p');
+			$field->unique_key = (int) ($key === 'u');
+			$field->multiple_key = (int) ($key === 'k');
+			$field->numeric = ($type === FSQL_TYPE_INTEGER || $type === FSQL_TYPE_FLOAT) ? 1 : 0;
+			$field->blob = 0;
+			$field->type = $this->_typecode_to_name($type);
+			$field->unsigned = 0;
+			$field->zerofill = 0;
 			return $field;
 		} else {
 			return $this->_set_error('Bad results id passed in');
 		}
 	}
 	
-	function field_seek(&$rs, $i)
+	function field_seek($rs_id, $i)
 	{
-		if($this->_is_valid_result_set($rs)) {
-			return $rs->columnsCursor->seek($i);
+		if($this->_is_valid_result_set($rs_id)) {
+			return $this->resultSets[$rs_id]->columnsCursor->seek($i);
 		} else {
 			return $this->_set_error('Bad results id passed in');
 		}
 	}
 
-	function free_result(&$rs)
+	function free_result($rs_id)
 	{
-		if($this->_is_valid_result_set($rs)) {
-			return $rs->free();
+		if($this->_is_valid_result_set($rs_id)) {
+			$ret = $this->resultSets[$rs_id]->free();
+			unset($this->resultSets[$rs_id]);
+			return $ret;
 		} else {
 			return $this->_set_error('Bad results id passed in');
 		}

@@ -13,6 +13,74 @@ if (!function_exists('array_combine')) {
 	}
 }
 
+function same_obj(&$a, &$b) {
+
+    if(gettype($a) !== gettype($b)) return false;
+
+    $same = false;
+    if(is_array($a)){
+
+        //Look for an unused index in $a
+        $key = uniqid("is_ref_", true);
+        while(isset($a[$key]))$key = uniqid("is_ref_", true);
+
+        //The two variables differ in content ... They can't be the same
+        if(isset($b[$key])) return false;
+
+        //The arrays point to the same data if changes are reflected in $b
+        $data = uniqid("is_ref_data_", true);
+        $a[$key] =& $data;
+        //There seems to be a modification ...
+        $same = ((isset($b[$key])) and ($b[$key] === $data));
+
+        //Undo our changes ...
+        unset($a[$key]);
+
+    }elseif(is_object($a)){
+
+        //The same objects are required to have equal class names ;-)
+        if(get_class($a) !== get_class($b)) return false;
+
+        //Look for an unused property in $a
+        $key = uniqid("is_ref_", true);
+        while(isset($a->$key))$key = uniqid("is_ref_", true);
+
+        //The two variables differ in content ... They can't be the same
+        if(isset($b->$key)) return false;
+
+        //The arrays point to the same data if changes are reflected in $b
+        $data = uniqid("is_ref_data_", true);
+        $a->$key =& $data;
+        //There seems to be a modification ...
+        $same = ((isset($b->$key)) and ($b->$key === $data));
+
+        //Undo our changes ...
+        unset($a->$key);
+
+    }elseif(is_resource($a)){
+
+        if(get_resource_type($a) !== get_resource_type($b))return false;
+        $same = ((string) $var1) === ((string) $var2);
+
+    }else{
+
+        if($a !== $b) return false;
+
+        //To check for a reference of a variable with simple type
+        //simply store its old value and check against modifications of the second variable ;-)
+
+        $data = uniqid("is_ref_", true);
+        while($data === $a) $data = uniqid("is_ref_", true);
+
+        $save = $a;             //WE NEED A COPY HERE!!!
+        $a    = $data;          //Set a to the value of $data (copy)
+        $same = ($a === $b);    //Check if $var2 was modified too ...
+        $a    = $save;          //Undo our changes ...
+
+    }
+    return $same;
+}
+
 if(!function_exists('is_a'))
 {
 	function is_a($anObject, $aClass)
@@ -21,7 +89,7 @@ if(!function_exists('is_a'))
 	}
 }
 
-function create_directory($original_path, $type, $environment)
+function create_directory($original_path, $type, &$environment)
 {
 	$paths = pathinfo($original_path);
 	

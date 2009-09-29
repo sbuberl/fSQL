@@ -9,7 +9,7 @@ class fSQLDatabase
 
 	function fSQLDatabase(&$environment, $name, $path)
 	{
-		$this->environment = $environment;
+		$this->environment =& $environment;
 		$this->name = $name;
 		$this->path = $path;
 	}
@@ -50,16 +50,17 @@ class fSQLDatabase
 		return $this->path;
 	}
 	
-	function _createSchema($name)
+	function &_createSchema($name)
 	{
-		return new fSQLStandardSchema($this, $name);
+		$schema =& new fSQLStandardSchema($this, $name);
+		return $schema;
 	}
 	
 	function defineSchema($name)
 	{
 		if(!isset($this->schemas[$name]))
 		{
-			$this->schemas[$name] = $this->_createSchema($name);
+			$this->schemas[$name] =& $this->_createSchema($name);
 			return $this->schemas[$name]->create();
 		}
 		else
@@ -83,6 +84,7 @@ class fSQLDatabase
 		if(isset($this->schemas[$name]))
 		{
 			$this->schemas[$name]->drop();
+			unset($this->schemas[$name]);
 		}
 		
 		return $schema;
@@ -112,15 +114,26 @@ class fSQLMemoryDatabase extends fSQLDatabase
 	
 	function create()
 	{
-		$this->schemas['INFORMATION_SCHEMA'] =& new fSQLInformationSchema($this);
 		$this->defineSchema('public');
 		$this->environment->_get_master_schema()->addDatabase($this);
 		return true;
 	}
 	
-	function _createSchema($name)
+	function defineSchema($name)
 	{
-		return new fSQLMemorySchema($this, $name);
+		if(!isset($this->schemas[$name]))
+		{
+			$this->schemas[$name] =& new fSQLMemorySchema($this, $name);
+			return $this->schemas[$name]->create();
+		}
+		else
+			return false;
+	}
+	
+	function &_createSchema($name)
+	{
+		$schema =& new fSQLMemorySchema($this, $name);
+		return $schema;
 	}
 }
 
@@ -136,9 +149,21 @@ class fSQLMasterDatabase extends fSQLMemoryDatabase
 		return $this->defineSchema('master');
 	}
 	
-	function _createSchema($name)
+	function &_createSchema($name)
 	{
-		return new fSQLMasterSchema($this, $name);
+		$schema =& new fSQLMasterSchema($this, $name);
+		return $schema;
+	}
+	
+	function defineSchema($name)
+	{
+		if(!isset($this->schemas[$name]))
+		{
+			$this->schemas[$name] =& new fSQLMasterSchema($this, $name);
+			return $this->schemas[$name]->create();
+		}
+		else
+			return false;
 	}
 }
 
