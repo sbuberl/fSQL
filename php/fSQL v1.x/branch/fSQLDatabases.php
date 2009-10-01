@@ -19,9 +19,7 @@ class fSQLDatabase
 		$path = create_directory($this->path, 'database', $this->environment);
 		if($path !== false) {
 			$this->path = $path;
-			$this->defineSchema('public');
-			$this->environment->_get_master_schema()->addDatabase($this);
-			return true;
+			return $this->defineSchema('public') !== false;
 		}
 		else
 			return false;
@@ -56,15 +54,18 @@ class fSQLDatabase
 		return $schema;
 	}
 	
-	function defineSchema($name)
+	function &defineSchema($name)
 	{
+		$schema = false;
+		
 		if(!isset($this->schemas[$name]))
 		{
 			$this->schemas[$name] =& $this->_createSchema($name);
-			return $this->schemas[$name]->create();
+			if($this->schemas[$name]->create())
+				return $this->schemas[$name];
 		}
-		else
-			return false;
+		
+		return $schema;
 	}
 	
 	function &getSchema($name)
@@ -97,7 +98,6 @@ class fSQLDatabase
 	
 	function drop()
 	{
-		$this->environment->_get_master_schema()->removeDatabase($this);
 		foreach(array_keys($this->schemas) as $schema_name)
 			$this->schemas[$schema_name]->drop();
 		$this->close();
@@ -114,20 +114,20 @@ class fSQLMemoryDatabase extends fSQLDatabase
 	
 	function create()
 	{
-		$this->defineSchema('public');
-		$this->environment->_get_master_schema()->addDatabase($this);
-		return true;
+		return $this->defineSchema('public') !== false;
 	}
 	
-	function defineSchema($name)
+	function &defineSchema($name)
 	{
+		$schema = false;
 		if(!isset($this->schemas[$name]))
 		{
 			$this->schemas[$name] =& new fSQLMemorySchema($this, $name);
-			return $this->schemas[$name]->create();
+			if($this->schemas[$name]->create())
+				return $this->schemas[$name];
 		}
 		else
-			return false;
+			return $schema;
 	}
 	
 	function &_createSchema($name)
@@ -146,7 +146,7 @@ class fSQLMasterDatabase extends fSQLMemoryDatabase
 	
 	function create()
 	{
-		return $this->defineSchema('master');
+		return $this->defineSchema('master') !== false;
 	}
 	
 	function &_createSchema($name)
@@ -155,15 +155,18 @@ class fSQLMasterDatabase extends fSQLMemoryDatabase
 		return $schema;
 	}
 	
-	function defineSchema($name)
+	function &defineSchema($name)
 	{
+		$schema = false;
+		
 		if(!isset($this->schemas[$name]))
 		{
 			$this->schemas[$name] =& new fSQLMasterSchema($this, $name);
-			return $this->schemas[$name]->create();
+			if($this->schemas[$name]->create())
+				return $this->schemas[$name];
 		}
 		else
-			return false;
+			return $schema;
 	}
 }
 

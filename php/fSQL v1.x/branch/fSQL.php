@@ -52,6 +52,7 @@ require FSQL_INCLUDE_PATH.'/fSQLCursors.php';
 require FSQL_INCLUDE_PATH.'/fSQLDatabases.php';
 require FSQL_INCLUDE_PATH.'/fSQLFunctions.php';
 require FSQL_INCLUDE_PATH.'/fSQLSchemas.php';
+require FSQL_INCLUDE_PATH.'/fSQLTableDefs.php';
 require FSQL_INCLUDE_PATH.'/fSQLTables.php';
 require FSQL_INCLUDE_PATH.'/fSQLUtilities.php';
 require FSQL_INCLUDE_PATH.'/fSQLViews.php';
@@ -79,6 +80,7 @@ class fSQLEnvironment
 		
 		$this->databases['FSQL'] =& new fSQLMasterDatabase($this, 'FSQL');
 		$this->databases['FSQL']->create();
+		$this->_get_master_schema()->addDatabase($this->databases['FSQL']);
 	}
 	
 	function define_db($name, $path)
@@ -93,6 +95,7 @@ class fSQLEnvironment
 		} 
 		
 		if($this->databases[$name]->create()) {
+			$this->_get_master_schema()->addDatabase($this->databases[$name]);
 			return true;
 		}
 		else {
@@ -107,10 +110,15 @@ class fSQLEnvironment
 		
 		$db =& $this->_get_database($db_name);
 		if($db !== false) {
-			return $db->defineSchema($schema_name);
+			$schema =& $db->defineSchema($schema_name);
+			if($schema !== false)
+			{
+				$this->_get_master_schema()->addSchema($schema);
+				return true;
+			}
 		}
-		else
-			return false;
+		
+		return false;
 	}
 	
 	function select_db($name)
@@ -582,9 +590,13 @@ class fSQLEnvironment
 				$new_columns = $src_table->getColumns();
 			}
 			
-			$schema->createTable($table_name, $new_columns, $temporary);
-	
-			return true;
+			$table =& $schema->createTable($table_name, $new_columns, $temporary);
+			if($table !== false) {
+				$this->_get_master_schema()->addTable($table);
+				return true;
+			} else {
+				return false;
+			}
 		} else {
 			return $this->_set_error('Invalid CREATE TABLE query');
 		}
@@ -600,12 +612,17 @@ class fSQLEnvironment
 			if($schema === false)
 				return false;
 			else if($schema->getTable($table_name_pieces[2]) !== false)
-				return $this->_set_error("A relation named {$table_name_pireces[2]} already exists");
+				return $this->_set_error("A relation named {$table_name_pieces[2]} already exists");
 			$view_query = $matches[3];
 			
-			$schema->createView($table_name_pieces[2], $view_query, null);
-			
-			return true;
+			$view =& $schema->createView($table_name_pieces[2], $view_query, null);
+			if($view !== false)
+			{
+				$this->_get_master_schema()->addTable($view);
+				return true;
+			}
+			else
+				return false;
 		}
 		else
 			return $this->_set_error('Invalid CREATE VIEW query');
@@ -2063,7 +2080,42 @@ EOC;
 							return $this->_error_table_read_lock($table_name_pieces);
 						}
 	
-						$schema->dropTable($table->getName());
+						$this->_get_master_schema()->removeTable($table);
+						if($schema->dropTable($table->getName()) === true)
+							return true;
+						else
+							return false;
+					}
+					else if(!$ifexists) {
+						return $this->_error_table_not_exists($table_name_pieces); 
+					}
+				} else {
+					return $this->_set_error('Parse error in table listing');
+				}
+			}
+			return true;
+		} else if(preg_match('/\ADROP\s+VIEW(?:\s+(IF\s+EXISTS))?\s+(.*)\s*[;]?\Z/is', $query, $matches)) {
+			$ifexists = !empty($matches[1]);
+			$tables = explode(',', $matches[2]);
+	
+			foreach($tables as $table) {
+				if(preg_match('/(`?(?:[^\W\d]\w*`?\.`?){0,2}[^\W\d]\w*`?)/is', $table, $table_parts)) {
+					$table_name_pieces = $this->_parse_table_name($table_parts[1]);
+					$schema =& $this->_find_schema($table_name_pieces[0], $table_name_pieces[1]);
+					if($schema === false)
+						return false;
+					$table =& $schema->getTable($table_name_pieces[2]);
+					if($table !== false)
+					{
+						if($table->isReadLocked()) {
+							return $this->_error_table_read_lock($table_name_pieces);
+						}
+	
+						$this->_get_master_schema()->removeTable($table);
+						if($schema->dropTable($table->getName()) === true)
+							return true;
+						else
+							return false;
 					}
 					else if(!$ifexists) {
 						return $this->_error_table_not_exists($table_name_pieces); 
@@ -2084,19 +2136,37 @@ EOC;
 			}
 			
 			$db =& $this->databases[$db_name];
-	
-			$tables = $db->listTables();
+			if($db->drop() === true)
+			{
+				$this->_get_master_schema()->removeDatabase($db);
+				unset($this->databases[$db_name]);
+				return true;
+			}
+			else
+				return false;
+		} else if(preg_match('/\ADROP\s+SCHEMA(?:\s+(IF\s+EXISTS))?\s+(`?(?:[^\W\d]\w*`?\.`?)?[^\W\d]\w*`?)s*[;]?\Z/is', $query, $matches)) {
+			$ifexists = !empty($matches[1]);
+			$schema_name_pieces = $this->_parse_schema_name($matches[2]);
+			if($schema_name_pieces === false)
+				return false;
 			
-			foreach($tables as $table) {
-				$db->dropTable($table);
+			$schema_name = $schema_name_pieces[1];
+			$schema =& $this->_find_schema($schema_name_pieces[0], $schema_name);
+			if($schema === false)
+			{
+				if(!$ifexists)
+					return $this->_set_error("Schema '{$schema_name}' does not exist"); 
+				else
+					return true;
 			}
 			
-			unset($this->databases[$db_name]);
-			
-			return TRUE;
+			$this->_get_master_schema()->removeSchema($schema);
+			if($db->dropSchema($schema_name) === true)
+				return true;
+			else
+				return false;
 		} else {
-			$this->_set_error('Invalid DROP query');
-			return null;
+			return $this->_set_error('Invalid DROP query');
 		}
 	}
 	

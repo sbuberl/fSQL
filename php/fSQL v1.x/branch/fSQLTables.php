@@ -5,8 +5,9 @@
  */
 class fSQLTable
 {
-	var $name = NULL;
-	var $schema = NULL;
+	var $name = null;
+	var $definition = null;
+	var $schema = null;
 
 	function fSQLTable($name, &$schema)
 	{
@@ -17,6 +18,11 @@ class fSQLTable
 	function getName()
 	{
 		return $this->name;
+	}
+	
+	function &getDefinition()
+	{
+		return $this->definition;
 	}
 
 	function &getSchema()
@@ -29,12 +35,19 @@ class fSQLTable
 		$this->name = $new_name;
 	}
 	
+	function close()
+	{
+		$this->name = null;
+		$this->definition = null;
+		$this->schema = null;
+		return true;
+	}
+	
 	function drop() { return false; }
-	function exists() { return false; }
 	function temporary() { return false; }
 
 	function getColumnNames() { return false; }
-	function getColumns() { return false; }
+	function getColumns() {return false; }
 	function setColumns($columns) { }
 	
 	function getCursor() { return null; }
@@ -52,29 +65,21 @@ class fSQLTable
  */
 class fSQLTemporaryTable extends fSQLTable
 {
-	var $exists = false;
-	var $rcursor = NULL;
-	var $wcursor = NULL;
-	var $columns = NULL;
-	var $entries = NULL;
+	var $rcursor = null;
+	var $wcursor = null;
+	var $entries = null;
 
 	function fSQLTemporaryTable($name, &$schema)
 	{
 		$this->name = $name;
+		$this->definition =& new fSQLMemoryTableDef();
 		$this->schema =& $schema;
 	}
 
 	function create($columnDefs)
 	{
-		$this->exists = true;
-		$this->columns = $columnDefs;
+		$this->definition->setColumns($columnDefs);
 		$this->entries = array();
-		if(!is_a($this->schema, 'fSQLMasterSchema'))
-			$this->schema->getDatabase()->getEnvironment()->_get_master_schema()->addTable($this);
-	}
-	
-	function exists() {
-		return $this->exists;
 	}
 
 	function temporary() {
@@ -82,20 +87,20 @@ class fSQLTemporaryTable extends fSQLTable
 	}
 	
 	function getColumnNames() {
-		return array_keys($this->getColumns());
+		return array_keys($this->definition->getColumns());
 	}
 	
 	function getColumns() {
-		return $this->columns;
+		return $this->definition->getColumns();
 	}
 	
 	function setColumns($columns) {
-		$this->columns = $columns;
+		$this->definition->setColumns($columns);
 	}
 	
 	function &getCursor()
 	{
-		if($this->rcursor === NULL)
+		if($this->rcursor === null)
 			$this->rcursor =& new fSQLCursor($this->entries);
 
 		return $this->rcursor;
@@ -103,7 +108,7 @@ class fSQLTemporaryTable extends fSQLTable
 
 	function &getWriteCursor()
 	{
-		if($this->wcursor === NULL)
+		if($this->wcursor === null)
 			$this->wcursor =& new fSQLWriteCursor($this->entries);
 		
 		return $this->wcursor;
@@ -127,11 +132,11 @@ class fSQLTemporaryTable extends fSQLTable
 	// Free up all data
 	function drop()
 	{
-		$this->rcursor = NULL;
-		$this->wcursor = NULL;
-		$this->columns = NULL;
-		$this->entries = NULL;
-		$this->schema->getDatabase()->getEnvironment()->_get_master_schema()->removeTable($this);
+		$this->rcursor = null;
+		$this->wcursor = null;
+		$this->definition->drop();
+		$this->definition = null;
+		$this->entries = null;
 	}
 
 	/* Unnecessary for temporary tables */
@@ -146,18 +151,13 @@ class fSQLTemporaryTable extends fSQLTable
  */
 class fSQLStandardTable extends fSQLTable
 {
-	var $rcursor = NULL;
-	var $wcursor = NULL;
-	var $columns = NULL;
-	var $entries = NULL;
-	var $columns_load = NULL;
-	var $data_load = NULL;
-	var $columnsLockFile = NULL;
-	var $columnsFile = NULL;
-	var $dataLockFile = NULL;
-	var $dataFile = NULL;
-	var $lock = NULL;
-	var $readFunction = null;
+	var $rcursor = null;
+	var $wcursor = null;
+	var $entries = null;
+	var $data_load = null;
+	var $dataLockFile = null;
+	var $dataFile = null;
+	var $lock = null;
 	
 	function fSQLStandardTable($name, &$schema)
 	{
@@ -166,32 +166,17 @@ class fSQLStandardTable extends fSQLTable
 		$path_to_schema = $schema->getPath();
 		$columns_path = $path_to_schema.$name.'.columns';
 		$data_path = $path_to_schema.$name.'.data';
-		$this->columnsLockFile = new fSQLFile($columns_path.'.lock.cgi');
-		$this->columnsFile = new fSQLFile($columns_path.'.cgi');
+		$this->definition = new fSQLStandardTableDef($columns_path);
 		$this->dataLockFile = new fSQLFile($data_path.'.lock.cgi');
 		$this->dataFile = new fSQLFile($data_path.'.cgi');
 	}
 	
 	function create($columnDefs)
 	{
-		$this->columns = $columnDefs;
+		$this->definition->setColumns($columnDefs);
 		
 		list($msec, $sec) = explode(' ', microtime());
-		$this->columns_load = $this->data_load = $sec.$msec;
-
-		// create the columns lock
-		$this->columnsLockFile->acquireWrite();
-		$columnsLock = $this->columnsLockFile->getHandle();
-		ftruncate($columnsLock, 0);
-		fwrite($columnsLock, $this->columns_load);
-		
-		// create the columns file
-		$this->columnsFile->acquireWrite();
-		$toprint = $this->_printColumns($columnDefs);
-		fwrite($this->columnsFile->getHandle(), $toprint);
-		
-		$this->columnsFile->releaseWrite();	
-		$this->columnsLockFile->releaseWrite();
+		$this->data_load = $sec.$msec;
 
 		// create the data lock
 		$this->dataLockFile->acquireWrite();
@@ -205,48 +190,8 @@ class fSQLStandardTable extends fSQLTable
 		
 		$this->dataFile->releaseWrite();	
 		$this->dataLockFile->releaseWrite();
-		
-		$this->schema->getDatabase()->getEnvironment()->_get_master_schema()->addTable($this);
-		
-		return $this;
-	}
 
-	function _printColumns($columnDefs)
-	{
-		$toprint = count($columnDefs)."\r\n";
-		$this->readString = '^(\d+):\s*';
-		foreach($columnDefs as $name => $column) {
-			$nullable = $column['null'];
-			$typeMatch = "";
-			switch($column['type']) {
-				case FSQL_TYPE_INTEGER:
-				case FSQL_TYPE_ENUM:
-				case FSQL_TYPE_TIMESTAMP:
-					$typeMatch = '-?\d+';
-					break;
-				case FSQL_TYPE_FLOAT:
-					$typeMatch = '-?\d+\.\d+';
-					break;
-				default:
-					$typeMatch = "'.*?(?<!\\\\)'";
-					break;
-			}
-			$this->readString .= $nullable ? "($typeMatch|NULL);" : "($typeMatch);";
-			$default = $column['default'];
-			if($default === NULL)
-				$default = 'NULL';
-			else if(is_string($default))
-				$default = "'".$default."'";
-			
-			$restraint = is_array($column['restraint']) ? implode(',', $column['restraint']) : '';
-			
-			$toprint .= sprintf("%s: %s;%s;%d;%s;%s;%d;\r\n", $name, $column['type'], $restraint, $column['auto'], $default, $column['key'], $column['null']);
-		}
-		return $toprint;
-	}
-	
-	function exists() {
-		return file_exists($this->columnsFile->getPath());
+		return $this;
 	}
 
 	function temporary() {
@@ -254,102 +199,11 @@ class fSQLStandardTable extends fSQLTable
 	}
 	
 	function getColumnNames() {
-		return array_keys($this->getColumns());
+		return array_keys($this->definition->getColumns());
 	}
 	
 	function getColumns() {
-		$this->columnsLockFile->acquireRead();
-		$lock = $this->columnsLockFile->getHandle();
-
-		$modified = fread($lock, 20);
-		if($this->columns_load === NULL || $this->columns_load < $modified)
-		{
-			$this->columns_load = $modified;
-			
-			$this->columnsFile->acquireRead();
-			$columnsHandle = $this->columnsFile->getHandle();
-
-			$line = fgets($columnsHandle);			
-			if(!preg_match('/^(\d+)/', $line, $matches))
-			{
-				$this->columnsFile->releaseRead();
-				$this->columnsLockFile->releaseRead();
-				return NULL;
-			}
-			
-			$num_columns = $matches[1];
-			$readString = '^(\d+):\s*';
-			$translate = '';
-			for($i = 0; $i < $num_columns; $i++) {
-				$line =	fgets($columnsHandle);
-				if(preg_match("/(\S+): ([a-z][a-z]?);(.*);(0|1);(-?\d+(?:\.\d+)?|'(.*)'|NULL);(p|u|k|n);(0|1);/", $line, $matches)) {
-					$type = $matches[2];
-					$default = $matches[5];
-					if($default === 'NULL')
-						$default = NULL;
-					else if($default{0} === '\'')
-						$default = $matches[6];
-					else if($type === FSQL_TYPE_INTEGER)
-						$default = (int) $default;
-					else if($type === FSQL_TYPE_FLOAT)
-						$default = (float) $default;
-						
-					$nullable = (bool) $matches[8];
-					$typeMatch = '';
-					$translateCode = '';
-					switch($type) {
-						case FSQL_TYPE_INTEGER:
-						case FSQL_TYPE_ENUM:
-						case FSQL_TYPE_TIMESTAMP:
-						case FSQL_TYPE_YEAR:
-							$typeMatch = '-?\d+';
-							$translateCode =  "((int) \$entry[$i])";
-							break;
-						case FSQL_TYPE_FLOAT:
-							$typeMatch = '-?\d+\.\d+';
-							$translateCode =  "((float) \$entry[$i])";
-							break;
-						default:
-							$typeMatch = "'.*?(?<!\\\\\\\\)'";
-							$translateCode = "substr(\$entry[$i], 1, -1)";
-							break;
-					}
-					if($nullable) {
-						$readString .= "($typeMatch|NULL);";
-						$translate[] = "((\$entry[$i] !== 'NULL') ? $translateCode : null)";
-					} else {
-						$readString .= "($typeMatch);";
-						$translate[] = $translateCode;
-					}
-					$this->columns[$matches[1]] = array(
-						'type' => $type, 'auto' => (bool) $matches[4], 'default' => $default, 'key' => $matches[7], 'null' => (bool) $matches[8]
-					);
-					preg_match_all("/'.*?(?<!\\\\)'/", $matches[3], $this->columns[$matches[1]]['restraint']);
-					$this->columns[$matches[1]]['restraint'] = $this->columns[$matches[1]]['restraint'][0];
-				} else {
-					return NULL;
-				}
-			}
-
-			$fullTranslateCode = implode(',', $translate);
-			$readCode = <<<EOC
-\$line = rtrim(fgets(\$dataHandle, 4096));
-if(preg_match("/{$readString}/", \$line, \$entry))
-{
-	array_shift(\$entry);
-	\$row = (int) array_shift(\$entry);
-	\$entries[\$row] = array($fullTranslateCode); 
-}
-EOC;
-			
-			$this->readFunction = create_function('$dataHandle,&$entries', $readCode);
-
-			$this->columnsFile->releaseRead();
-		}
-		
-		$this->columnsLockFile->releaseRead();
-		
-		return $this->columns;
+		return $this->definition->getColumns();
 	}
 	
 	function &getCursor()
@@ -404,45 +258,9 @@ EOC;
 			
 			if($num_entries != 0)
 			{
-			//	$columns = array_keys($this->getColumns());
-			//	$skip = false;
-				$readFunction = $this->readFunction;
+				$readFunction = $this->definition->getReadFunction();
 				for($i = 0;  $i < $num_entries; $i++) {
 					$readFunction($dataHandle, $entries);
-/*					if(!$skip) {
-						if(preg_match('/^(\d+):(.*)$/', $line, $matches))
-						{
-							$row = $matches[1];
-							$data = trim($matches[2]);
-						}
-						else
-							continue;
-					}
-					else {
-						$data .= $line;
-					}
-				
-					if(!preg_match("/(-?\d+(?:\.\d+)?|'.*?(?<!\\\\)'|NULL);$/", $line)) {
-						$skip = true;
-						continue;
-					} else {
-						$skip = false;
-					}
-				
-					preg_match_all("#((-?\d+(\.\d+)?)|'(.*?(?<!\\\\))'|NULL);#s", $data, $matches);
-					for($m = 0; $m < count($matches[0]); $m++) {
-						$value = $matches[1][$m];
-						if($value === 'NULL')  // null
-							$entries[$row][$m] = NULL;
-						else if($value{0} === '\'') //string
-							$entries[$row][$m] = $matches[4][$m];
-						else if(!empty($matches[3])) //float
-							$entries[$row][$m] = (float) $value;
-						else if(!empty($matches[2])) //int
-							$entries[$row][$m] = (int) $value;
-						else // other?
-							$entries[$row][$m] = $value;
-					} */
 				}
 			}
 			
@@ -454,30 +272,6 @@ EOC;
 		$this->dataLockFile->releaseRead();
 
 		return true;
-	}
-
-	function setColumns($columnDefs)
-	{
-		$this->columnsLockFile->acquireWrite();
-		$lock = $this->columnsLockFile->getHandle();
-		$modified = fread($lock, 20);
-		
-		$this->columns = $columnDefs;
-
-		list($msec, $sec) = explode(' ', microtime());
-		$this->columns_load = $sec.$msec;
-		fseek($lock, 0, SEEK_SET);
-		fwrite($lock, $this->columns_load);
-
-		$this->columnsFile->acquireWrite();
-
-		$toprint = $this->_printColumns($columnDefs);
-		$columnsHandle = $this->columnsFile->getHandle();
-		ftruncate($columnsHandle, 0);
-		fwrite($columnsHandle, $toprint);
-	
-		$this->columnsFile->releaseWrite();
-		$this->columnsLockFile->releaseWrite();
 	}
 	
 	function commit()
@@ -535,11 +329,9 @@ EOC;
 	{
 		if($this->lock === null)
 		{
-			unlink($this->columnsFile->getPath());
-			unlink($this->columnsLockFile->getPath());
+			$this->definition->drop();
 			unlink($this->dataFile->getPath());
 			unlink($this->dataLockFile->getPath());
-			$this->schema->getDatabase()->getEnvironment()->_get_master_schema()->removeTable($this);
 			return true;
 		}
 		else
@@ -553,8 +345,7 @@ EOC;
 
 	function readLock()
 	{
-		$success = $this->columnsLockFile->acquireRead() && $this->columnsFile->acquireRead()
-	 		&& $this->dataLockFile->acquireRead() && $this->dataFile->acquireRead();
+		$success = $this->definition->unlock() && $this->dataLockFile->acquireRead() && $this->dataFile->acquireRead();
 		if($success) {
 			$this->lock = 'r';
 			return true;
@@ -566,8 +357,7 @@ EOC;
 
 	function writeLock()
 	{
-		$success = $this->columnsLockFile->acquireRead() && $this->columnsFile->acquireRead()
-			&& $this->dataLockFile->acquireRead() && $this->dataFile->acquireRead();
+		$success = $this->definition->writeLock() && $this->dataLockFile->acquireWrite() && $this->dataFile->acquireWrite();
 		if($success) {
 			$this->lock = 'w';
 			return true;
@@ -581,15 +371,13 @@ EOC;
 	{
 		if($this->lock === 'r')
 		{
-			$this->columnsLockFile->releaseRead();
-			$this->columnsFile->releaseRead();
+			$this->definition->unlock();
 			$this->dataLockFile->releaseRead();
 			$this->dataFile->releaseRead();
 		}
 		else if($this->lock === 'w')
 		{
-			$this->columnsLockFile->releaseWrite();
-			$this->columnsFile->releaseWrite();
+			$this->definition->unlock();
 			$this->dataLockFile->releaseWrite();
 			$this->dataFile->releaseWrite();
 		}

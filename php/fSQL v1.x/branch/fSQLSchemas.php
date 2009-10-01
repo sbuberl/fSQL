@@ -13,7 +13,6 @@ class fSQLSchema
 	
 	function drop()
 	{
-		$this->database->getEnvironment()->_get_master_schema()->removeSchema($this);
 		return true;
 	}
 	
@@ -94,7 +93,6 @@ class fSQLMemorySchema extends fSQLSchema
 
 	function create()
 	{
-		$this->database->getEnvironment()->_get_master_schema()->addSchema($this);
 		return true;
 	}
 	
@@ -115,9 +113,9 @@ class fSQLMemorySchema extends fSQLSchema
 	
 	function &createView($view_name, $query, $columns = null)
 	{
-		$table =& new fSQLTemporaryView($view_name, $this, $query, $columns);
+		$table =& new fSQLTemporaryView($view_name, $this);
 		$this->tables[$view_name] =& $table;
-		$table->create($columns);
+		$table->define($query, $columns);
 		return $this->tables[$view_name];
 	}
 	
@@ -149,7 +147,7 @@ class fSQLMemorySchema extends fSQLSchema
 	function renameTable($old_table_name, $new_table_name, &$new_db)
 	{
 		$oldTable =& $this->getTable($old_table_name);
-		if($oldTable->exists()) {
+		if($oldTable !== false) {
 			$new_db->tables[$new_table_name] =& $oldTable;
 			$oldTable->rename($new_table_name);
 			unset($this->tables[$old_table_name]);
@@ -162,7 +160,7 @@ class fSQLMemorySchema extends fSQLSchema
 	function dropTable($table_name)
 	{
 		$table =& $this->getTable($table_name);
-		if($table->exists()) {
+		if($table !== false) {
 			$table->drop();			
 			$table = NULL;
 			unset($this->tables[$table_name]);
@@ -202,7 +200,6 @@ class fSQLStandardSchema extends fSQLSchema
 				return false;
 		}
 		
-		$this->database->getEnvironment()->_get_master_schema()->addSchema($this);
 		return true;
 	}
 	
@@ -214,7 +211,7 @@ class fSQLStandardSchema extends fSQLSchema
 	
 	function &createTable($table_name, $columns, $temporary = false)
 	{
-		$table = NULL;
+		$table = false;
 		
 		if(!$temporary) {
 			$table =& new fSQLStandardTable($table_name, $this);
@@ -228,15 +225,44 @@ class fSQLStandardSchema extends fSQLSchema
 		return $table;
 	}
 	
+	function &createView($view_name, $query, $columns = null)
+	{
+		$table =& new fSQLStandardView($view_name, $this);
+		$this->tables[$view_name] =& $table;
+		$table->define($query, $columns);
+		return $this->tables[$view_name];
+	}
+	
 	function &getTable($table_name)
 	{
-		if(!isset($this->loadedTables[$table_name])) {
-			$table =& new fSQLStandardTable($table_name, $this);
-			$this->loadedTables[$table_name] =& $table;
-			unset($table);
+		$table = false;
+		
+		if(!isset($this->loadedTables[$table_name]))
+		{
+			if($this->tableExists($table_name))
+			{
+				$path_prefix = $this->path.$table_name;
+		
+				if(file_exists($path_prefix.'.data.cgi')) {
+					$table =& new fSQLStandardTable($table_name, $this);
+				} else if(file_exists($path_prefix.'.view.cgi')) {
+					$table =& new fSQLStandardView($table_name, $this);
+					$table->execute();
+				}
+				
+				$this->loadedTables[$table_name] =& $table;
+				unset($table);
+			}
+			else
+				return $table;
 		}
 		
 		return $this->loadedTables[$table_name];
+	}
+	
+	function tableExists($table_name)
+	{
+		return in_array($table_name, $this->listTables());
 	}
 	
 	/**
@@ -265,7 +291,7 @@ class fSQLStandardSchema extends fSQLSchema
 	function renameTable($old_table_name, $new_table_name, &$new_db)
 	{
 		$oldTable =& $this->getTable($old_table_name);
-		if($oldTable->exists()) {
+		if($oldTable !== false) {
 			if(!$oldTable->temporary()) {
 				$newTable =& $new_db->createTable($oldTable->getColumns());
 				copy($oldTable->dataFile->getPath(), $newTable->dataFile->getPath());
@@ -286,12 +312,11 @@ class fSQLStandardSchema extends fSQLSchema
 	function dropTable($table_name)
 	{
 		$table =& $this->getTable($table_name);
-		if($table->exists()) {
+		if($table !== false) {
 			$table->drop();			
-			$table = NULL;
+			$table = null;
 			unset($this->loadedTables[$table_name]);
 			unset($table);
-
 			return true;
 		} else {
 			return false;
@@ -348,9 +373,6 @@ class fSQLMasterSchema extends fSQLMemorySchema
 			)
 		);
 		
-		$this->addDatabase($this->database);
-		$this->addSchema($this);
-		
 		return true;
 	}
 	
@@ -400,6 +422,7 @@ class fSQLMasterSchema extends fSQLMemorySchema
 		
 		$columnsTable =& $this->getTable('columns');
 		$columnsCursor =& $columnsTable->getWriteCursor();
+		
 		foreach($table->getColumns() as $col_name => $columnDef)
 		{
 			$type = $environment->_typecode_to_name($columnDef['type']);
