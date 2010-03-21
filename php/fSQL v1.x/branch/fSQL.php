@@ -1117,12 +1117,14 @@ EOC
 							}
 						}
 					} else {
+						$alias = !empty($colmatches[3]) ? $colmatches[3] : $column;
+						
 						if($table_name) {
 							$table_columns = $tables[$table_name]->getColumns();
 							$column_names = array_keys($table_columns);
 							$index = array_search($column, $column_names) + $joined_info['offsets'][$table_name];
 							$columnData = $table_columns[$column];
-						} else {
+						} else if(strcasecmp($column, "null")){
 							$index = array_search($column, $joined_info['columns']);
 							$owner_table_name = null;
 							foreach($joined_info['tables'] as $join_table_name => $join_table)
@@ -1134,8 +1136,14 @@ EOC
 							}
 							$columnData = $joined_info['tables'][$owner_table_name][$column];
 						}
-						
-						$alias = !empty($colmatches[3]) ? $colmatches[3] : $column;
+						else  // "null" keyword
+						{
+							$selectedInfo[] = array('null', 'null', $alias, 
+													array('type'=>FSQL_TYPE_STRING,'null'=>true,'default'=>null,'auto'=>false,'key'=>'n','restraint'=>array())
+												);
+							continue;
+						}
+							
 						$selectedInfo[] = array('column', $index, $alias, $columnData);
 					}
 				}
@@ -1295,6 +1303,7 @@ EOT;
 							$select_line .= "\$entry[$select_value], ";
 							$fullColumnsInfo[$select_alias] = $info[3];
 							break;
+						case 'null':
 						case 'number':
 						case 'string':
 							$select_line .= $select_value.', ';
