@@ -379,13 +379,16 @@ class fSQLMasterSchema extends fSQLMemorySchema
 	function addDatabase(&$database)
 	{
 		$dbTable =& $this->getTable('databases');
-		$dbTable->getWriteCursor()->appendRow(array($database->getName(), $database->getPath()));
+		$dbCursor =& $dbTable->getWriteCursor();
+		$dbCursor->appendRow(array($database->getName(), $database->getPath()));
 	}
 	
 	function addSchema(&$schema)
 	{
+		$database =& $schema->getDatabase();
 		$schemaTable =& $this->getTable('schemas');
-		$schemaTable->getWriteCursor()->appendRow(array($schema->getDatabase()->getName(), $schema->getName(), $schema->getPath()));
+		$schemaCursor =& $schemaTable->getWriteCursor();
+		$schemaCursor->appendRow(array($database->getName(), $schema->getName(), $schema->getPath()));
 		
 		foreach($schema->listTables() as $table_name)
 		{
@@ -397,7 +400,9 @@ class fSQLMasterSchema extends fSQLMemorySchema
 	function addTable(&$table)
 	{
 		$schema =& $table->getSchema();
+		$database =& $schema->getDatabase();
 		$tablesTable =& $this->getTable('tables');
+		$tablesCursor =& $tablesTable->getWriteCursor();
 		if(is_a($table, 'fSQLView'))
 			$type = 'VIEW';
 		else if($table->temporary()) {
@@ -405,7 +410,7 @@ class fSQLMasterSchema extends fSQLMemorySchema
 		} else {
 			$type = 'BASE TABLE';
 		}
-		$tablesTable->getWriteCursor()->appendRow(array($schema->getDatabase()->getName(), $schema->getName(), $table->getName(), $type));
+		$tablesCursor->appendRow(array($database->getName(), $schema->getName(), $table->getName(), $type));
 		
 		$this->addColumns($table);
 	}
@@ -444,7 +449,8 @@ class fSQLMasterSchema extends fSQLMemorySchema
 	{	
 		$db_name = $database->getName();
 		
-		$databasesCursor =& $this->getTable('databases')->getWriteCursor();
+		$databasesTables =& $this->getTable('databases');
+		$databasesCursor =& $databasesTables->getWriteCursor();
 		for($databasesCursor->first(); !$databasesCursor->isDone(); $databasesCursor->next())
 		{
 			list($curr_db_name, ) = $databasesCursor->getRow();
@@ -462,11 +468,13 @@ class fSQLMasterSchema extends fSQLMemorySchema
 	}
 	
 	function removeSchema(&$schema)
-	{	
-		$db_name = $schema->getDatabase()->getName();
+	{
+		$database =& $schema->getDatabase();
+		$db_name = $database->getName();
 		$schema_name = $schema->getName();
 		
-		$schemasCursor =& $this->getTable('schemas')->getWriteCursor();
+		$schemasTable =& $this->getTable('schemas');
+		$schemasCursor =& $schemasTable->getWriteCursor();
 		for($schemasCursor->first(); !$schemasCursor->isDone(); $schemasCursor->next())
 		{
 			list($curr_db_name, $curr_schema_name, ) = $schemasCursor->getRow();
@@ -486,8 +494,8 @@ class fSQLMasterSchema extends fSQLMemorySchema
 	function removeTable(&$table)
 	{
 		$schema =& $table->getSchema();
-		
-		$db_name = $schema->getDatabase()->getName();
+		$database =& $schema->getDatabase();
+		$db_name = $database->getName();
 		$schema_name = $schema->getName();
 		$table_name = $table->getName();
 		
@@ -508,12 +516,13 @@ class fSQLMasterSchema extends fSQLMemorySchema
 	function removeColumns(&$table)
 	{
 		$schema =& $table->getSchema();
-		
-		$db_name = $schema->getDatabase()->getName();
+		$database =& $schema->getDatabase();
+		$db_name = $database->getName();
 		$schema_name = $schema->getName();
 		$table_name = $table->getName();
 		
-		$columnsCursor =& $this->getTable('columns')->getWriteCursor();
+		$columnsTable =& $this->getTable('columns');
+		$columnsCursor =& $columnsTable->getWriteCursor();
 		$columnsCursor->first();
 		while(!$columnsCursor->isDone())
 		{

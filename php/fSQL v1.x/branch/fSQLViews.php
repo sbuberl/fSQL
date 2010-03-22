@@ -35,7 +35,8 @@ class fSQLView extends fSQLTable
 	
 	function execute()
 	{
-		$env =& $this->schema->getDatabase()->getEnvironment();
+		$database =& $this->schema->getDatabase();
+		$env =& $database->getEnvironment();
 		$rs_id = $env->query($this->query);
 		$rs =& $env->get_result_set($rs_id);
 		if($rs !== false)
@@ -203,7 +204,7 @@ class fSQLStandardView extends fSQLView
 			$this->queryFile->acquireRead();
 			$dataHandle = $this->queryFile->getHandle();
 
-			$this->query = fgets($dataHandle, 4096);
+			$this->query = file_read_line($dataHandle);
 
 			$this->queryFile->releaseRead();
 		}

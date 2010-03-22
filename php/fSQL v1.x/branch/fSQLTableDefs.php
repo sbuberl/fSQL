@@ -137,7 +137,7 @@ class fSQLStandardTableDef extends fSQLTableDef
 					
 		$fullTranslateCode = implode(',', $translate);
 		$readCode = <<<EOC
-\$line = rtrim(fgets(\$dataHandle, 4096));
+\$line = rtrim(file_read_line(\$dataHandle));
 if(preg_match("/{$readString}/", \$line, \$entry))
 {
 	array_shift(\$entry);
@@ -162,7 +162,7 @@ EOC;
 			$this->columnsFile->acquireRead();
 			$columnsHandle = $this->columnsFile->getHandle();
 
-			$line = fgets($columnsHandle);		
+			$line = file_read_line($columnsHandle);		
 			if(!preg_match('/^(\d+)/', $line, $matches))
 			{
 				$this->columnsFile->releaseRead();
@@ -172,7 +172,7 @@ EOC;
 			
 			$num_columns = (int) $matches[1];
 			for($i = 0; $i < $num_columns; $i++) {
-				$line =	fgets($columnsHandle);
+				$line =	file_read_line($columnsHandle);
 				if(preg_match("/(\S+): ([a-z][a-z]?);(.*);(0|1);(-?\d+(?:\.\d+)?|'(.*)'|NULL);(p|u|k|n);(0|1);/", $line, $matches)) {
 					$type = $matches[2];
 					$default = $matches[5];

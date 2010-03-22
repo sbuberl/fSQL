@@ -20,6 +20,12 @@ class fSQLTable
 		return $this->name;
 	}
 	
+	function getFullName()
+	{
+		$db = $this->schema->getDatabase();
+		return $db->getName().'.'.$this->schema->getName().'.'.$this->name;
+	}
+	
 	function &getDefinition()
 	{
 		return $this->definition;
@@ -245,7 +251,7 @@ class fSQLStandardTable extends fSQLTable
 			$this->dataFile->acquireRead();
 			$dataHandle = $this->dataFile->getHandle();
 
-			$line = fgets($dataHandle);
+			$line = file_read_line($dataHandle);
 			if(!preg_match('/^(\d+)/', $line, $matches))
 			{
 				$this->dataFile->releaseRead();
@@ -276,7 +282,8 @@ class fSQLStandardTable extends fSQLTable
 	
 	function commit()
 	{
-		if($this->getWriteCursor()->isUncommitted() === false)
+		$writeCursor =& $this->getWriteCursor();
+		if($writeCursor->isUncommitted() === false)
 			return;
 
 		$this->dataLockFile->acquireWrite();

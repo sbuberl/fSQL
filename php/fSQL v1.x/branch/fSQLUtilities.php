@@ -21,29 +21,84 @@ if(!function_exists('is_a'))
 	}
 }
 
+list($php_major_version, $php_minor_version, ) = explode('.', PHP_VERSION);
+if($php_major_version >= 5)
+{
+	function mkdir_recursive($pathname, $mode)
+	{
+		return mkdir($pathname, $recursive, true);
+	}
+}
+else
+{
+	function mkdir_recursive($pathname, $mode)
+	{
+		is_dir(dirname($pathname)) || mkdir_recursive(dirname($pathname), $mode);
+		return is_dir($pathname) || @mkdir($pathname, $mode);
+	}
+}
+
+if($php_major_version >= 4 && $php_minor_version >= 2)
+{
+	function file_read_line($file)
+	{
+		return fgets($file);
+	}
+}
+else
+{
+	function file_read_line($file)
+	{
+		$line = "";
+		$ending = NULL;
+		do
+		{
+			$read = fgets($file, 1024);
+			if($read)
+			{
+				$line .= $read;
+				if(strlen($read) === 1024)
+				{
+					$ending = substr($read, -1);
+					if($ending !== "\r" && $ending !== "\n")
+						continue;
+				}
+			}
+			
+			break;
+		} while(true);
+		
+		return $line;
+	}
+}
+
 function create_directory($original_path, $type, &$environment)
 {
 	$paths = pathinfo($original_path);
+	var_dump($paths);
 	
 	$dirname = realpath($paths['dirname']);
 	if(!$dirname || !is_dir($dirname) || !is_readable($dirname)) {
-		return $this->environment->_set_error(ucfirst($type)." parent path '$path' does not exist.  Please correct the path or create the directory.");
+		if(mkdir_recursive($original_path, 0777) === true)
+			$realpath = $original_path;
+		else
+			return $environment->_set_error(ucfirst($type)." parent path '{$paths['dirname']}' does not exist.  Please correct the path or create the directory.");
 	}
 	
 	$path = $dirname.'/'.$paths['basename'];
 	$realpath = realpath($path);
-	if($realpath === false) {
-		if(@mkdir($path, 0777) === true)
+	if($realpath === false || !file_exists($realpath)) {
+		if(@mkdir_recursive($path, 0777) === true)
 			$realpath = $path;
 		else
 			return $environment->_set_error("Unable to create directory '$path'.  Please make the directory manually or check the permissions of the parent directory.");
-	} else if(!is_readable($path) || !is_writeable($path)) {
-		chmod($path, 0777);
+	} else if(!is_readable($realpath) || !is_writeable($realpath)) {
+		@chmod($realpath, 0777);
 	}
 
 	if(substr($realpath, -1) != '/')
 		$realpath .= '/';
-	
+
 	if(is_dir($realpath) && is_readable($realpath) && is_writeable($realpath)) {
 		return $realpath;
 	} else {

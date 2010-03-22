@@ -78,9 +78,12 @@ class fSQLEnvironment
 		list($usec, $sec) = explode(' ', microtime());
 		srand((float) $sec + ((float) $usec * 100000));
 		
-		$this->databases['FSQL'] =& new fSQLMasterDatabase($this, 'FSQL');
-		$this->databases['FSQL']->create();
-		$this->_get_master_schema()->addDatabase($this->databases['FSQL']);
+		$db =& new fSQLMasterDatabase($this, 'FSQL');
+		$db->create();
+		$this->databases['FSQL'] =& $db;
+		
+		$master =& $this->_get_master_schema();
+		$master->addDatabase($db);
 	}
 	
 	function define_db($name, $path)
@@ -88,14 +91,15 @@ class fSQLEnvironment
 		$this->error_msg = null;
 		
 		if($path !== FSQL_MEMORY_DB_PATH)
-			$this->databases[$name] =& new fSQLDatabase($this, $name, $path);
+			$db =& new fSQLDatabase($this, $name, $path);
 		else {
 			$db =& new fSQLMemoryDatabase($this, $name);
-			$this->databases[$name] =& $db;
 		} 
 		
-		if($this->databases[$name]->create()) {
-			$this->_get_master_schema()->addDatabase($this->databases[$name]);
+		$this->databases[$name] =& $db;
+		if($db->create()) {
+			$master =& $this->_get_master_schema();
+			$master->addDatabase($this->databases[$name]);
 			return true;
 		}
 		else {
@@ -113,7 +117,8 @@ class fSQLEnvironment
 			$schema =& $db->defineSchema($schema_name);
 			if($schema !== false)
 			{
-				$this->_get_master_schema()->addSchema($schema);
+				$master =& $this->_get_master_schema();
+				$master->addSchema($schema);
 				return true;
 			}
 		}
@@ -189,14 +194,26 @@ class fSQLEnvironment
 		return $this->_set_error("Schema {$db_name}.{$schema_name} does not exist"); 
 	}
 	
+	function _build_table_name($table_name_pieces)
+	{
+		list($db_name, $schema_name, $table_name) = $table_name_pieces;
+		if($db_name === null)
+			$db_name = $this->currentDB->getName();
+		if($schema_name === null)
+			$schema_name = 'public';
+		return $db_name.'.'.$schema_name.'.'.$table_name;
+	}
+	
 	function _error_table_not_exists($table_name_pieces)
 	{
-		return $this->_set_error("Table {$table_name_pieces[0]}.{$table_name_pieces[1]}.{$table_name_pieces[2]} does not exist"); 
+		$table_name = $this->_build_table_name($table_name_pieces);
+		return $this->_set_error("Table {$table_name} does not exist"); 
 	}
 
 	function _error_table_read_lock($table_name_pieces)
 	{
-		return $this->_set_error("Table {$table_name_pieces[0]}.{$table_name_pieces[1]}.{$table_name_pieces[2]} is locked for reading only"); 
+		$table_name = $this->_build_table_name($table_name_pieces);
+		return $this->_set_error("Table {$table_name} is locked for reading only"); 
 	}
 	
 	function escape_string($string)
@@ -288,7 +305,6 @@ class fSQLEnvironment
 		if($name_pieces !== false)
 		{
 			list($db_name, $schema_name, $table_name) = $name_pieces;
-			
 			$schema =& $this->_find_schema($db_name, $schema_name);
 			if($schema)
 			{
@@ -592,7 +608,8 @@ class fSQLEnvironment
 			
 			$table =& $schema->createTable($table_name, $new_columns, $temporary);
 			if($table !== false) {
-				$this->_get_master_schema()->addTable($table);
+				$master =& $this->_get_master_schema();
+				$master->addTable($table);
 				return true;
 			} else {
 				return false;
@@ -618,7 +635,8 @@ class fSQLEnvironment
 			$view =& $schema->createView($table_name_pieces[2], $view_query, null);
 			if($view !== false)
 			{
-				$this->_get_master_schema()->addTable($view);
+				$master =& $this->_get_master_schema();
+				$master->addTable($view);
 				return true;
 			}
 			else
@@ -950,8 +968,7 @@ EOC
 						if($table == false)
 							return false;
 						
-						$schema =& $table->getSchema();
-						$saveas = $schema->getDatabase()->getName().'.'.$schema->getName().'.'.$table_name;
+						$saveas = $table->getFullName();
 	
 						if(preg_match('/\A\s+(?:AS\s+)?([^\W\d]\w*)(.*)/is', $the_rest, $alias_data)) {
 							if(!in_array(strtolower($alias_data[1]), array('natural', 'left', 'right', 'full', 'outer', 'cross', 'inner')))
@@ -2089,7 +2106,8 @@ EOC;
 							return $this->_error_table_read_lock($table_name_pieces);
 						}
 	
-						$this->_get_master_schema()->removeTable($table);
+						$master =& $this->_get_master_schema();
+						$master->removeTable($table);
 						if($schema->dropTable($table->getName()) === true)
 							return true;
 						else
@@ -2119,8 +2137,9 @@ EOC;
 						if($table->isReadLocked()) {
 							return $this->_error_table_read_lock($table_name_pieces);
 						}
-	
-						$this->_get_master_schema()->removeTable($table);
+						
+						$master =& $this->_get_master_schema();
+						$master->removeTable($table);
 						if($schema->dropTable($table->getName()) === true)
 							return true;
 						else
@@ -2145,9 +2164,10 @@ EOC;
 			}
 			
 			$db =& $this->databases[$db_name];
+			$master =& $this->_get_master_schema();
+			$master->removeDatabase($db);
 			if($db->drop() === true)
 			{
-				$this->_get_master_schema()->removeDatabase($db);
 				unset($this->databases[$db_name]);
 				return true;
 			}
@@ -2169,7 +2189,8 @@ EOC;
 					return true;
 			}
 			
-			$this->_get_master_schema()->removeSchema($schema);
+			$master =& $this->_get_master_schema();
+			$master->removeSchema($schema);
 			if($db->dropSchema($schema_name) === true)
 				return true;
 			else
