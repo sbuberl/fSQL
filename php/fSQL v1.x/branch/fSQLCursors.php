@@ -81,6 +81,12 @@ class fSQLCursor
 class fSQLWriteCursor extends fSQLCursor
 {
 	var $uncommitted = false;
+	
+	var $newRows = array();
+	
+	var $updatedRows = array();
+	
+	var $deletedRows = array();
 
 	function fSQLWriteCursor(&$entries)
 	{
@@ -89,25 +95,43 @@ class fSQLWriteCursor extends fSQLCursor
 	
 	function appendRow($entry)
 	{
-		array_push($this->entries, $entry);
+		$this->newRows[] = $entry;
+		$this->entries[] = $entry;
 		$this->uncommitted = true;
 	}
 
 	function updateField($column, $value)
 	{
-		if($this->current_row_id !== false)
+		$row_id = $this->current_row_id;
+		if($row_id !== false)
 		{
-			$this->entries[$this->current_row_id][$column] = $value;
+			if(isset($this->newRows[$row_id])) // row add in same transaction
+			{
+				$this->newRows[$row_id][$column] = $value; 
+			}
+			else
+			{
+				if(!isset($this->updatedRows[$row_id]))
+					$this->updatedRows[$row_id] = array();
+				$this->updatedRows[$row_id][$column] = $value;
+			}
+		
+			$this->entries[$row_id][$column] = $value;
 			$this->uncommitted = true;
 		}
 	}
 
 	function deleteRow()
 	{
+		$row_id = $this->current_row_id;
 		if($this->current_row_id !== false)
 		{
 			$this->num_rows--;
-			unset($this->entries[$this->current_row_id]);
+			if(isset($this->newRows[$row_id])) // row added in same transaction
+				unset($this->newRows[$row_id]);
+			else if(!in_array($row_id, $this->deletedRows)) // double check not already in there
+				$this->deletedRows[] = $row_id;
+			unset($this->entries[$row_id]);
 			$this->current_row_id = key($this->entries);
 			if($this->current_row_id === null) { // key on an empty array is null?
 				$this->current_row_id = false;
@@ -125,6 +149,7 @@ class fSQLWriteCursor extends fSQLCursor
 
 class fSQLResultSet
 {
+	var $columnNames;  // cached to save speed iterating
 	var $columns;
 	var $data;
 	var $columnsCursor;
@@ -132,9 +157,10 @@ class fSQLResultSet
 	
 	function fSQLResultSet($columns, $data)
 	{
-		$this->columns = array();
+		$this->columns = $columns;
+		$this->columnNames = array();
 		foreach($columns as $column)
-			$this->columns[$column['name']] = $column;
+			$this->columnNames[] = $column['name'];
 		$this->data = $data;
 		$this->columnsCursor =& new fSQLCursor($columns);
 		$this->dataCursor =& new fSQLCursor($data);

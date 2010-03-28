@@ -1,332 +1,44 @@
 <?php
 
-class fSQLSchema
+class fSQLMasterDriver extends fSQLDriver
 {
-	var $name = null;
-	var $path = null;
-	var $database = null;
-	
-	function create()
+	function &defineDatabase(&$environment, $name)
 	{
-		return false;
-	}
-	
-	function drop()
-	{
-		return true;
-	}
-	
-	function close()
-	{
-		unset($this->name, $this->path, $this->database);
-	}
-	
-	function &createTable($table_name, $columns, $temporary = false)
-	{
-		$table = null;
-		return $table;
-	}
-	
-	function &createView($view_name, $query, $columns = null)
-	{
-		$view = null;
-		return $view;
-	}
-	
-	function &getDatabase()
-	{
-		return $this->database;
-	}
-	
-	function getName()
-	{
-		return $this->name;
-	}
-
-	function getPath()
-	{
-		return $this->path;
-	}
-	
-	function &getTable($table_name)
-	{
-		$table = null;
-		return $table;
-	}
-	
-	/**
-	 * Returns an array of names of all the tables in the database
-	 * 
-	 * @return array the table names
-	 */
-	function listTables()
-	{
-		return array();
-	}
-	
-	function renameTable($old_table_name, $new_table_name, &$new_db)
-	{
-		return false;
-	}
-	
-	function dropTable($table_name)
-	{
-		return false;
-	}
-	
-	function copyTable($name, $src_path, $dest_path)
-	{
-		return false;
-	}
+		$db =& new fSQLMasterDatabase($environment, $name);
+		return $db;
+	}	
 }
 
-class fSQLMemorySchema extends fSQLSchema
+class fSQLMasterDatabase extends fSQLMemoryDatabase
 {
-	var $tables = array();
-	
-	function fSQLMemorySchema(&$database, $name)
+	function fSQLMemoryDatabase(&$environment, $name)
 	{
-		$this->name = $name;
-		$this->database =& $database;
-		$this->path = FSQL_MEMORY_DB_PATH;
-	}
-
-	function create()
-	{
-		return true;
-	}
-	
-	function close()
-	{
-		parent::close();
-		unset($this->tables);
-	}
-	
-	function &createTable($table_name, $columns, $temporary = false)
-	{
-		$table =& new fSQLTemporaryTable($table_name, $this);
-		$this->tables[$table_name] =& $table;
-		//$table =& $this->tables[$table_name];
-		$table->create($columns);
-		return $table;
-	}
-	
-	function &createView($view_name, $query, $columns = null)
-	{
-		$table =& new fSQLTemporaryView($view_name, $this);
-		$this->tables[$view_name] =& $table;
-		$table->define($query, $columns);
-		return $this->tables[$view_name];
-	}
-	
-	function &getTable($table_name)
-	{
-		$rel = false;
-		if(isset($this->tables[$table_name]))
-		{
-			$rel =& $this->tables[$table_name];
-			if(is_a($rel, 'fSQLView')) {
-				$this->tables[$table_name]->execute();
-			}
-			return $this->tables[$table_name];
-		}
-	
-		return $rel;
-	}
-	
-	/**
-	 * Returns an array of names of all the tables in the database
-	 * 
-	 * @return array the table names
-	 */
-	function listTables()
-	{
-		return array_keys($this->tables);
-	}
-	
-	function renameTable($old_table_name, $new_table_name, &$new_db)
-	{
-		$oldTable =& $this->getTable($old_table_name);
-		if($oldTable !== false) {
-			$new_db->tables[$new_table_name] =& $oldTable;
-			$oldTable->rename($new_table_name);
-			unset($this->tables[$old_table_name]);
-			return true;
-		} else {
-			return false;
-		}
-	}
-	
-	function dropTable($table_name)
-	{
-		$table =& $this->getTable($table_name);
-		if($table !== false) {
-			$table->drop();			
-			$table = NULL;
-			unset($this->tables[$table_name]);
-			unset($table);
-			return true;
-		} else {
-			return false;
-		}
-	}
-	
-	function copyTable($name, $src_path, $dest_path)
-	{
-		copy($src_path.$name.'columns.cgi', $dest_path.$name.'columns.cgi');
-		copy($src_path.$name.'data.cgi', $dest_path.$name.'data.cgi');
-	}
-}
-
-class fSQLStandardSchema extends fSQLSchema
-{
-	var $loadedTables = array();
-
-	function fSQLStandardSchema(&$database, $name)
-	{
-		$this->name = $name;
-		$this->database =& $database;
-		$this->path = $name !== 'public' ? $database->getPath().$name.'/' : $database->getPath();
+		parent::fSQLMemoryDatabase($environment, $name);
 	}
 	
 	function create()
 	{
-		if($this->name !== 'public') {
-			$path = create_directory($this->path, 'schema', $this->database->getEnvironment());
-			if($path !== false) {
-				$this->path = $path;
-			}
-			else
-				return false;
-		}
-		
-		return true;
+		return $this->defineSchema('master') !== false;
 	}
 	
-	function close()
+	function &_createSchema($name)
 	{
-		parent::close();
-		unset($this->loadedTables);
+		$schema =& new fSQLMasterSchema($this, $name);
+		return $schema;
 	}
 	
-	function &createTable($table_name, $columns, $temporary = false)
+	function &defineSchema($name)
 	{
-		$table = false;
+		$schema = false;
 		
-		if(!$temporary) {
-			$table =& new fSQLStandardTable($table_name, $this);
-		} else {
-			$table =& new fSQLTemporaryTable($table_name, $this);
-			$this->loadedTables[$table_name] =& $table;
-		}
-
-		$table->create($columns);
-		
-		return $table;
-	}
-	
-	function &createView($view_name, $query, $columns = null)
-	{
-		$table =& new fSQLStandardView($view_name, $this);
-		$this->tables[$view_name] =& $table;
-		$table->define($query, $columns);
-		return $this->tables[$view_name];
-	}
-	
-	function &getTable($table_name)
-	{
-		$table = false;
-		
-		if(!isset($this->loadedTables[$table_name]))
+		if(!isset($this->schemas[$name]))
 		{
-			if($this->tableExists($table_name))
-			{
-				$path_prefix = $this->path.$table_name;
-		
-				if(file_exists($path_prefix.'.data.cgi')) {
-					$table =& new fSQLStandardTable($table_name, $this);
-				} else if(file_exists($path_prefix.'.view.cgi')) {
-					$table =& new fSQLStandardView($table_name, $this);
-					$table->execute();
-				}
-				
-				$this->loadedTables[$table_name] =& $table;
-				unset($table);
-			}
-			else
-				return $table;
+			$this->schemas[$name] =& new fSQLMasterSchema($this, $name);
+			if($this->schemas[$name]->create())
+				return $this->schemas[$name];
 		}
-		
-		return $this->loadedTables[$table_name];
-	}
-	
-	function tableExists($table_name)
-	{
-		return in_array($table_name, $this->listTables());
-	}
-	
-	/**
-	 * Returns an array of names of all the tables in the database
-	 * 
-	 * @return array the table names
-	 */
-	function listTables()
-	{
-		$dir = opendir($this->path);
-
-		$tables = array();
-		while (false !== ($file = readdir($dir))) {
-			if ($file !== '.' && $file !== '..' && !is_dir($file)) {
-				if(substr($file, -12) == '.columns.cgi') {
-					$tables[] = substr($file, 0, -12);
-				}
-			}
-		}
-		
-		closedir($dir);
-		
-		return $tables;
-	}
-	
-	function renameTable($old_table_name, $new_table_name, &$new_db)
-	{
-		$oldTable =& $this->getTable($old_table_name);
-		if($oldTable !== false) {
-			if(!$oldTable->temporary()) {
-				$newTable =& $new_db->createTable($oldTable->getColumns());
-				copy($oldTable->dataFile->getPath(), $newTable->dataFile->getPath());
-				copy($oldTable->dataLockFile->getPath(), $newTable->dataLockFile->getPath());
-				$this->dropTable($old_table_name);
-			} else {
-				$new_db->loadedTables[$new_table_name] =& $oldTable;
-				$oldTable->rename($new_table_name);
-				unset($this->loadedTables[$old_table_name]);
-			}
-
-			return true;
-		} else {
-			return false;
-		}
-	}
-	
-	function dropTable($table_name)
-	{
-		$table =& $this->getTable($table_name);
-		if($table !== false) {
-			$table->drop();			
-			$table = null;
-			unset($this->loadedTables[$table_name]);
-			unset($table);
-			return true;
-		} else {
-			return false;
-		}
-	}
-	
-	function copyTable($name, $src_path, $dest_path)
-	{
-		copy($src_path.$name.'columns.cgi', $dest_path.$name.'columns.cgi');
-		copy($src_path.$name.'data.cgi', $dest_path.$name.'data.cgi');
+		else
+			return $schema;
 	}
 }
 
@@ -534,5 +246,4 @@ class fSQLMasterSchema extends fSQLMemorySchema
 		}
 	}
 }
-
 ?>

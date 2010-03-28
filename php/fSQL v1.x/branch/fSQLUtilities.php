@@ -26,7 +26,7 @@ if($php_major_version >= 5)
 {
 	function mkdir_recursive($pathname, $mode)
 	{
-		return mkdir($pathname, $recursive, true);
+		return mkdir($pathname, $mode, true);
 	}
 }
 else
@@ -75,7 +75,6 @@ else
 function create_directory($original_path, $type, &$environment)
 {
 	$paths = pathinfo($original_path);
-	var_dump($paths);
 	
 	$dirname = realpath($paths['dirname']);
 	if(!$dirname || !is_dir($dirname) || !is_readable($dirname)) {
