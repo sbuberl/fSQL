@@ -1,5 +1,19 @@
 <?php
+/**
+ * fSQL start file
+ * 
+ * This file is the start point of the fSQL.
+ * @author Kaja Fumei <???@???.???>
+ * @version ??
+ * @package fsql
+ */
 
+/**#@+
+ * Constants
+ */
+/**
+ * Defines the library version
+ */
 define('FSQL_VERSION', '1.4.0');
 define('FSQL_MEMORY_DB_PATH', ':memory:');
 
@@ -40,10 +54,17 @@ define('FSQL_FORMAT_TIME', '%H:%M:%S');
 
 define('FSQL_EXTENSION', '.cgi',TRUE);
 
+/**
+ * fSQL library include path is set to same directory with
+ * calling file in default.  
+ */
 if(!defined('FSQL_INCLUDE_PATH')) {
 	define('FSQL_INCLUDE_PATH', dirname(__FILE__));
 }
 
+/**
+ * fSQL library's extensions path is given relatively to FSQL_INCLUDE_PATH.
+ */
 define('FSQL_EXTENSIONS_PATH', FSQL_INCLUDE_PATH.'/extensions');
 
 require FSQL_INCLUDE_PATH.'/fSQLCursors.php';
@@ -54,42 +75,123 @@ require FSQL_INCLUDE_PATH.'/drivers/fSQLBaseDriver.php';
 require FSQL_INCLUDE_PATH.'/drivers/fSQLMemoryDriver.php';
 require FSQL_INCLUDE_PATH.'/drivers/fSQLMasterDriver.php';
 
+/**
+ * This class provides a working environment for fSQL mechanisms. Class contains
+ * required information such as databases and registered functions. 
+ * @package fsql
+ * @subpackage classes
+ */
 class fSQLEnvironment
 {
+	/**
+	* @var array
+	*/
 	var $updatedTables = array();
+	/**
+	* @var array
+	*/
 	var $lockedTables = array();
+	/**
+	* @var array
+	*/
 	var $databases = array();
+	/**
+	* Pointer(?) to currently using database
+	* @var ???
+	*/
 	var $currentDB = null;
+	/**
+	* Pointer(?) to currently using schema
+	* @var ???
+	*/
 	var $currentSchema = null;
+	/**
+	* Last error message issued by fSQL
+	* @var string
+	*/
 	var $error_msg = null;
+	/**
+	* Number of total queries run.
+	* @var integer
+	*/
 	var $query_count = 0;
+	/**
+	* 
+	* @var array
+	*/
 	var $join_lambdas = array();
+	/**
+	* 
+	* @var integer
+	*/
 	var $affected = 0;
+	/**
+	* 
+	* @var integer
+	*/
 	var $insert_id = 0;
+	/**
+	* 
+	* @var bool
+	*/
 	var $auto = 1;
+	/**
+	* Array of registered (i.e available) functions
+	* @var array
+	*/
 	var $registered_functions = array();
+	/**
+	* 
+	* @var array
+	*/
 	var $resultSets = array();
+	/**
+	* 
+	* @var ???
+	*/
 	var $parser;
 	
+	/**
+	* This is a class constructor. Master database is created and inserted
+	* into master schema. 
+	*/ 
 	function fSQLEnvironment()
 	{
+		// get current time in microseconds and feed srand method with
+		// this value for future usage.
 		list($usec, $sec) = explode(' ', microtime());
 		srand((float) $sec + ((float) $usec * 100000));
 		
+		// create masterdatabase object; environment is current object
+		// and name is FSQL
 		$db =& new fSQLMasterDatabase($this, 'FSQL');
 		$db->create();
+		// insert the reference of masterdatabase to environment's 
+		// database array with its name as index.
 		$this->databases['FSQL'] =& $db;
 		
+		// insert masterdatabase to environment's master schema
 		$master =& $this->_get_master_schema();
 		$master->addDatabase($db);
 		
+		// create a new parser.
 		$this->parser = new fSQLParser();
 	}
-	
+
+	/**
+	* Defines a database with given $name at the given $path. If $path is 
+	* equals to FSQL_MEMORY_DB_PATH database is defined on memory not on the
+	* file system. 
+	* @param string $name 
+	* @param string $path 
+	*/
 	function define_db($name, $path)
 	{
 		$this->error_msg = null;
-		
+
+		// if $path is equal to FSQL_MEMORY_DB_PATH database is created
+		// on memory else fSQLStandardDriver is included and database is
+		// created on filesystem.   		
 		if($path !== FSQL_MEMORY_DB_PATH) {
 			require FSQL_INCLUDE_PATH.'/drivers/fSQLStandardDriver.php';
 			$db =& new fSQLDatabase($this, $name, $path);
@@ -98,7 +200,11 @@ class fSQLEnvironment
 			$db =& new fSQLMemoryDatabase($this, $name);
 		} 
 		
+		// insert the reference of new database to databases array.
 		$this->databases[$name] =& $db;
+
+		// insert database reference to master schema if database is 
+		// created succesfully else delete reference from databases array.
 		if($db->create()) {
 			$master =& $this->_get_master_schema();
 			$master->addDatabase($this->databases[$name]);
@@ -110,6 +216,13 @@ class fSQLEnvironment
 		}
 	}
 	
+	/**
+	* Defines a schema within given database name. This schema also inserted
+	* environment object's master schema.
+	* @param string $db_name 
+	* @param string $schema_name
+	* @return bool true if schema succesfully defined.
+	*/
 	function define_schema($db_name, $schema_name)
 	{
 		$this->error_msg = null;
@@ -127,7 +240,14 @@ class fSQLEnvironment
 		
 		return false;
 	}
-	
+
+	/**
+	* Selects database with name $name. Selection means, assigning currentDB
+	* variable with database reference and currentSchema with database's 
+	* public schema. Database is selected if it is defined previously.
+	* @param string $name 
+	* @return bool true if database is selected.
+	*/
 	function select_db($name)
 	{
 		if(isset($this->databases[$name])) {
@@ -138,7 +258,15 @@ class fSQLEnvironment
 			return $this->_set_error("No database called {$name} found");
 		}
 	}
-	
+
+	/**
+	* Selects schema of a database. Selection means; assigning currentDB
+	* variable with database reference and currentSchema with database's 
+	* schema whose name given as argument. 
+	* @param string $db_name 
+	* @param string $schema_name 
+	* @return bool ???.
+	*/
 	function select_schema($db_name, $schema_name)
 	{
 		if(isset($this->databases[$db_name])) {
@@ -155,16 +283,22 @@ class fSQLEnvironment
 		}
 	}
 	
+	/**
+	* Closes all result sets and databases.  
+	*/
 	function close()
 	{
 		$this->_unlock_tables();
 		
+		// close all resulsets.
 		foreach(array_keys($this->resultSets) as $rs_id)
 			$this->resultSets[$rs_id]->close();
 		
+		// close all databases.
 		foreach (array_keys($this->databases) as $db_name)
 			$this->databases[$db_name]->close();
-		
+
+		// reset variables.
 		$this->resultSets = array();
 		$this->databases = array();
 		$this->updatedTables = array();
@@ -173,16 +307,28 @@ class fSQLEnvironment
 		$this->currentDB = null;
 		$this->error_msg = null;
 	}
-	
+
+	/**
+	* Returns error message.  
+	* @return string ???.
+	*/
 	function error()
 	{
 		return $this->error_msg;
 	}
-	
+
+	/**
+	* This method enables and disables MYSQL extension according to value 
+	* of $enable and current parser type. If enable is true and parser is 
+	* not mysql, a mysql parser is created. If enable is false and the parser 
+	* is mysql sql parser is created.
+	* @param bool $enable 
+	*/
 	function enable_mysql_exstensions($enable)
 	{
 		if($enable && !is_a($this->parser, 'fSQLParserMySQL'))
 		{
+			// include mysql extension if not exists.
 			if(!class_exists('fSQLParserMySQL'))
 				require FSQL_EXTENSIONS_PATH.'/mysql/fSQLParserMySQL.php';
 			$this->parser = new fSQLParserMySQL($this);
@@ -193,18 +339,34 @@ class fSQLEnvironment
 		}
 	}
 
+	/**
+	* Registers php equivalent of a given sql function. 
+	* @param string $sqlName
+	* @param string $phpName
+	* @return bool always true 
+	*/
 	function register_function($sqlName, $phpName)
 	{
 		$this->registered_functions[$sqlName] = $phpName;
 		return true;
 	}
-	
+
+	/**
+	* Sets error message. 
+	* @param string $error error message
+	* @return bool always false
+	*/
 	function _set_error($error)
 	{
 		$this->error_msg = $error."\r\n";
 		return false;
 	}
-	
+
+	/**
+	* Wrapper method calling _set_error with a formatted message.   
+	* @param string $db_name
+	* @param string $schema_name
+	*/
 	function _error_schema_not_exist($db_name, $schema_name)
 	{
 		return $this->_set_error("Schema {$db_name}.{$schema_name} does not exist"); 
@@ -219,13 +381,21 @@ class fSQLEnvironment
 			$schema_name = 'public';
 		return $db_name.'.'.$schema_name.'.'.$table_name;
 	}
-	
+
+	/**
+	* Wrapper method calling _set_error with a formatted message.   
+	* @param string $table_name_pieces
+	*/
 	function _error_table_not_exists($table_name_pieces)
 	{
 		$table_name = $this->_build_table_name($table_name_pieces);
 		return $this->_set_error("Table {$table_name} does not exist"); 
 	}
 
+	/**
+	* Wrapper method calling _set_error with a formatted message.   
+	* @param string $table_name_pieces
+	*/
 	function _error_table_read_lock($table_name_pieces)
 	{
 		$table_name = $this->_build_table_name($table_name_pieces);
@@ -237,16 +407,29 @@ class fSQLEnvironment
 		return str_replace(array('\\', '\0', '\n', '\r', '\t', '\''), array('\\\\', '\\0', '\\n', '\\', '\\t', '\\\''), $string);
 	}
 	
+	/**
+	* Returns number of affected rows.   
+	* @return integer ???
+	*/
 	function affected_rows()
 	{
 		return $this->affected;
 	}
 
+	/**
+	* Returns last inserted id ???.   
+	* @return integer ???
+	*/
 	function insert_id()
 	{
 		return $this->insert_id;
 	}
 	
+	/**
+	* Returns an array of all databases where database names are indexes and 
+	* paths are value.    
+	* @return array database path array
+	*/
 	function list_dbs()
 	{
 		$databases = array();
@@ -256,23 +439,40 @@ class fSQLEnvironment
 		}
 		return $databases;
 	}
-	
+
+	/**
+	* Returns query count.   
+	* @return integer
+	*/
 	function query_count()
 	{
 		return $this->query_count;
 	}
 	
+	/**
+	* This method returs master schema of the master database.  
+	* @return fSQLStandardSchema
+	*/
 	function &_get_master_schema()
 	{
 		return $this->databases['FSQL']->getSchema('master');
 	}
 	
+	/**
+	* Returns database $db_name. If $db_name argumen is not given, method
+	* returns currentDB.   
+	* @param string $db_name
+	* @return fSQLDatabase|bool
+	*/
 	function &_get_database($db_name)
 	{
 		$db = false;
 		
+		// If $db_name is given try to return database else (not given)
+		// try to return currentDB. 
 		if(!$db_name)
 		{
+			// if there is no selected database set error
 			if($this->currentDB !== null)
 				$db =& $this->currentDB;
 			else
@@ -280,6 +480,7 @@ class fSQLEnvironment
 		}
 		else
 		{
+			// if database $db_name is not defined set error
 			if(isset($this->databases[$db_name]))
 				$db =& $this->databases[$db_name];
 			else
@@ -289,6 +490,13 @@ class fSQLEnvironment
 		return $db;
 	}
 	
+	/**
+	* Finds and returns schema of a database.
+	* returns currentDB.   
+	* @param string $db_name
+	* @param string $schema_name
+	* @return fSQLStandardSchema|bool
+	*/
 	function &_find_schema($db_name, $schema_name)
 	{
 		$schema = false;
@@ -296,6 +504,8 @@ class fSQLEnvironment
 		$db =& $this->_get_database($db_name);
 		if($db !== false)
 		{
+			// if $schema_name is not given try to find current schema
+			// else ( $schema_name is given) try to find schema.
 			if(!$schema_name)
 			{
 				if($this->currentSchema !== null)
@@ -314,6 +524,11 @@ class fSQLEnvironment
 		return $schema;
 	}
 	
+	/**
+	* Finds and returns a table.
+	* @param string $name_pieces
+	* @return fSQLTable|bool
+	*/
 	function &_find_table($name_pieces)
 	{
 		$table = false;
@@ -333,13 +548,22 @@ class fSQLEnvironment
 		return $table;
 	}
 	
+	/**
+	* Unlocks all locked tables in the environment 
+	* @see fSQLStandardTable::unlock
+	*/
 	function _unlock_tables()
 	{
+		// unlock all locked tables.
 		foreach (array_keys($this->lockedTables) as $index )
 			$this->lockedTables[$index]->unlock();
+		// reset locked tables array.
 		$this->lockedTables = array();
 	}
 
+	/**
+	* ???
+	*/
 	function _begin()
 	{
 		$this->auto = 0;
@@ -347,24 +571,41 @@ class fSQLEnvironment
 		$this->_commit();
 	}
 	
+	/**
+	* Commits all updated tables.
+	* @see fSQLStandardTable::commit
+	*/
 	function _commit()
 	{
 		$this->auto = 1;
+		// commit all updated tables
 		foreach (array_keys($this->updatedTables) as $index ) {
 			$this->updatedTables[$index]->commit();
 		}
+		// reset updatedTables array
 		$this->updatedTables = array();
 	}
-	
+
+	/**
+	* Rollbacks all updated tables.
+	* @see fSQLStandardTable::rollback
+	*/
 	function _rollback()
 	{
 		$this->auto = 1;
+		// rollback all updated tables
 		foreach (array_keys($this->updatedTables) as $index ) {
 			$this->updatedTables[$index]->rollback();
 		}
+		// reset updatedTables array
 		$this->updatedTables = array();
 	}
 	
+	/**
+	* Parses, prepares and executes given query. 
+	* @param string query
+	* @return bool 
+	*/
 	function query($query)
 	{
 		$this->query_count++;
@@ -377,7 +618,13 @@ class fSQLEnvironment
 		$command->prepare();
 		return $command->execute();
 	}
-	
+
+	/**
+	* Prepares a value to sql insert statement (i.e if value is null it is 
+	* replaced with NULL, if value is string it is surronded with "''").  
+	* @param string|integer|bool value
+	* @return string|integer|bool modified value
+	*/
 	function _prep_for_insert($value)
 	{
 		if($value === null) {
@@ -389,6 +636,9 @@ class fSQLEnvironment
 		return $value;
 	}
 	
+	/**
+	* Parsing will be changed.
+	*/
 	function _parse_value($columnDef, $value)
 	{
 		// Blank, NULL, or DEFAULT values
@@ -480,24 +730,51 @@ class fSQLEnvironment
 		else
 			return $this->_set_error('Parse error in table name');
 	}
-	
+
+	/**
+	*
+	* @param 
+	* @param 
+	* @return 
+	*/
 	function _create_result_set($columns, $entries)
 	{
 		$rs_id = !empty($this->resultSets) ? max(array_keys($this->resultSets)) + 1 : 1;
 		$this->resultSets[$rs_id] =& new fSQLResultSet($columns, $entries);
 		return $rs_id;
 	}
-	
+
+	/**
+	* Returns result set whose id is $rs_id. If resultset with given id is
+	* not defined, false is returned. 
+	* @param integer rs_id
+	* @return bool|fSQLResultSet
+	*/
 	function &get_result_set($rs_id)
 	{
 		$rs = $this->_is_valid_result_set($rs_id) ? $this->resultSets[$rs_id] : false;
 		return $rs;
 	}
 	
+	/**
+	* Returns whether resultset with given id is valid.
+	* @param integer rs_id
+	* @return bool
+	*/
 	function _is_valid_result_set($rs_id) {
 		return $rs_id !== false && isset($this->resultSets[$rs_id]->columns);
 	}
 	
+	/**
+	* Returns results whose id is $rs_id. Result structure is depends on 
+	* type argument. Possible types are: FSQL_NUM, FSQL_ASSOC, FSQL_BOTH. If
+	* type is FSQL_NUM resultset data(???) is returned. If type is FSQL_ASSOC
+	* an array having the form "columnname => entry" is returned. If type is
+	* FSQL_BOTH ???
+	* @param integer rs_id
+	* @param integer type
+	* @return array|bool
+	*/
 	function fetch_all($rs_id, $type = 1)
 	{
 		if($this->_is_valid_result_set($rs_id)) {
@@ -523,6 +800,14 @@ class fSQLEnvironment
 		}
 	}
 	
+	/**
+	* Returns a single result row of result set whose id is rs_id. Result 
+	* structure is depends on type argument. Possible types are: FSQL_NUM, 
+	* FSQL_ASSOC, FSQL_BOTH. ???
+	* @param integer rs_id
+	* @param integer type
+	* @return array|bool
+	*/
 	function fetch_array($rs_id, $type = 1)
 	{
 		if($this->_is_valid_result_set($rs_id)) {
@@ -542,10 +827,36 @@ class fSQLEnvironment
 		}
 	}
 	
+	/**
+	*
+	* @param 
+	* @param 
+	* @return 
+	*/
 	function fetch_assoc($results) { return $this->fetch_array($results, FSQL_ASSOC); }
-	function fetch_row	($results) { return $this->fetch_array($results, FSQL_NUM); }
-	function fetch_both	($results) { return $this->fetch_array($results, FSQL_BOTH); }
+
+	/**
+	*
+	* @param 
+	* @param 
+	* @return 
+	*/
+	function fetch_row($results) { return $this->fetch_array($results, FSQL_NUM); }
+
+	/**
+	*
+	* @param 
+	* @param 
+	* @return 
+	*/
+	function fetch_both($results) { return $this->fetch_array($results, FSQL_BOTH); }
  
+	/**
+	*
+	* @param 
+	* @param 
+	* @return 
+	*/
 	function fetch_object($rs_id)
 	{
 		$row = $this->fetch_array($rs_id, FSQL_ASSOC);
@@ -560,6 +871,12 @@ class fSQLEnvironment
 		return $obj;
 	}
 	
+	/**
+	*
+	* @param 
+	* @param 
+	* @return 
+	*/
 	function data_seek($rs_id, $i)
 	{
 		if($this->_is_valid_result_set($rs_id)) {
@@ -569,6 +886,12 @@ class fSQLEnvironment
 		}
 	}
 	
+	/**
+	*
+	* @param 
+	* @param 
+	* @return 
+	*/
 	function num_rows($rs_id)
 	{
 		if($this->_is_valid_result_set($rs_id)) {
@@ -578,6 +901,12 @@ class fSQLEnvironment
 		}
 	}
 	
+	/**
+	*
+	* @param 
+	* @param 
+	* @return 
+	*/
 	function num_fields($rs_id)
 	{
 		if($this->_is_valid_result_set($rs_id)) {
@@ -587,6 +916,12 @@ class fSQLEnvironment
 		}
 	}
 	
+	/**
+	*
+	* @param 
+	* @param 
+	* @return 
+	*/
 	function fetch_field($rs_id, $i = NULL)
 	{
 		if($this->_is_valid_result_set($rs_id)) {
@@ -621,6 +956,12 @@ class fSQLEnvironment
 		}
 	}
 	
+	/**
+	*
+	* @param 
+	* @param 
+	* @return 
+	*/
 	function field_seek($rs_id, $i)
 	{
 		if($this->_is_valid_result_set($rs_id)) {
@@ -630,6 +971,12 @@ class fSQLEnvironment
 		}
 	}
 
+	/**
+	*
+	* @param 
+	* @param 
+	* @return 
+	*/
 	function free_result($rs_id)
 	{
 		if($this->_is_valid_result_set($rs_id)) {
@@ -641,12 +988,24 @@ class fSQLEnvironment
 		}
 	}
 
+	/**
+	*
+	* @param 
+	* @param 
+	* @return 
+	*/
 	function _fsql_not($x)
 	{
 		$c = ~$x & 3;
 		return (($c << 1) ^ ($c >> 1)) & 3;
 	}
 
+	/**
+	*
+	* @param 
+	* @param 
+	* @return 
+	*/
 	function _fsql_like($left, $right)
 	{
 		if($left !== null && $right !== null)
@@ -658,6 +1017,12 @@ class fSQLEnvironment
 			return FSQL_UNKNOWN;
 	}
 	
+	/**
+	* Checks if a value exists in an array.
+	* @param mixed needle
+	* @param mixed haystack
+	* @return bool
+	*/
 	function _fsql_in($needle, $haystack)
 	{
 		if($needle !== null)
@@ -668,6 +1033,12 @@ class fSQLEnvironment
 			return FSQL_UNKNOWN;
 	}
 	
+	/**
+	*
+	* @param 
+	* @param 
+	* @return 
+	*/
 	function _fsql_regexp($left, $right)
 	{
 		if($left !== null && $right !== null)
@@ -676,6 +1047,11 @@ class fSQLEnvironment
 			return FSQL_UNKNOWN;
 	}
 
+	/**
+	* Method converts typecode to  name. 
+	* @param string type
+	* @return string name 
+	*/
 	function _typecode_to_name($type)
 	{
 		switch($type)
