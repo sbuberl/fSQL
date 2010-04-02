@@ -4,19 +4,47 @@ class fSQLStandardDriver extends fSQLDriver
 {
 	function &defineDatabase(&$environment, $name, $path)
 	{
-		$db =& new fSQLDatabase($environment, $name, $path);
+		$db =& new fSQLStandardDatabase($environment, $name, $path);
 		return $db;
-	}	
+	}
+}
+
+class fSQLStandardDatabase extends fSQLDatabase
+{
+	function create()
+	{
+		$path = create_directory($this->path, 'database', $this->environment);
+		if($path !== false) {
+			$this->path = $path;
+			return $this->defineSchema('public') !== false;
+		}
+		else
+			return false;
+	}
+	
+	function &_createSchema($name)
+	{
+		$schema =& new fSQLStandardSchema($this, $name);
+		return $schema;
+	}
+	
+	function drop()
+	{
+		foreach(array_keys($this->schemas) as $schema_name)
+			$this->schemas[$schema_name]->drop();
+		$this->close();
+		return true;
+	}
 }
 
 class fSQLStandardSchema extends fSQLSchema
 {
+	var $path;
 	var $loadedTables = array();
 
 	function fSQLStandardSchema(&$database, $name)
 	{
-		$this->name = $name;
-		$this->database =& $database;
+		parent::fSQLSchema($database, $name);
 		$this->path = $name !== 'public' ? $database->getPath().$name.'/' : $database->getPath();
 	}
 	
@@ -38,6 +66,11 @@ class fSQLStandardSchema extends fSQLSchema
 	{
 		parent::close();
 		unset($this->loadedTables);
+	}
+	
+	function getPath()
+	{
+		return $this->path;
 	}
 	
 	function &createTable($table_name, $columns, $temporary = false)
@@ -172,14 +205,25 @@ class fSQLStandardTableDef extends fSQLTableDef
 	
 	function fSQLStandardTableDef($path)
 	{
-		$this->columnsLockFile = new fSQLFile($path.'.lock.cgi');
-		$this->columnsFile = new fSQLFile($path.'.cgi');
+		$this->columnsLockFile =& new fSQLFile($path.'.lock.cgi');
+		$this->columnsFile =& new fSQLFile($path.'.cgi');
 	}
 	
 	function close()
 	{
-		$this->path = null;
-		$this->columns = null;
+		if(isset($this->columnsLockFile))
+			$this->columnsLockFile->close();
+		if(isset($this->columnsFile))
+			$this->columnsFile->close();
+		
+		unset(
+			$this->columns,
+			$this->columnsFile,
+			$this->columnsLockFile,
+			$this->columnsLoad,
+			$this->lock,
+			$this->readFunction
+		);
 	}
 	
 	function drop()
@@ -444,6 +488,28 @@ class fSQLStandardTable extends fSQLTable
 		$this->dataLockFile->releaseWrite();
 
 		return $this;
+	}
+	
+	function close()
+	{
+		if($this->rcursor !== null)
+			$this->rcursor->close();
+		if($this->wcursor !== null)
+			$this->wcursor->close();
+			
+		$this->dataLockFile->close();
+		$this->dataFile->close();
+		
+		unset(
+			$this->entries,
+			$this->dataFile,
+			$this->dataLockFile,
+			$this->data_load,
+			$this->lock,
+			$this->readFunction
+		);
+		
+		parent::close();
 	}
 
 	function temporary() {

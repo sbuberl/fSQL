@@ -21,19 +21,6 @@ class fSQLMemoryDatabase extends fSQLDatabase
 		return $this->defineSchema('public') !== false;
 	}
 	
-	function &defineSchema($name)
-	{
-		$schema = false;
-		if(!isset($this->schemas[$name]))
-		{
-			$this->schemas[$name] =& new fSQLMemorySchema($this, $name);
-			if($this->schemas[$name]->create())
-				return $this->schemas[$name];
-		}
-		else
-			return $schema;
-	}
-	
 	function &_createSchema($name)
 	{
 		$schema =& new fSQLMemorySchema($this, $name);
@@ -44,13 +31,6 @@ class fSQLMemoryDatabase extends fSQLDatabase
 class fSQLMemorySchema extends fSQLSchema
 {
 	var $tables = array();
-	
-	function fSQLMemorySchema(&$database, $name)
-	{
-		$this->name = $name;
-		$this->database =& $database;
-		$this->path = FSQL_MEMORY_DB_PATH;
-	}
 
 	function create()
 	{
@@ -142,11 +122,6 @@ class fSQLMemorySchema extends fSQLSchema
 class fSQLMemoryTableDef extends fSQLTableDef
 {
 	var $columns = null;
-	
-	function fSQLMemoryTableDef()
-	{
-		
-	}
 	
 	function close()
 	{

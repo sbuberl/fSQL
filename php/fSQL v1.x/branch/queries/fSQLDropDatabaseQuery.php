@@ -6,7 +6,7 @@ class fSQLDropDatabaseQuery extends fSQLQuery
 	
 	var $ifExists;
 	
-	function fSQLDatabaseQuery(&$environment, $databaseName, $ifExists)
+	function fSQLDropDatabaseQuery(&$environment, $databaseName, $ifExists)
 	{
 		parent::fSQLQuery($environment);
 		$this->databaseName = $databaseName;

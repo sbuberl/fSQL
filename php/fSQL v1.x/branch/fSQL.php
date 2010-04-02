@@ -194,13 +194,14 @@ class fSQLEnvironment
 		// created on filesystem.   		
 		if($path !== FSQL_MEMORY_DB_PATH) {
 			require FSQL_INCLUDE_PATH.'/drivers/fSQLStandardDriver.php';
-			$db =& new fSQLDatabase($this, $name, $path);
+			$driver =& new fSQLStandardDriver();
 		}
 		else {
-			$db =& new fSQLMemoryDatabase($this, $name);
+			$driver =& new fSQLMemoryDriver();
 		} 
 		
 		// insert the reference of new database to databases array.
+		$db =& call_user_func_array(array($driver, 'defineDatabase'), array(&$this, $name, $path));
 		$this->databases[$name] =& $db;
 
 		// insert database reference to master schema if database is 
@@ -250,13 +251,7 @@ class fSQLEnvironment
 	*/
 	function select_db($name)
 	{
-		if(isset($this->databases[$name])) {
-			$this->currentDB =& $this->databases[$name];
-			$this->currentSchema =& $this->currentDB->getSchema('public');
-			return true;
-		} else {
-			return $this->_set_error("No database called {$name} found");
-		}
+		return $this->select_schema($name, 'public');
 	}
 
 	/**
@@ -270,14 +265,16 @@ class fSQLEnvironment
 	function select_schema($db_name, $schema_name)
 	{
 		if(isset($this->databases[$db_name])) {
-			$this->currentDB =& $this->databases[$db_name];
-			$schema =& $this->currentDB->getSchema($schema_name);
+			$db =& $this->databases[$db_name];
+			$schema =& $db->getSchema($schema_name);
 			if($schema !== false) {
+				$this->currentDB =& $db;
 				$this->currentSchema =& $schema;
 				return true;
 			}
-			else
-				return false;
+			else {
+				return $this->_error_schema_not_exist($db_name, $schema_name);
+			}
 		} else {
 			return $this->_set_error("No database called {$db_name} found");
 		}
@@ -292,20 +289,29 @@ class fSQLEnvironment
 		
 		// close all resulsets.
 		foreach(array_keys($this->resultSets) as $rs_id)
-			$this->resultSets[$rs_id]->close();
+			$this->resultSets[$rs_id]->free();
 		
-		// close all databases.
 		foreach (array_keys($this->databases) as $db_name)
 			$this->databases[$db_name]->close();
-
+		
 		// reset variables.
-		$this->resultSets = array();
-		$this->databases = array();
-		$this->updatedTables = array();
-		$this->join_lambdas = array();
-		$this->databases = array();
-		$this->currentDB = null;
-		$this->error_msg = null;
+		unset(
+			$this->query_count,
+			$this->affected,
+			$this->insert_id,
+			$this->auto,
+			$this->parser,
+			$this->resultSets,
+			$this->databases,
+			$this->lockedTables,
+			$this->updatedTables,
+			$this->join_lambdas,
+			$this->registered_functions,
+			$this->databases,
+			$this->currentDB,
+			$this->currentSchema,
+			$this->error_msg
+		);
 	}
 
 	/**
@@ -569,6 +575,7 @@ class fSQLEnvironment
 		$this->auto = 0;
 		$this->_unlock_tables();
 		$this->_commit();
+		return true;
 	}
 	
 	/**

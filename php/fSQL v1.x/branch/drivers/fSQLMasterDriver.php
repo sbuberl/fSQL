@@ -11,11 +11,6 @@ class fSQLMasterDriver extends fSQLDriver
 
 class fSQLMasterDatabase extends fSQLMemoryDatabase
 {
-	function fSQLMemoryDatabase(&$environment, $name)
-	{
-		parent::fSQLMemoryDatabase($environment, $name);
-	}
-	
 	function create()
 	{
 		return $this->defineSchema('master') !== false;
@@ -26,29 +21,10 @@ class fSQLMasterDatabase extends fSQLMemoryDatabase
 		$schema =& new fSQLMasterSchema($this, $name);
 		return $schema;
 	}
-	
-	function &defineSchema($name)
-	{
-		$schema = false;
-		
-		if(!isset($this->schemas[$name]))
-		{
-			$this->schemas[$name] =& new fSQLMasterSchema($this, $name);
-			if($this->schemas[$name]->create())
-				return $this->schemas[$name];
-		}
-		else
-			return $schema;
-	}
 }
 
 class fSQLMasterSchema extends fSQLMemorySchema
-{
-	function fSQLMasterSchema(&$database, $name)
-	{
-		parent::fSQLMemorySchema($database, $name);
-	}
-	
+{	
 	function create()
 	{
 		$databasesTable =& $this->createTable('databases', array(

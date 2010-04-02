@@ -2,11 +2,6 @@
 
 class fSQLShowTablesQuery extends fSQLQuery
 {	
-	function fSQLShowTablesQuery(&$environment)
-	{
-		parent::fSQLQuery($environment);
-	}
-	
 	function execute()
 	{
 		$data = array();

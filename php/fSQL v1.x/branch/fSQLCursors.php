@@ -12,6 +12,11 @@ class fSQLCursor
 		$this->num_rows = count($entries);
 		$this->first();
 	}
+	
+	function close()
+	{
+		unset($this->entries, $this->current_row_id, $this->num_rows);	
+	}
 
 	function first()
 	{
@@ -87,10 +92,11 @@ class fSQLWriteCursor extends fSQLCursor
 	var $updatedRows = array();
 	
 	var $deletedRows = array();
-
-	function fSQLWriteCursor(&$entries)
+	
+	function close()
 	{
-		parent::fSQLCursor($entries);
+		unset($this->uncommitted, $this->newRows, $this->updatedRows, $this->deletedRows);
+		parent::close();	
 	}
 	
 	function appendRow($entry)
@@ -168,10 +174,13 @@ class fSQLResultSet
 	
 	function free()
 	{
-		unset($this->columns);
-		unset($this->data);
-		unset($this->columnsCursor);
-		unset($this->dataCursor);
+		unset(
+			$this->columnNames,
+			$this->columns,
+			$this->data,
+			$this->columnsCursor,
+			$this->dataCursor
+		);
 		return true;
 	}
 }

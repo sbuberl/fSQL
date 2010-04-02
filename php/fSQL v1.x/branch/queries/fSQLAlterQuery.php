@@ -1,12 +1,7 @@
 <?php
 
 class fSQLAlterQuery extends fSQLQuery
-{	
-	function fSQLAlterQuery(&$environment)
-	{
-		parent::fSQLQuery($environment);
-	}
-	
+{
 	function query($query)
 	{
 		if(preg_match('/\AALTER\s+TABLE\s+(`?(?:[^\W\d]\w*`?\.`?){0,2}[^\W\d]\w*`?)\s+(.*)/is', $query, $matches)) {

@@ -124,6 +124,18 @@ class fSQLFile
 		$this->lock = 0;
 	}
 
+	function close()
+	{
+		// should be unlocked before reaches here, but just in case,
+		// release all locks and close file
+		if($this->handle !== null)
+		{
+		//	flock($this->handle, LOCK_UN);
+			fclose($this->handle);
+		}
+		unset($this->filepath, $this->handle, $this->lock);
+	}
+	
 	function getHandle()
 	{
 		return $this->handle;
@@ -235,56 +247,39 @@ class fSQLFile
 
 class fSQLOrderByClause
 {
-	var $tosort;
+	var $sortFunction;
 	
-	function fSQLOrderByClause($tosort)
+	function fSQLOrderByClause($tosortData)
 	{
-		$this->tosort = $tosort;
-	}
-	
+		$code = "";
+		foreach($tosortData as $tosort) {
+			$key = $tosort['key'];
+			if($tosort['ascend'])
+			{
+				$ltVal = -1;
+				$gtVal = 1;
+			}
+			else
+			{
+				$ltVal = 1;
+				$gtVal = -1;
+			}
+			$code .= <<<EOC
+\$a_value = \$a[$key];
+\$b_value = \$b[$key];
+if(\$a_value === null)		return $ltVal;
+elseif(\$b_value === null)	return $gtVal;
+elseif(\$a_value < \$b_value)	return $ltVal;
+elseif(\$a_value > \$b_value)	return $gtVal;
+EOC;
+		}
+		$code .= 'return 0;';
+		$this->sortFunction = create_function('$a, $b', $code);
+	}	
+
 	function sort(&$data)
 	{
-		usort($data, array($this, '_orderBy'));
-	}
-	
-	function _orderBy($a, $b)
-	{
-		foreach($this->tosort as $tosort) {
-			$key = $tosort['key'];
-			$ascend = $tosort['ascend'];
-			
-			$a_value = $a[$key];
-			$b_value = $b[$key];
-			
-			if($ascend) {
-				if ($a_value === NULL) {
-					return -1;
-				}
-				elseif ($b_value === NULL) {
-					return 1;
-				}
-				elseif($a_value < $b_value) {
-					return -1;
-				}
-				elseif ($a_value > $b_value) {
-					return 1;
-				}
-			} else {
-				if ($a_value === NULL) {
-					return 1;
-				}
-				elseif ($b_value === NULL) {
-					return -1;
-				}
-				elseif($a_value < $b_value) {
-					return 1;
-				}
-				elseif ($a_value > $b_value) {
-					return -1;
-				}
-			}
-		}
-		return 0;
+		usort($data, $this->sortFunction);
 	}
 }
 

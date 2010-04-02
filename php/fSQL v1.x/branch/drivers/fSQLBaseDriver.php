@@ -4,16 +4,16 @@ class fSQLDriver
 {
 	function &defineDatabase(&$environment, $name)
 	{
-		return null;
+		return false;
 	}	
 }
 
 class fSQLDatabase
 {
-	var $name = null;
-	var $path = null;
+	var $environment;
+	var $name;
+	var $path;
 	var $schemas = array();
-	var $environment = null;
 
 	function fSQLDatabase(&$environment, $name, $path)
 	{
@@ -24,13 +24,7 @@ class fSQLDatabase
 	
 	function create()
 	{
-		$path = create_directory($this->path, 'database', $this->environment);
-		if($path !== false) {
-			$this->path = $path;
-			return $this->defineSchema('public') !== false;
-		}
-		else
-			return false;
+		return false;
 	}
 	
 	function close()
@@ -50,7 +44,7 @@ class fSQLDatabase
 	{
 		return $this->name;
 	}
-
+	
 	function getPath()
 	{
 		return $this->path;
@@ -58,7 +52,7 @@ class fSQLDatabase
 	
 	function &_createSchema($name)
 	{
-		$schema =& new fSQLStandardSchema($this, $name);
+		$schema = false;
 		return $schema;
 	}
 	
@@ -116,8 +110,13 @@ class fSQLDatabase
 class fSQLSchema
 {
 	var $name = null;
-	var $path = null;
 	var $database = null;
+	
+	function fSQLSchema(&$database, $name)
+	{
+		$this->database =& $database;
+		$this->name = $name;
+	}
 	
 	function create()
 	{
@@ -131,7 +130,7 @@ class fSQLSchema
 	
 	function close()
 	{
-		unset($this->name, $this->path, $this->database);
+		unset($this->name, $this->database);
 	}
 	
 	function &createTable($table_name, $columns, $temporary = false)
@@ -154,11 +153,6 @@ class fSQLSchema
 	function getName()
 	{
 		return $this->name;
-	}
-
-	function getPath()
-	{
-		return $this->path;
 	}
 	
 	function &getTable($table_name)
@@ -216,9 +210,9 @@ class fSQLTableDef
  */
 class fSQLTable
 {
-	var $name = null;
+	var $name;
 	var $definition = null;
-	var $schema = null;
+	var $schema;
 
 	function fSQLTable($name, &$schema)
 	{
@@ -254,9 +248,9 @@ class fSQLTable
 	
 	function close()
 	{
-		$this->name = null;
-		$this->definition = null;
-		$this->schema = null;
+		if(isset($this->definition))
+			$this->definition->close();
+		unset($this->definition, $this->schema, $this->name);
 		return true;
 	}
 	
@@ -283,16 +277,10 @@ class fSQLView extends fSQLTable
 	var $columns = null;
 	var $entries = null;
 	
-	function fSQLView($name, &$schema)
-	{
-		parent::fSQLTable($name, $schema);
-	}
-	
 	function close()
 	{
 		parent::close();
-		unset($this->query);
-		unset($this->columns);
+		unset($this->query, $this->columns, $this->entries);
 	}
 	
 	function define($query, $columns)

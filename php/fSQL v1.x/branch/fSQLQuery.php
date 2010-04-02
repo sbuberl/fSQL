@@ -17,11 +17,6 @@ class fSQLQuery
 class fSQLDMLQuery extends fSQLQuery
 {	
 	var $affected = 0;
-	
-	function fSQLDMLQuery(&$environment)
-	{
-		parent::fSQLQuery($environment);
-	}
 }
 
 ?>

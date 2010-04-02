@@ -2,11 +2,6 @@
 
 class fSQLCommitQuery extends fSQLQuery
 {	
-	function fSQLCommitQuery(&$environment)
-	{
-		parent::fSQLQuery($environment);
-	}
-	
 	function query($query)
 	{
 		if(preg_match('/\ACOMMIT\s*[;]?\s*\Z/is', $query, $matches)) {
