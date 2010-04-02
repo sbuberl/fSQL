@@ -195,8 +195,7 @@ EOT;
 				$fullColumnsInfo[] = $column_info;
 			}
 			$line = '$final_set[] = array('. substr($select_line, 0, -2) . ');';
-			if($this->joins === null)
-				$group = $data;
+			$group = $data;
 		}
 		
 		if($this->joins !== null) {
