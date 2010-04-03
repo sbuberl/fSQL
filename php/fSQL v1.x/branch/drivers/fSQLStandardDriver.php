@@ -1,5 +1,15 @@
 <?php
+/**
+ * Standard driver definitions file
+ * 
+ * This file is describes classes for standard driver module. 
+ * @author Kaja Fumei <kaja.fumei@gmail.com>
+ * @version 
+ */
 
+/**
+ * 
+ */
 class fSQLStandardDriver extends fSQLDriver
 {
 	function &defineDatabase(&$environment, $name, $path)
@@ -9,8 +19,15 @@ class fSQLStandardDriver extends fSQLDriver
 	}
 }
 
+/**
+ * 
+ */
 class fSQLStandardDatabase extends fSQLDatabase
 {
+	/*
+	 * Creates directory|directories using path attribute and defines a schema 
+	 * @return bool false if create directory or define schema fails
+	 */
 	function create()
 	{
 		$path = create_directory($this->path, 'database', $this->environment);
@@ -22,12 +39,20 @@ class fSQLStandardDatabase extends fSQLDatabase
 			return false;
 	}
 	
+	/*
+	 * Creates a new fSQLStandardSchema object with given name.
+	 * @return fSQLStandardSchema
+	 */
 	function &_createSchema($name)
 	{
 		$schema =& new fSQLStandardSchema($this, $name);
 		return $schema;
 	}
 	
+	/*
+	 * Drops all schemas in this database and closes database.
+	 * @return bool always true
+	 */
 	function drop()
 	{
 		foreach(array_keys($this->schemas) as $schema_name)
@@ -37,17 +62,31 @@ class fSQLStandardDatabase extends fSQLDatabase
 	}
 }
 
+/**
+ * 
+ */
 class fSQLStandardSchema extends fSQLSchema
 {
 	var $path;
 	var $loadedTables = array();
 
+	/*
+	 * Class constructor calls parent constructor with arguments. This method 
+ 	 * sets path attribute according to name. If name is not public, it is
+	 * included in path.
+	 * @param 
+	 * @param string $name
+	 */
 	function fSQLStandardSchema(&$database, $name)
 	{
 		parent::fSQLSchema($database, $name);
 		$this->path = $name !== 'public' ? $database->getPath().$name.'/' : $database->getPath();
 	}
-	
+
+	/*
+	 * Method creates schema as directory at given path if name is not public
+	 * @return bool true on success.
+	 */
 	function create()
 	{
 		if($this->name !== 'public') {
@@ -62,21 +101,37 @@ class fSQLStandardSchema extends fSQLSchema
 		return true;
 	}
 	
+	/*
+	 * Calls parent close method and unsets attributes.
+	 */
 	function close()
 	{
 		parent::close();
 		unset($this->loadedTables);
 	}
 	
+	/*
+	 * Returns schema path.
+	 */
 	function getPath()
 	{
 		return $this->path;
 	}
-	
+
+	/*
+	 * Creates table whose name and columns are given as arguments. If table
+	 * is temporary, it is created as fSQLMemoryTable table and added to 
+	 * loadedTables array.
+	 * @param string $table_name
+	 * @param string $columns (???)
+	 * @param bool $temporary
+	 * @return fSQLTable
+	 */
 	function &createTable($table_name, $columns, $temporary = false)
 	{
 		$table = false;
 		
+		// Check if table is temporary
 		if(!$temporary) {
 			$table =& new fSQLStandardTable($table_name, $this);
 		} else {
@@ -89,6 +144,13 @@ class fSQLStandardSchema extends fSQLSchema
 		return $table;
 	}
 	
+	/*
+	 * Creates a  fSQLStandardView and adds view to tables array.
+	 * @param string $view_name
+	 * @param string $query
+	 * @param string $columns (???)
+	 * @return fSQLStandardView
+	 */
 	function &createView($view_name, $query, $columns = null)
 	{
 		$table =& new fSQLStandardView($view_name, $this);
@@ -97,6 +159,11 @@ class fSQLStandardSchema extends fSQLSchema
 		return $this->tables[$view_name];
 	}
 	
+	/*
+	 * Finds and returns table. 
+	 * @param string $table_name
+	 * @return fSQLTable
+	 */
 	function &getTable($table_name)
 	{
 		$table = false;
@@ -123,7 +190,12 @@ class fSQLStandardSchema extends fSQLSchema
 		
 		return $this->loadedTables[$table_name];
 	}
-	
+
+	/*
+	 * Checks whether table exists.
+	 * @param string $table_name
+	 * @return bool
+	 */
 	function tableExists($table_name)
 	{
 		return in_array($table_name, $this->listTables());
@@ -131,7 +203,6 @@ class fSQLStandardSchema extends fSQLSchema
 	
 	/**
 	 * Returns an array of names of all the tables in the database
-	 * 
 	 * @return array the table names
 	 */
 	function listTables()
@@ -139,6 +210,9 @@ class fSQLStandardSchema extends fSQLSchema
 		$dir = opendir($this->path);
 
 		$tables = array();
+
+		// Look for all files in path. If file name has the form 
+		// filename.columns.cgi, add filename to $tables.
 		while (false !== ($file = readdir($dir))) {
 			if ($file !== '.' && $file !== '..' && !is_dir($file)) {
 				if(substr($file, -12) == '.columns.cgi') {
@@ -152,6 +226,17 @@ class fSQLStandardSchema extends fSQLSchema
 		return $tables;
 	}
 	
+	/**
+	 * Renames (and copies/moves if necessary) the table. If table is temporary
+	 * simply table renamed and added to new database. If table is not temporary
+	 * a new table is created in new database with the same properties as the
+	 * old table has. Old table's dataFile and dataLockFile are copied to
+	 * new directory. In all cases, old table is deleted from database. 
+	 * @param string $old_table_name
+	 * @param string $new_table_name
+	 * @param fSQLDatabase $new_db
+	 * @return bool 
+	 */
 	function renameTable($old_table_name, $new_table_name, &$new_db)
 	{
 		$oldTable =& $this->getTable($old_table_name);
@@ -172,7 +257,12 @@ class fSQLStandardSchema extends fSQLSchema
 			return false;
 		}
 	}
-	
+
+	/**
+	 * Drops table and unsets related attributes.
+	 * @param string $table_name
+	 * @return bool
+	 */
 	function dropTable($table_name)
 	{
 		$table =& $this->getTable($table_name);
@@ -186,7 +276,13 @@ class fSQLStandardSchema extends fSQLSchema
 			return false;
 		}
 	}
-	
+
+	/**
+	 * Copies table to a destination path. 
+	 * @param string $name
+	 * @param string $src_path 
+	 * @param string $dst_path 
+	 */
 	function copyTable($name, $src_path, $dest_path)
 	{
 		copy($src_path.$name.'columns.cgi', $dest_path.$name.'columns.cgi');

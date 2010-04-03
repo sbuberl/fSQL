@@ -3,9 +3,8 @@
  * fSQL start file
  * 
  * This file is the start point of the fSQL.
- * @author Kaja Fumei <???@???.???>
- * @version ??
- * @package fsql
+ * @author Kaja Fumei <kaja.fumei@gmail.com>
+ * @version 
  */
 
 /**#@+
@@ -84,67 +83,82 @@ require FSQL_INCLUDE_PATH.'/drivers/fSQLMasterDriver.php';
 class fSQLEnvironment
 {
 	/**
+	* Updated (but not commited) tables.
 	* @var array
 	*/
 	var $updatedTables = array();
+
 	/**
 	* @var array
 	*/
 	var $lockedTables = array();
+
 	/**
+	* All databases.
 	* @var array
 	*/
 	var $databases = array();
+
 	/**
-	* Pointer(?) to currently using database
+	* Currently selected database
 	* @var ???
 	*/
 	var $currentDB = null;
+
 	/**
-	* Pointer(?) to currently using schema
+	* Currently selected schema
 	* @var ???
 	*/
 	var $currentSchema = null;
+
 	/**
 	* Last error message issued by fSQL
 	* @var string
 	*/
 	var $error_msg = null;
+
 	/**
 	* Number of total queries run.
 	* @var integer
 	*/
 	var $query_count = 0;
+
 	/**
 	* 
 	* @var array
 	*/
 	var $join_lambdas = array();
+
 	/**
 	* 
 	* @var integer
 	*/
 	var $affected = 0;
+
 	/**
 	* 
 	* @var integer
 	*/
 	var $insert_id = 0;
+
 	/**
 	* 
 	* @var bool
 	*/
 	var $auto = 1;
+
 	/**
 	* Array of registered (i.e available) functions
 	* @var array
 	*/
 	var $registered_functions = array();
+
 	/**
 	* 
 	* @var array
 	*/
 	var $resultSets = array();
+
 	/**
 	* 
 	* @var ???
