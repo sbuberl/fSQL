@@ -215,7 +215,8 @@ EOT;
 		
 		$final_set = array();
 		eval($code);
-					
+		
+		$final_set = array_filter($final_set, 'strlen');
 		// Execute an ORDER BY
 		if(!empty($this->orderby))
 		{

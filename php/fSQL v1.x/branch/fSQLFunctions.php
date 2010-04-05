@@ -405,8 +405,8 @@ class fSQLFunctions
 	}
 	 
 	 ///// Aggregate Functions
-	function avg($data, $column) {
-		$sum = fSQLFunctions::sum($data, $column);
+	function avg($data, $column, $flag) {
+		$sum = fSQLFunctions::sum($data, $column, $flag);
 		return $sum / count($data);
 	}
 	function count($data, $column) {
@@ -437,12 +437,23 @@ class fSQLFunctions
 		}
 		return $min;
 	}
-	function sum($data, $column) {
+	function sum($data, $column, $flag) {
 		$i = null;
-		foreach($data as $entry)
-		{
-			$i += $entry[$column];
+		
+		if ($flag === "constant")
+			$i = $column * sizeof($data);
+
+		else if ($column === "*")
+			return null;
+
+		else {
+			foreach($data as $entry)
+			{
+				$i += $entry[$column];
+			}
 		}
+
+
 		return $i;
 	}
 	

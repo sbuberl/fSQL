@@ -232,6 +232,7 @@ class fSQLParser
 			$final_param_list = '';
 			$function_info = null;
 			$paramExprs = array();
+			$expr_type = "non-constant";
 			
 			if(isset($this->registered_functions[$function])) {
 				$builtin = false;
@@ -265,9 +266,15 @@ class fSQLParser
 				$parameter = explode(',', $params);
 				foreach($parameter as $param) {
 					$param = trim($param);
+
 					if($function_type === FSQL_FUNC_AGGREGATE && $param === '*' )
 					{
 						$paramExprs[] = '"*"';
+					}
+					else if (preg_match("/^\d*$/", $param))
+					{	
+						$expr_type = '"constant"';
+						$paramExprs[] = $param;
 					}
 					else
 					{	
@@ -284,9 +291,9 @@ class fSQLParser
 			$final_param_list = implode(",", $paramExprs);
 
 			if($builtin)
-				$expr = "fSQLFunctions::$function($final_param_list)";
+				$expr = "fSQLFunctions::$function($final_param_list, $expr_type)";
 			else
-				$expr = "$function($final_param_list)";
+				$expr = "$function($final_param_list, $param_type)";
 		}
 		// column/alias/keyword
 		else if(preg_match("/\A(?:([^\W\d]\w*|\{\{left\}\})\.)?([^\W\d]\w*)\Z/is", $exprStr, $matches)) {
