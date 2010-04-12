@@ -38,7 +38,8 @@ class fSQLLegacySchema extends fSQLStandardSchema
 		{
 			$key =& new fSQLMemoryKey($type);
 			$key->create($columns);
-			$table->getDefinition()->addKey($name, $type, $columns, 'MEM', '');
+			$tableDef =& $table->getDefinition();
+			$tableDef->addKey($name, $type, $columns, 'MEM', '');
 		}
 		return $key;
 	}

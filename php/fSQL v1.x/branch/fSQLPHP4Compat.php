@@ -68,4 +68,17 @@ if(!function_exists('array_key_exists'))
    }
 }
 
+// Portable recursive mkdir wrapper (recursive flag added in PHP 5)
+function mkdir_recursive($pathname, $mode)
+{
+	is_dir(dirname($pathname)) || mkdir_recursive(dirname($pathname), $mode);
+	return is_dir($pathname) || mkdir($pathname, $mode);
+}
+
+// Portable is_a() wrapper (uses is_a())
+function fsql_is_a($object, $classname)
+{
+	return is_a($object, $classname);
+}
+
 ?>

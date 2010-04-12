@@ -41,7 +41,8 @@ class fSQLDefaultSchema extends fSQLStandardSchema
 			$file = $table->getName().'.primary.cgi';
 			$key =& new fSQLDefaultKey($schema->getPath().$file);
 			$key->create($columns);
-			$table->getDefinition()->addKey($name, $type, $columns, $engine, $file);
+			$tableDef =& $table->getDefinition();
+			$tableDef->addKey($name, $type, $columns, $engine, $file);
 		}
 		return $key;
 	}

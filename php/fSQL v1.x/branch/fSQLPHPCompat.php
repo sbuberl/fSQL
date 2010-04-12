@@ -7,7 +7,9 @@ if (!defined('PHP_VERSION_ID')) {
 }
 
 // Include PHP4 compatibility file if running PHP 4
-if(PHP_VERSION_ID < 50000)
+if(PHP_VERSION_ID >= 50000)
+	require FSQL_INCLUDE_PATH.'/fSQLPHP5Compat.php';
+else
 	require FSQL_INCLUDE_PATH.'/fSQLPHP4Compat.php';
 
 // Define array_intersect_key if missing (introduced in PHP 5.1.0)
@@ -43,35 +45,6 @@ if(!function_exists('array_intersect_key'))
 	    return $result;
 	}
 
-}
-
-/* mkdir_recursive - wrapper around a recursive mkdir() (recursive flag introduced in PHP 5)
- * fsql_is_a - wrapper around is_a/instanceof for PHP 4/5
- */ 
-if(PHP_VERSION_ID >= 50000)
-{
-	function mkdir_recursive($pathname, $mode)
-	{
-		return mkdir($pathname, $mode, true);
-	}
-	
-	function fsql_is_a($object, $classname)
-	{
-		return $object instanceof $classname;
-	}
-}
-else
-{
-	function mkdir_recursive($pathname, $mode)
-	{
-		is_dir(dirname($pathname)) || mkdir_recursive(dirname($pathname), $mode);
-		return is_dir($pathname) || mkdir($pathname, $mode);
-	}
-	
-	function fsql_is_a($object, $classname)
-	{
-		return is_a($object, $classname);
-	}
 }
 
 /* Wrapper around fgets() to make length optional (introduced in PHP 4.2) */
