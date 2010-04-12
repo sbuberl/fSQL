@@ -1,77 +1,5 @@
 <?php
 
-// This function is in PHP5 but nowhere else so we're making it in case we're on PHP4
-if (!function_exists('array_combine')) {
-	function array_combine($keys, $values) {
-		if(is_array($keys) && is_array($values) && count($keys) == count($values)) {
-			$combined = array();
-			foreach($keys as $indexnum => $key)
-				$combined[$key] = $values[$indexnum];
-			return $combined;
-		}
-		return false;
-	}
-}
-
-if(!function_exists('is_a'))
-{
-	function is_a($anObject, $aClass)
-	{
-	   return !strcasecmp(get_class($anObject), $aClass) || is_subclass_of($anObject, $aClass);
-	}
-}
-
-list($php_major_version, $php_minor_version, ) = explode('.', PHP_VERSION);
-if($php_major_version >= 5)
-{
-	function mkdir_recursive($pathname, $mode)
-	{
-		return mkdir($pathname, $mode, true);
-	}
-}
-else
-{
-	function mkdir_recursive($pathname, $mode)
-	{
-		is_dir(dirname($pathname)) || mkdir_recursive(dirname($pathname), $mode);
-		return is_dir($pathname) || @mkdir($pathname, $mode);
-	}
-}
-
-if($php_major_version >= 4 && $php_minor_version >= 2)
-{
-	function file_read_line($file)
-	{
-		return fgets($file);
-	}
-}
-else
-{
-	function file_read_line($file)
-	{
-		$line = "";
-		$ending = NULL;
-		do
-		{
-			$read = fgets($file, 1024);
-			if($read)
-			{
-				$line .= $read;
-				if(strlen($read) === 1024)
-				{
-					$ending = substr($read, -1);
-					if($ending !== "\r" && $ending !== "\n")
-						continue;
-				}
-			}
-			
-			break;
-		} while(true);
-		
-		return $line;
-	}
-}
-
 function create_directory($original_path, $type, &$environment)
 {
 	$paths = pathinfo($original_path);
@@ -128,12 +56,25 @@ class fSQLFile
 	{
 		// should be unlocked before reaches here, but just in case,
 		// release all locks and close file
-		if($this->handle !== null)
+		if(isset($this->handle))
 		{
 		//	flock($this->handle, LOCK_UN);
 			fclose($this->handle);
 		}
 		unset($this->filepath, $this->handle, $this->lock);
+	}
+	
+	function drop()
+	{
+		// only allow drops if not locked
+		if($this->handle === null)
+		{
+			unlink($this->filepath);
+			$this->close();
+			return true;
+		}
+		else
+			return false;
 	}
 	
 	function getHandle()
@@ -311,7 +252,7 @@ class fSQLTypes
 		else if(!is_numeric($arg))
 			return false;
 		else if(is_string($arg))
-			$arg = ctype_digit($arg) ? (int) $arg : (float) $arg;
+			$arg = strpos($arg, '.') === false ? (int) $arg : (float) $arg;
 		return true;
 	}
 	

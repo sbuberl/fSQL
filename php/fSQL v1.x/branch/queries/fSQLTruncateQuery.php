@@ -1,12 +1,7 @@
 <?php
 
 class fSQLTruncateQuery extends fSQLQuery
-{	
-	function fSQLTruncateQuery(&$environment)
-	{
-		parent::fSQLQuery($environment);
-	}
-	
+{
 	function query($query)
 	{
 		if(preg_match('/\ATRUNCATE\s+TABLE\s+(.*)[;]?\Z/is', $query, $matches)) {
@@ -20,7 +15,8 @@ class fSQLTruncateQuery extends fSQLQuery
 					else if($table->isReadLocked())
 						return $this->environment->_error_table_read_lock($table_name_pieces);
 					
-					$columns = $table->getColumns();
+					$tableDef =& $table->getDefinition();
+					$columns = $tableDef->getColumns();
 					$table_name = $table->getName();
 					$db->dropTable($table_name);
 					$db->createTable($table_name, $columns);

@@ -41,8 +41,9 @@ class fSQLSelectQuery extends fSQLQuery
 			$base_table =& $this->environment->_find_table($join['fullName']);
 			if($base_table === false)
 				return false;
-			$base_table_columns = $base_table->getColumns();
-			$join_columns_size = count($base_table->getColumnNames());
+			$base_table_def =& $base_table->getDefinition();
+			$base_table_columns = $base_table_def->getColumns();
+			$join_columns_size = count($base_table_columns);
 			$join_data = $base_table->getEntries();
 			
 			$joined_info['tables'][$saveas] = $base_table_columns;
@@ -53,7 +54,8 @@ class fSQLSelectQuery extends fSQLQuery
 				$joining_table =& $this->environment->_find_table($join_op['fullName']);
 				if($joining_table === false)
 					return false;
-				$joining_table_columns = $joining_table->getColumns();
+				$joining_table_def =& $joining_table->getDefinition();
+				$joining_table_columns = $joining_table_def->getColumns();
 				$joining_columns_size = count($joining_table_columns);
 				
 				$join_table_alias = $join_op['alias'];
@@ -187,8 +189,14 @@ EOT;
 						break;
 					case 'function':
 						$expr = $this->environment->parser->buildExpression($select_value, $joined_info, false);
-						$select_line .= $expr['expression'].', ';
-						$column_info = $expr['type'];
+						if($expr !== null)
+						{
+							$select_line .= $expr['expression'].', ';
+							$column_info = $expr['type'];
+						}
+						else
+							return false; // error should already be set by parser
+						
 						break;
 				}
 				$column_info['name'] = $select_alias;
@@ -198,7 +206,7 @@ EOT;
 			$group = $data;
 		}
 		
-		if($this->joins !== null) {
+		if(!empty($this->joins)) {
 			if($this->where !== null)
 				$line = "if({$this->where}) {\r\n\t\t\t\t\t$line\r\n\t\t\t\t}";
 				
@@ -211,12 +219,16 @@ $final_code
 EOT;
 		}
 		else
+		{
+			$data = array(true);  // hack so it passes count and !empty expressions
+			$group = $data;
 			$code = $line;
+		}
 		
 		$final_set = array();
 		eval($code);
 		
-		$final_set = array_filter($final_set, 'strlen');
+		//$final_set = array_filter($final_set, 'strlen');
 		// Execute an ORDER BY
 		if(!empty($this->orderby))
 		{
@@ -269,7 +281,7 @@ EOT;
 	function _left_join($left_data, $right_data, $join_comparator, $pad_length)
 	{
 		$new_join_data = array();
-		$right_padding = array_fill(0, $pad_length, NULL);
+		$right_padding = array_fill(0, $pad_length, null);
 
 		foreach($left_data as $left_entry)
 		{
@@ -291,7 +303,7 @@ EOT;
 	function _right_join($left_data, $right_data, $join_comparator, $pad_length)
 	{
 		$new_join_data = array();
-		$left_padding = array_fill(0, $pad_length, NULL);
+		$left_padding = array_fill(0, $pad_length, null);
 
 		foreach($right_data as $right_entry)
 		{
@@ -314,8 +326,8 @@ EOT;
 	{
 		$new_join_data = array();
 		$matched_rids = array();
-		$left_padding = array_fill(0, $left_pad_length, NULL);
-		$right_padding = array_fill(0, $right_pad_length, NULL);
+		$left_padding = array_fill(0, $left_pad_length, null);
+		$right_padding = array_fill(0, $right_pad_length, null);
 
 		foreach($left_data as $left_entry)
 		{

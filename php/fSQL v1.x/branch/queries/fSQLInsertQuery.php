@@ -33,10 +33,10 @@ class fSQLInsertQuery extends fSQLDMLQuery
 			return $this->environment->_error_table_read_lock($this->fullTableName);
 		}
 
-		$tableColumns = $table->getColumns();
+		$tableDef = $table->getDefinition();
+		$tableColumns = $tableDef->getColumns();
 		$tableCursor =& $table->getWriteCursor();
 
-		$unique_keys = array(0 => array('type' => 'p', 'columns' => array()));
 		$newentry = array();
 		$col_index = -1;
 		
@@ -65,53 +65,46 @@ class fSQLInsertQuery extends fSQLDMLQuery
 					return false;
 				$newentry[$col_index] = $data;
 			}
-			
-			////See if it is a PRIMARY KEY or UNIQUE
-			if($columnDef['key'] === 'p')
-				$unique_keys[0]['columns'][] = $col_index;
-			else if($columnDef['key'] === 'u')
-				$unique_keys[] = array('type' => 'u', 'columns' => array($col_index));	
 		}
 		
-		if(!empty($unique_keys[0]['columns']) || count($unique_keys) > 1) {
-			$tableCursor->first();
-			while(!$tableCursor->isDone()) {
-				$row = $tableCursor->getRow();
-				$do_delete = false;
-				foreach($unique_keys as $unique_key) {
-					$match_found = true;
-					foreach($unique_key['columns'] as $col_index) {
-						$match_found = $match_found && $row[$col_index] == $newentry[$col_index];
-					}
-					if($match_found) {
-						if($this->replace)
-							$do_delete = true;
-						else if(!$this->ignore)
-							return $this->environment->_set_error("Duplicate value found on key");
-						else
-							return true;
+		$keys = $table->getKeys();
+		if(!empty($keys))
+		{
+			foreach(array_keys($keys) as $k)
+			{
+				$key =& $keys[$k];
+				if($key->getType() & FSQL_KEY_UNIQUE)
+				{
+					$indexValue = $key->extractIndex($newentry);
+					if($indexValue !== false)
+					{
+						$rowid = $key->lookup($indexValue);
+						if($rowid !== false)
+						{
+							if($this->replace)
+							{
+								// may have already ben deleted so check return
+								if($tableCursor->find($rowid))
+								{
+									$tableCursor->deleteRow();
+									$this->affected++;
+								}
+							}
+							else if(!$this->ignore)
+								return $this->environment->_set_error("Duplicate value found on key");
+							else
+								return true;
+						}
 					}
 				}
-				
-				if($do_delete) {
-					$tableCursor->deleteRow();
-					$this->affected++;
-				}
-				else
-					$tableCursor->next();
 			}
 		}
-
+		
 		$tableCursor->appendRow($newentry);
 		
-		if($this->environment->auto)
-			$table->commit();
-		else if(!in_array($table, $this->environment->updatedTables))
-			$this->environment->updatedTables[] =& $table;
-
 		$this->affected++;
 		
-		return true;
+		return $this->commit($table);
 	}
 }
 

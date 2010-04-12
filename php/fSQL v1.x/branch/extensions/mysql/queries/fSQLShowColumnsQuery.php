@@ -19,11 +19,10 @@ class fSQLShowColumnsQuery extends fSQLQuery
 		if($tableObj === false)
 			return false;
 		
-		$columns = $tableObj->getColumns();
-			
+		$tableDef = $tableObj->getDefinition();
 		$data = array();
 			
-		foreach($columns as $name => $column) {
+		foreach($tableObj->getColumns() as $name => $column) {
 			$type = $this->environment->_typecode_to_name($column['type']);
 			$default = $column['default'];
 			$null = ($column['null']) ? 'YES' : 'NO';

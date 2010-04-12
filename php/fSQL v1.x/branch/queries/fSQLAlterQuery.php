@@ -15,6 +15,7 @@ class fSQLAlterQuery extends fSQLQuery
 				return $this->environment->_error_table_read_lock($table_name_pieces);
 			
 			$schema = $tableObj->getSchema();
+			$tableDef = $tableObj->getDefinition();
 			$columns =  $tableObj->getColumns();
 			
 			preg_match_all('/(?:ADD|ALTER|CHANGE|DROP|RENAME).*?(?:,|\Z)/is', trim($changes), $specs);
@@ -29,7 +30,7 @@ class fSQLAlterQuery extends fSQLQuery
 					}
 					
 					$columnDef['key'] = 'p';
-					$tableObj->setColumns($columns);
+					$tableDef->setColumns($columns);
 					
 					return true;
 				} else if(preg_match("/\ACHANGE(?:\s+(?:COLUMN))?\s+`?([^\W\d]\w*)`?\s+(?:SET\s+DEFAULT ((?:[\+\-]\s*)?\d+(?:\.\d+)?|NULL|(\"|').*?(?<!\\\\)(?:\\3))|DROP\s+DEFAULT)(?:,|;|\Z)/is", $specs[0][$i], $matches)) {
@@ -73,7 +74,7 @@ class fSQLAlterQuery extends fSQLQuery
 					}
 					
 					$columnDef['default'] = $default;
-					$tableObj->setColumns($columns);
+					$tableDef->setColumns($columns);
 					
 					return true;
 				} else if(preg_match('/\ADROP\s+PRIMARY\s+KEY/is', $specs[0][$i], $matches)) {
@@ -86,7 +87,7 @@ class fSQLAlterQuery extends fSQLQuery
 					}
 					
 					if($found) {
-						$tableObj->setColumns($columns);
+						$tableDef->setColumns($columns);
 						return true;
 					} else {
 						return $this->environment->_set_error('No primary key found');

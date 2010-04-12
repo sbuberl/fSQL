@@ -15,8 +15,9 @@ class fSQLTransaction
 	
 	function destroy()
 	{
-		$this->environment = null;
-		$this->updatedTables = null;
+		unset($this->environment);
+		unset($this->updatedTables);
+		unset($this->previousAutoValue);
 	}
 	
 	function begin()
@@ -24,6 +25,7 @@ class fSQLTransaction
 		$this->previousAutoValue = $this->environment->auto;
 		$this->environment->auto = 0;
 		$this->environment->_unlock_tables();
+		return true;
 	}
 	
 	function commit()
@@ -36,6 +38,16 @@ class fSQLTransaction
 			$this->updatedTables = array();
 		}
 		$this->environment->auto = $this->previousAutoValue;
+		$this->destroy();
+		return true;
+	}
+	
+	function markTableAsUpdated(&$table)
+	{
+		$table_fqn = $table->getFullName();
+		if(!isset($this->updatedTables[$table_fqn]))
+			$this->updatedTables[$table_fqn] =& $table;
+		return true;
 	}
 	
 	function rollback()
@@ -48,13 +60,8 @@ class fSQLTransaction
 			$this->updatedTables = array();
 		}
 		$this->environment->auto = $this->previousAutoValue;
-	}
-	
-	function setTableAsUpdated(&$table)
-	{
-		$table_fqn = $table->getFullName();
-		if(!isset($this->updatedTables[$table_fqn]))
-			$this->updatedTables[$table_fqn] =& $table;
+		$this->destroy();
+		return true;
 	}
 }
 

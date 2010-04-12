@@ -48,16 +48,8 @@ EOC;
 				$this->affected++;
 			}
 		}
-			
-		if($this->affected)
-		{
-			if($this->environment->auto)
-				$table->commit();
-			else if(!in_array($table, $this->environment->updatedTables))
-				$this->environment->updatedTables[] =& $table;
-		}
-
-		return true;
+		
+		return $this->commit($table);
 	}	
 }
 

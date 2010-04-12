@@ -45,7 +45,7 @@ class fSQLShowTablesQuery extends fSQLQuery
 			$columns[] = array('name'=>'Table_type','type'=>FSQL_TYPE_STRING,'default'=>'','null'=>false,'auto'=>'false','key'=>'n','restraint'=>null);
 			foreach($tables as $table_name) {
 				$table =& $schema->getTable($table_name);
-				$table_type = !is_a($table, 'fSQLView') ? 'BASE TABLE' : 'VIEW';
+				$table_type = !fsql_is_a($table, 'fSQLView') ? 'BASE TABLE' : 'VIEW';
 				$data[] = array($table_name, $table_type);
 			}
 		}

@@ -8,14 +8,40 @@
  */
 
 /**
- * Base driver class. Has no attribute.
+ * Base driver class.  Also a factory class creating
+ * objcts of the right type. Has no attribute.
  */
 class fSQLDriver
 {
-	function &defineDatabase(&$environment, $name)
+	function &defineDatabase(&$environment, $name, $args)
 	{
 		return false;
-	}	
+	}
+	
+	function isAbstract()
+	{
+		return true;
+	}
+	
+	function &_undefinedNew() { $o = false; return $o; }
+	
+	function &newSchemaObj(&$db, $name) { return fSQLDriver::_undefinedNew(); }
+	
+	function &newTableObj(&$schema, $name) { return fSQLDriver::_undefinedNew(); }
+	function &newTempTableObj(&$schema, $name)
+	{
+		$table =& new fSQLMemoryTable($schema, $name);
+		return $table;
+	}
+	
+	function &newTableDefObj(&$schema, $table_name) { return fSQLDriver::_undefinedNew(); }
+	
+	function &newViewObj(&$schema, $name) { return fSQLDriver::_undefinedNew(); }
+	function &newTempViewObj(&$schema, $name)
+	{
+		$view =& new fSQLMemoryView($schema, $name);
+		return $view;
+	}
 }
 
 /**
@@ -24,6 +50,8 @@ class fSQLDriver
  */
 class fSQLDatabase
 {
+	var $driver;
+	
         /**
         * The environment which this database is created. 
         * @var fSQLEnvironment
@@ -55,8 +83,9 @@ class fSQLDatabase
         * @param string $name 
         * @param string $path 
         */
-	function fSQLDatabase(&$environment, $name, $path)
+	function fSQLDatabase(&$driver, &$environment, $name, $path)
 	{
+		$this->driver =& $driver;
 		$this->environment =& $environment;
 		$this->name = $name;
 		$this->path = $path;
@@ -68,7 +97,7 @@ class fSQLDatabase
         */
 	function create()
 	{
-		return false;
+		return $this->defineSchema('public') !== false;
 	}
 	
         /**
@@ -91,6 +120,11 @@ class fSQLDatabase
 		return $this->environment;
 	}
 	
+	function &getDriver()
+	{
+		return $this->driver;
+	}
+	
         /**
         * Returns database name  
 	* @return string database name
@@ -109,17 +143,6 @@ class fSQLDatabase
 		return $this->path;
 	}
 	
-        /**
-        * Creates a schema in this database. This class does not implement 	
-	* method, subclasses will do.
-	* @return fSQLSchema|bool new schema or false
-        */
-	function &_createSchema($name)
-	{
-		$schema = false;
-		return $schema;
-	}
-	
 	/**
         * Creates a schema and inserts it to schemas array. 
 	* @param string $name
@@ -131,9 +154,11 @@ class fSQLDatabase
 		
 		if(!isset($this->schemas[$name]))
 		{
-			$this->schemas[$name] =& $this->_createSchema($name);
+			$this->schemas[$name] =& $this->driver->newSchemaObj($this, $name);
 			if($this->schemas[$name]->create())
 				return $this->schemas[$name];
+			else
+				unset($this->schemas[$name]);
 		}
 		
 		return $schema;
@@ -202,7 +227,7 @@ class fSQLDatabase
 /**
  * Base schema class. This class provides basic properties for any kind of 
  * schema. Schemas are created inside of a database ( i.e each schema is defined
- * under a database).  
+ * under a database).
  */
 class fSQLSchema
 {
@@ -235,7 +260,7 @@ class fSQLSchema
         */
 	function create()
 	{
-		return false;
+		return true;
 	}
 	
         /**
@@ -244,6 +269,7 @@ class fSQLSchema
         */
 	function drop()
 	{
+		$this->close();
 		return true;
 	}
 
@@ -255,29 +281,42 @@ class fSQLSchema
 		unset($this->name, $this->database);
 	}
 	
+	function &createKey($name, $type, $columns, &$table)
+	{
+		$key = null;
+		return $key;
+	}
+	
         /**
-        * Creates table. This class does not implement method, subclasses will do.
+        * Creates table.
 	* @param string $table_name
 	* @param string $columns
 	* @param bool $temporary
-	* @return fSQLTable always null
+	* @return fSQLTable|bool created table or false
         */
 	function &createTable($table_name, $columns, $temporary = false)
 	{
-		$table = null;
+		$driver =& $this->database->getDriver();
+		if($temporary)
+			$table =& $driver->newTempTableObj($this, $table_name);
+		else
+			$table =& $driver->newTableObj($this, $table_name);
+		$table->create($columns);
 		return $table;
 	}
 	
         /**
-        * Creates view. This class does not implement method, subclasses will do.
+        * Creates view.
 	* @param string $view_name
 	* @param string $query
 	* @param string $columns
-	* @return fSQLView always null
+	* @return fSQLView fSQLView|bool created view or false
         */
 	function &createView($view_name, $query, $columns = null)
 	{
-		$view = null;
+		$driver =& $this->database->getDriver();
+		$view =& $driver->newTableObj($this, $view_name);
+		$view->define($query, $columns);
 		return $view;
 	}
 	
@@ -371,13 +410,16 @@ class fSQLTableDef
 class fSQLTable
 {
 	var $name;
-	var $definition = null;
+	var $definition;
 	var $schema;
 
-	function fSQLTable($name, &$schema)
+	function fSQLTable(&$schema, $name)
 	{
 		$this->name = $name;
 		$this->schema =& $schema;
+		$db =& $schema->getDatabase();
+		$driver =& $db->getDriver();
+		$this->definition =& $driver->newTableDefObj($schema, $name);
 	}
 
 	function getName()
@@ -414,16 +456,18 @@ class fSQLTable
 		return true;
 	}
 	
-	function drop() { return false; }
+	function drop() { return $this->close(); }
 	function temporary() { return false; }
-
-	function getColumnNames() { return false; }
-	function getColumns() {return false; }
-	function setColumns($columns) { }
 	
-	function getCursor() { return null; }
-	function getWriteCursor() { return null; }
+	function getKeyNames() { return false; }
+	function getKeys() { return false ; }
+	
+	function &getCursor() { return null; }
+	function &getWriteCursor() { return null; }
 	function getEntries() { return null; }
+	
+	function commit() { return false; }
+	function rollback() { return false; }
 	
 	function isReadLocked() { return false; }
 	function readLock() { return false; }
@@ -490,7 +534,7 @@ class fSQLView extends fSQLTable
 		$rs =& $env->get_result_set($rs_id);
 		if($rs !== false)
 		{
-			if($this->getColumns() === null)
+			if($this->definition->getColumns() === false)
 				$this->definition->setColumns($rs->columns);
 			$this->entries = $rs->data;
 			$env->free_result($rs_id);
@@ -498,6 +542,60 @@ class fSQLView extends fSQLTable
 		}
 		else
 			return false;
+	}
+}
+
+class fSQLKey
+{
+	function close()
+	{
+		return true;
+	}
+	
+	function create($columns)
+	{
+		return false;
+	}
+	
+	function drop()
+	{
+		return $this->close();
+	}
+	
+	/**
+	 * Given a row from this key's table extract the key data
+	 * for use as a parameter to lookup().
+	 * 
+	 * @param array $row
+	 */
+	function extractIndex($row)
+	{
+		$columns = $this->getColumns();
+		if($columns)
+		{
+			switch(count($columns))
+			{
+				case 1:
+					return $row[$columns[0]];
+				case 2:
+					return array($row[$columns[0]], $row[$columns[1]]);
+				case 3:
+					return array($row[$columns[0]], $row[$columns[1]], $row[$columns[2]]);
+				default:
+					// ugly but it works.  last resort
+					return array_intersect_key($row, array_flip($columns));
+			}
+		}
+		else
+			return false;
+	}
+	
+	function getColumns() { return false; }
+	function getType() { return false; }
+	
+	function lookup($key)
+	{
+		return false;
 	}
 }
 

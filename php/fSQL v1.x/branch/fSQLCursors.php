@@ -17,6 +17,18 @@ class fSQLCursor
 	{
 		unset($this->entries, $this->current_row_id, $this->num_rows);	
 	}
+	
+	function findRow($row_id)
+	{
+		$this->first();
+		while($this->current_row_id !== false)
+		{
+			if($this->current_row_id === $row_id)
+				return true;
+			$this->next();
+		}
+		return false;
+	}
 
 	function first()
 	{
@@ -85,8 +97,6 @@ class fSQLCursor
 
 class fSQLWriteCursor extends fSQLCursor
 {
-	var $uncommitted = false;
-	
 	var $newRows = array();
 	
 	var $updatedRows = array();
@@ -95,15 +105,21 @@ class fSQLWriteCursor extends fSQLCursor
 	
 	function close()
 	{
-		unset($this->uncommitted, $this->newRows, $this->updatedRows, $this->deletedRows);
-		parent::close();	
+		unset($this->newRows, $this->updatedRows, $this->deletedRows);
+		parent::close();
 	}
 	
 	function appendRow($entry)
 	{
-		$this->newRows[] = $entry;
 		$this->entries[] = $entry;
-		$this->uncommitted = true;
+		$aKeys = array_keys($this->entries);
+		$this->newRows[] = end($aKeys);
+		$this->num_rows++;
+	}
+	
+	function getNewRows()
+	{
+		return array_intersect_key($this->entries, array_flip($this->newRows));
 	}
 
 	function updateField($column, $value)
@@ -118,12 +134,12 @@ class fSQLWriteCursor extends fSQLCursor
 			else
 			{
 				if(!isset($this->updatedRows[$row_id]))
-					$this->updatedRows[$row_id] = array();
-				$this->updatedRows[$row_id][$column] = $value;
+					$this->updatedRows[$row_id] = array($column => $value);
+				else
+					$this->updatedRows[$row_id][$column] = $value;
 			}
 		
 			$this->entries[$row_id][$column] = $value;
-			$this->uncommitted = true;
 		}
 	}
 
@@ -143,13 +159,12 @@ class fSQLWriteCursor extends fSQLCursor
 				$this->current_row_id = false;
 				$this->entries = array();
 			}
-			$this->uncommitted = true;
 		}
 	}
 	
 	function isUncommitted()
 	{
-		return $this->uncommitted;
+		return !empty($this->newRows) || !empty($this->updatedRows) || !empty($this->deletedRows);
 	}
 }
 

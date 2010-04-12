@@ -10,11 +10,14 @@ class fSQLCreateTableQuery extends fSQLQuery
 	
 	var $columns;
 	
-	function fSQLCreateTableQuery(&$environment, $fullTableName, $columns, $ifNotExists, $temporary)
+	var $constraints;
+	
+	function fSQLCreateTableQuery(&$environment, $fullTableName, $columns, $constraints, $ifNotExists, $temporary)
 	{
 		parent::fSQLQuery($environment);
 		$this->fullTableName = $fullTableName;
 		$this->columns = $columns;
+		$this->constraints = $constraints;
 		$this->ifNotExists = $ifNotExists;
 		$this->temporary = $temporary;
 	}
@@ -32,9 +35,19 @@ class fSQLCreateTableQuery extends fSQLQuery
 				return true;
 			}
 		}
-			
+		
 		$table =& $schema->createTable($table_name, $this->columns, $this->temporary);
-		if($table !== false) {
+		if($table !== false)
+		{
+			$tableDef =& $table->getDefinition();
+			$columnIndicies = array_flip($tableDef->getColumnNames());
+			foreach($this->constraints as $constraint_name => $constraint_data)
+			{
+				$constraint_columns = array();
+				foreach($constraint_data['columns'] as $column)
+					$constraint_columns[] = $columnIndicies[$column];
+				$schema->createKey($constraint_name, $constraint_data['type'], $constraint_columns, $table);
+			}
 			$master =& $this->environment->_get_master_schema();
 			$master->addTable($table);
 			return true;

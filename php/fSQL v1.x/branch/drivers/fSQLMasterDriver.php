@@ -1,12 +1,18 @@
 <?php
 
-class fSQLMasterDriver extends fSQLDriver
+class fSQLMasterDriver extends fSQLMemoryDriver
 {
-	function &defineDatabase(&$environment, $name)
+	function &defineDatabase(&$environment, $name, $args)
 	{
-		$db =& new fSQLMasterDatabase($environment, $name);
+		$db =& new fSQLMasterDatabase($this, $environment, $name);
 		return $db;
-	}	
+	}
+	
+	function &newSchemaObj(&$db, $name)
+	{
+		$schema =& new fSQLMasterSchema($db, $name);
+		return $schema;
+	}
 }
 
 class fSQLMasterDatabase extends fSQLMemoryDatabase
@@ -14,12 +20,6 @@ class fSQLMasterDatabase extends fSQLMemoryDatabase
 	function create()
 	{
 		return $this->defineSchema('master') !== false;
-	}
-	
-	function &_createSchema($name)
-	{
-		$schema =& new fSQLMasterSchema($this, $name);
-		return $schema;
 	}
 }
 
@@ -91,7 +91,7 @@ class fSQLMasterSchema extends fSQLMemorySchema
 		$database =& $schema->getDatabase();
 		$tablesTable =& $this->getTable('tables');
 		$tablesCursor =& $tablesTable->getWriteCursor();
-		if(is_a($table, 'fSQLView'))
+		if(fsql_is_a($table, 'fSQLView'))
 			$type = 'VIEW';
 		else if($table->temporary()) {
 			$type = 'LOCAL TEMPORARY';
@@ -113,10 +113,12 @@ class fSQLMasterSchema extends fSQLMemorySchema
 		$table_name = $table->getName();
 		$db_name = $database->getName();
 		
+		$tableDef =& $table->getDefinition();
+		
 		$columnsTable =& $this->getTable('columns');
 		$columnsCursor =& $columnsTable->getWriteCursor();
 		
-		foreach($table->getColumns() as $col_name => $columnDef)
+		foreach($tableDef->getColumns() as $col_name => $columnDef)
 		{
 			$type = $environment->_typecode_to_name($columnDef['type']);
 			$nullable = $columnDef['type'] ? 'YES' : 'NO';

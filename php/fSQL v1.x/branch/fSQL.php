@@ -16,42 +16,48 @@
 define('FSQL_VERSION', '1.4.0');
 define('FSQL_MEMORY_DB_PATH', ':memory:');
 
-define('FSQL_ASSOC',1,TRUE);
-define('FSQL_NUM',  2,TRUE);
-define('FSQL_BOTH', 3,TRUE);
+define('FSQL_ASSOC',1,true);
+define('FSQL_NUM',  2,true);
+define('FSQL_BOTH', 3,true);
 
-define('FSQL_TRUE', 3, TRUE);
-define('FSQL_FALSE', 0,TRUE);
-define('FSQL_NULL', 1,TRUE);
-define('FSQL_UNKNOWN', 1,TRUE);
+define('FSQL_TRUE', 3, true);
+define('FSQL_FALSE', 0,true);
+define('FSQL_NULL', 1,true);
+define('FSQL_UNKNOWN', 1,true);
 
-define('FSQL_WHERE_NORMAL',2,TRUE);
-define('FSQL_WHERE_NORMAL_AGG',3,TRUE);
-define('FSQL_WHERE_ON',4,TRUE);
-define('FSQL_WHERE_HAVING',8,TRUE);
-define('FSQL_WHERE_HAVING_AGG',9,TRUE);
+define('FSQL_WHERE_NORMAL',2,true);
+define('FSQL_WHERE_NORMAL_AGG',3,true);
+define('FSQL_WHERE_ON',4,true);
+define('FSQL_WHERE_HAVING',8,true);
+define('FSQL_WHERE_HAVING_AGG',9,true);
 
-define('FSQL_TYPE_BOOLEAN','b',TRUE);
-define('FSQL_TYPE_DATE','d',TRUE);
-define('FSQL_TYPE_DATETIME','dt',TRUE);
-define('FSQL_TYPE_ENUM','e',TRUE);
-define('FSQL_TYPE_FLOAT','f',TRUE);
-define('FSQL_TYPE_INTEGER','i',TRUE);
-define('FSQL_TYPE_NUMERIC','n',TRUE);
-define('FSQL_TYPE_STRING','s',TRUE);
-define('FSQL_TYPE_TIME','t',TRUE);
-define('FSQL_TYPE_TIMESTAMP','ts',TRUE);
-define('FSQL_TYPE_YEAR','y',TRUE);
+define('FSQL_TYPE_BOOLEAN','b',true);
+define('FSQL_TYPE_DATE','d',true);
+define('FSQL_TYPE_DATETIME','dt',true);
+define('FSQL_TYPE_ENUM','e',true);
+define('FSQL_TYPE_FLOAT','f',true);
+define('FSQL_TYPE_INTEGER','i',true);
+define('FSQL_TYPE_NUMERIC','n',true);
+define('FSQL_TYPE_STRING','s',true);
+define('FSQL_TYPE_TIME','t',true);
+define('FSQL_TYPE_TIMESTAMP','ts',true);
+define('FSQL_TYPE_YEAR','y',true);
 
-define('FSQL_FUNC_NORMAL', 1, TRUE);
-define('FSQL_FUNC_AGGREGATE', 2, TRUE);
-define('FSQL_FUNC_ENV', 3, TRUE);
+define('FSQL_KEY_NONE', 0, true);
+define('FSQL_KEY_NULLABLE', 1, true);
+define('FSQL_KEY_NON_UNIQUE', 2, true);
+define('FSQL_KEY_UNIQUE', 4, true);
+define('FSQL_KEY_PRIMARY', 12, true);
+
+define('FSQL_FUNC_NORMAL', 1, true);
+define('FSQL_FUNC_AGGREGATE', 2, true);
+define('FSQL_FUNC_ENV', 3, true);
 
 define('FSQL_FORMAT_DATETIME', '%Y-%m-%d %H:%M:%S');
 define('FSQL_FORMAT_DATE', '%Y-%m-%d');
 define('FSQL_FORMAT_TIME', '%H:%M:%S');
 
-define('FSQL_EXTENSION', '.cgi',TRUE);
+define('FSQL_EXTENSION', '.cgi',true);
 
 /**
  * fSQL library include path is set to same directory with
@@ -66,9 +72,11 @@ if(!defined('FSQL_INCLUDE_PATH')) {
  */
 define('FSQL_EXTENSIONS_PATH', FSQL_INCLUDE_PATH.'/extensions');
 
+require FSQL_INCLUDE_PATH.'/fSQLPHPCompat.php';
 require FSQL_INCLUDE_PATH.'/fSQLCursors.php';
 require FSQL_INCLUDE_PATH.'/fSQLParser.php';
 require FSQL_INCLUDE_PATH.'/fSQLQuery.php';
+require FSQL_INCLUDE_PATH.'/fSQLTransactions.php';
 require FSQL_INCLUDE_PATH.'/fSQLUtilities.php';
 require FSQL_INCLUDE_PATH.'/drivers/fSQLBaseDriver.php';
 require FSQL_INCLUDE_PATH.'/drivers/fSQLMemoryDriver.php';
@@ -83,10 +91,10 @@ require FSQL_INCLUDE_PATH.'/drivers/fSQLMasterDriver.php';
 class fSQLEnvironment
 {
 	/**
-	* Updated (but not commited) tables.
-	* @var array
+	* Current transaction (or null if none).
+	* @var fSQLTransaction
 	*/
-	var $updatedTables = array();
+	var $transaction = null;
 
 	/**
 	* @var array
@@ -160,14 +168,23 @@ class fSQLEnvironment
 	var $resultSets = array();
 
 	/**
+	* The SQL parser class to use.  The exact type are
+	* dependent on which extensions are enabled.
 	* 
-	* @var ???
+	* @var fSQLParser
 	*/
 	var $parser;
 	
 	/**
-	* This is a class constructor. Master database is created and inserted
-	* into master schema. 
+	 * The default backend driver.
+	 * 
+	 * @var fSQLDriver
+	 */
+	var $driver = null;
+	
+	
+	/**
+	* This is a class constructor. 
 	*/ 
 	function fSQLEnvironment()
 	{
@@ -176,22 +193,37 @@ class fSQLEnvironment
 		list($usec, $sec) = explode(' ', microtime());
 		srand((float) $sec + ((float) $usec * 100000));
 		
-		// create masterdatabase object; environment is current object
-		// and name is FSQL
-		$db =& new fSQLMasterDatabase($this, 'FSQL');
-		$db->create();
-		// insert the reference of masterdatabase to environment's 
-		// database array with its name as index.
-		$this->databases['FSQL'] =& $db;
-		
-		// insert masterdatabase to environment's master schema
-		$master =& $this->_get_master_schema();
-		$master->addDatabase($db);
-		
 		// create a new parser.
-		$this->parser = new fSQLParser();
+		$this->parser =& new fSQLParser();
 	}
 
+	/**
+	 * Selects the default driver to use defining databases
+	 * using the given $name.  If this method is never used,
+	 * the environment will use the driver named 'default'.
+	 * 
+	 * @var string $name
+	 */
+	function select_driver($name)
+	{
+		$class_name = 'fSQL'.ucfirst(strtolower($name)).'Driver';
+		if(!class_exists($class_name))
+		{
+			$classFileName = FSQL_INCLUDE_PATH.'/drivers/'.$class_name.'.php';
+			if(file_exists($classFileName))
+				require $classFileName;
+			else
+				return $this->_set_error("No driver class for $name was found");
+		}
+		
+		$driver =& new $class_name();
+		if($driver->isAbstract())
+			return $this->_set_error("Driver $name is abstract and can not be used directly.");
+		
+		$this->driver =& $driver;
+		return true;
+	}
+	
 	/**
 	* Defines a database with given $name at the given $path. If $path is 
 	* equals to FSQL_MEMORY_DB_PATH database is defined on memory not on the
@@ -199,23 +231,24 @@ class fSQLEnvironment
 	* @param string $name 
 	* @param string $path 
 	*/
-	function define_db($name, $path)
+	function define_db($name)
 	{
 		$this->error_msg = null;
-
-		// if $path is equal to FSQL_MEMORY_DB_PATH database is created
-		// on memory else fSQLStandardDriver is included and database is
-		// created on filesystem.   		
-		if($path !== FSQL_MEMORY_DB_PATH) {
-			require FSQL_INCLUDE_PATH.'/drivers/fSQLStandardDriver.php';
-			$driver =& new fSQLStandardDriver();
+		
+		// if current driver is not set, try to set it to 'default'.
+		// if that fails, return false
+		if($this->driver === null)
+		{
+			if($this->select_driver('default') === false)
+				return false;
 		}
-		else {
-			$driver =& new fSQLMemoryDriver();
-		} 
+		
+		// get the rest of the arguments to this function
+		$args = func_get_args();
+		array_shift($args);
 		
 		// insert the reference of new database to databases array.
-		$db =& call_user_func_array(array($driver, 'defineDatabase'), array(&$this, $name, $path));
+		$db =& $this->driver->defineDatabase($this, $name, $args);
 		$this->databases[$name] =& $db;
 
 		// insert database reference to master schema if database is 
@@ -305,6 +338,7 @@ class fSQLEnvironment
 		foreach(array_keys($this->resultSets) as $rs_id)
 			$this->resultSets[$rs_id]->free();
 		
+		// close all databases
 		foreach (array_keys($this->databases) as $db_name)
 			$this->databases[$db_name]->close();
 		
@@ -318,13 +352,14 @@ class fSQLEnvironment
 			$this->resultSets,
 			$this->databases,
 			$this->lockedTables,
-			$this->updatedTables,
+			$this->transaction,
 			$this->join_lambdas,
 			$this->registered_functions,
 			$this->databases,
 			$this->currentDB,
 			$this->currentSchema,
-			$this->error_msg
+			$this->error_msg,
+			$this->driver
 		);
 	}
 
@@ -346,16 +381,16 @@ class fSQLEnvironment
 	*/
 	function enable_mysql_exstensions($enable)
 	{
-		if($enable && !is_a($this->parser, 'fSQLParserMySQL'))
+		if($enable && !fsql_is_a($this->parser, 'fSQLParserMySQL'))
 		{
 			// include mysql extension if not exists.
 			if(!class_exists('fSQLParserMySQL'))
 				require FSQL_EXTENSIONS_PATH.'/mysql/fSQLParserMySQL.php';
-			$this->parser = new fSQLParserMySQL($this);
+			$this->parser =& new fSQLParserMySQL($this);
 		}
-		else if(!$enable && is_a($this->parser, 'fSQLParserMySQL'))
+		else if(!$enable && fsql_is_a($this->parser, 'fSQLParserMySQL'))
 		{
-			$this->parser = new fSQLParser($this);
+			$this->parser =& new fSQLParser($this);
 		}
 	}
 
@@ -470,12 +505,32 @@ class fSQLEnvironment
 	}
 	
 	/**
-	* This method returs master schema of the master database.  
-	* @return fSQLStandardSchema
+	* This method returns the master schema of the master FSQL database.
+	* If it does not exist, it creates it.  This is to get around
+	* the PHP4 references in constructors issue.
+	* @return fSQLMasterSchema
 	*/
 	function &_get_master_schema()
 	{
-		return $this->databases['FSQL']->getSchema('master');
+		if(!isset($this->databases['FSQL']))
+		{
+			// create masterdatabase object; environment is current object
+			// and name is FSQL
+			$masterDriver =& new fSQLMasterDriver();
+			$db =& new fSQLMasterDatabase($masterDriver, $this, 'FSQL');
+			$db->create();
+			
+			// insert the reference of masterdatabase to environment's 
+			// database array with its name as index.
+			$this->databases['FSQL'] =& $db;
+			
+			// insert masterdatabase to environment's master schema
+			$schema =& $db->getSchema('master');
+			$schema->addDatabase($db);
+			return $schema;
+		}
+		else
+			return $this->databases['FSQL']->getSchema('master');
 	}
 	
 	/**
@@ -586,10 +641,15 @@ class fSQLEnvironment
 	*/
 	function _begin()
 	{
-		$this->auto = 0;
-		$this->_unlock_tables();
-		$this->_commit();
-		return true;
+		// commit any current transaction
+		if($this->transaction !== null)
+		{
+			$this->transaction->commit();
+			$this->transaction->destroy();
+		}
+			
+		$this->transaction = new fSQLTransaction($this);
+		return $this->transaction->begin();
 	}
 	
 	/**
@@ -598,13 +658,14 @@ class fSQLEnvironment
 	*/
 	function _commit()
 	{
-		$this->auto = 1;
-		// commit all updated tables
-		foreach (array_keys($this->updatedTables) as $index ) {
-			$this->updatedTables[$index]->commit();
+		if($this->transaction !== null)
+		{
+			$success = $this->transaction->commit();
+			$this->transaction = null;
+			return $success;
 		}
-		// reset updatedTables array
-		$this->updatedTables = array();
+		else
+			return $this->_set_error('Can commit because not inside a transaction');
 	}
 
 	/**
@@ -613,13 +674,14 @@ class fSQLEnvironment
 	*/
 	function _rollback()
 	{
-		$this->auto = 1;
-		// rollback all updated tables
-		foreach (array_keys($this->updatedTables) as $index ) {
-			$this->updatedTables[$index]->rollback();
+		if($this->transaction !== null)
+		{
+			$success = $this->transaction->rollback();
+			$this->transaction = null;
+			return $success;
 		}
-		// reset updatedTables array
-		$this->updatedTables = array();
+		else
+			return $this->_set_error('Can rollback because not inside a transaction');
 	}
 	
 	/**
@@ -948,7 +1010,7 @@ class fSQLEnvironment
 		if($this->_is_valid_result_set($rs_id)) {
 			$cursor =& $this->resultSets[$rs_id]>columnsCursor;
 			
-			if($i !== NULL)
+			if($i !== null)
 				$cursor->seek($i);
 			
 			$column = $cursor->getRow();
@@ -1063,7 +1125,7 @@ class fSQLEnvironment
 	function _fsql_regexp($left, $right)
 	{
 		if($left !== null && $right !== null)
-			return (eregi($right, $left)) ? FSQL_TRUE : FSQL_FALSE;
+			return (fsql_eregi($right, $left)) ? FSQL_TRUE : FSQL_FALSE;
 		else
 			return FSQL_UNKNOWN;
 	}

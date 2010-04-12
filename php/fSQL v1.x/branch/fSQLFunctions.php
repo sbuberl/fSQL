@@ -407,10 +407,11 @@ class fSQLFunctions
 	 ///// Aggregate Functions
 	function avg($data, $column, $flag) {
 		$sum = fSQLFunctions::sum($data, $column, $flag);
-		return $sum / count($data);
+		return $sum !== null ? $sum / count($data) : null;
 	}
-	function count($data, $column) {
+	function count($data, $column, $flag) {
 		if($column == '*') { return count($data); }
+		else if($flag === "constant") { return (int) ($column !== null); }
 		else {
 			$i = 0;
 			foreach($data as $entry) {
@@ -419,40 +420,43 @@ class fSQLFunctions
 			return $i;
 		}
 	}
-	function max($data, $column) {
+	function max($data, $column, $flag) {
 		$max = null;
-		foreach($data as $entry){
-			if($entry[$column] > $max || $max === null) {
-				$max = $entry[$column];
-			} 
+		if ($flag === "constant")
+			$max = $column;
+		else {
+			foreach($data as $entry){
+				if($entry[$column] > $max || $max === null) {
+					$max = $entry[$column];
+				} 
+			}
 		}
 		return $max;
 	}
-	function min($data, $column) {
+	function min($data, $column, $flag) {
 		$min = null;
-		foreach($data as $entry){
-			if($entry[$column] < $min || $min === null) {
-				$min = $entry[$column];
-			} 
+		if ($flag === "constant")
+			$min = $column;
+		else {
+			foreach($data as $entry){
+				if($entry[$column] < $min || $min === null) {
+					$min = $entry[$column];
+				} 
+			}
 		}
 		return $min;
 	}
 	function sum($data, $column, $flag) {
 		$i = null;
 		
-		if ($flag === "constant")
+		if ($flag === "constant" && $column !== null)
 			$i = $column * sizeof($data);
-
-		else if ($column === "*")
-			return null;
-
 		else {
 			foreach($data as $entry)
 			{
 				$i += $entry[$column];
 			}
 		}
-
 
 		return $i;
 	}

@@ -10,7 +10,6 @@ class fSQLUpdateQuery extends fSQLDMLQuery
 	
 	var $ignore;
 	
-	
 	function fSQLUpdateQuery(&$environment, $tableNamePieces, $setArray, $where, $ignore)
 	{
 		parent::fSQLDMLQuery($environment);
@@ -32,18 +31,18 @@ class fSQLUpdateQuery extends fSQLDMLQuery
 			return $this->environment->_error_table_read_lock($this->tableNamePieces);
 		}
 		
-		$columns = $table->getColumns();
+		$tableDef =& $table->getDefinition();
+		$columns = $tableDef->getColumns();
 		$columnNames = array_keys($columns);
 		$cursor =& $table->getWriteCursor();
 			
 		$col_indicies = array_flip($columnNames);
 		$updates = array();
 		
-		$code = "";
+		$code = '';
 		foreach($this->setArray as $set) {
-			list($column, $value) = $set;	
-			$columnDef = $columns[$column];
-			$new_value = $this->environment->_parse_value($columnDef, $value);
+			list($column, $value) = $set;
+			$new_value = $this->environment->_parse_value($columns[$column], $value);
 			if($new_value === false)
 				return $this->environment->_set_error('Unknown value: '.$value);
 			if(is_string($new_value))
@@ -58,24 +57,16 @@ class fSQLUpdateQuery extends fSQLDMLQuery
 		if($this->where)
 			$code = "\tif({$this->where}) {\r\n$code\r\n\t}";
 
-			eval(<<<EOC
+		eval(<<<EOC
 for( \$cursor->first(); !\$cursor->isDone(); \$cursor->next())
 {
 	\$entry = \$cursor->getRow();
 $code
 }
 EOC
-			);
+		);
 
-			if($this->affected)
-			{
-				if($this->environment->auto)
-					$table->commit();
-				else if(!in_array($table, $this->environment->updatedTables))
-					$this->environment->updatedTables[] =& $table;
-			}
-			
-			return true;
+		return $this->commit($table);
 	}	
 }
 

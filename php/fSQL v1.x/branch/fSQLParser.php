@@ -87,7 +87,7 @@ class fSQLParser
 				$logicalOp = trim($WHERE[1][$i]);
 				$not = !empty($WHERE[2][$i]);
 				$leftStr = $WHERE[3][$i];
-				$operator = preg_replace("/\s+/", " ", trim(strtoupper($WHERE[4][$i])));
+				$operator = preg_replace('/\s+/', ' ', trim(strtoupper($WHERE[4][$i])));
 				$rightStr = $WHERE[5][$i];
 				
 				$left = $this->buildExpression($leftStr, $join_info, $where_type);
@@ -96,7 +96,7 @@ class fSQLParser
 				
 				$leftExpr = $left['expression'];
 				
-				if($operator !== "IN" && $operator !== 'NOT IN')
+				if($operator !== 'IN' && $operator !== 'NOT IN')
 				{
 					$right = $this->buildExpression($rightStr, $join_info, $where_type);
 					if($right === null)
@@ -160,9 +160,9 @@ class fSQLParser
 							$not = !$not;
 						case 'IS':
 							if($rightExpr === 'NULL')
-								$local_condition = "($leftExpr === NULL ? FSQL_TRUE : FSQL_FALSE)";
+								$local_condition = "($leftExpr === null ? FSQL_TRUE : FSQL_FALSE)";
 							else if($rightExpr === 'TRUE')
-								$local_condition = "($leftExpr == TRUE ? FSQL_TRUE : FSQL_FALSE)";
+								$local_condition = "($leftExpr == true ? FSQL_TRUE : FSQL_FALSE)";
 							else if($rightExpr === 'FALSE')
 								$local_condition = "(in_array($leftExpr, array(0, 0.0, ''), true) ? FSQL_TRUE : FSQL_FALSE)";
 							else
@@ -232,7 +232,7 @@ class fSQLParser
 			$final_param_list = '';
 			$function_info = null;
 			$paramExprs = array();
-			$expr_type = "non-constant";
+			$expr_type = '"non-constant"';
 			
 			if(isset($this->registered_functions[$function])) {
 				$builtin = false;
@@ -269,31 +269,46 @@ class fSQLParser
 
 					if($function_type === FSQL_FUNC_AGGREGATE && $param === '*' )
 					{
-						$paramExprs[] = '"*"';
-					}
-					else if (preg_match("/^\d*$/", $param))
-					{	
-						$expr_type = '"constant"';
-						$paramExprs[] = $param;
+						if($function === 'count')
+							$paramExprs[] = '"*"';
+						else
+						{
+							$this->environment->_set_error('Passing * as a paramter is only allowed in COUNT');
+							return null;
+						}
 					}
 					else
-					{	
+					{
 						$paramExpr = $this->buildExpression($param, $join_info, $where_type | 1);
+						if($paramExpr === null) // parse error
+							return null;
+						
 						$pexp = $paramExpr['expression'];
-						if($function_type === FSQL_FUNC_AGGREGATE && preg_match('/\\$entry\[(\d+)\]/', $pexp, $pexp_matches))
-							$paramExprs[] = $pexp_matches[1];
+						if($function_type === FSQL_FUNC_AGGREGATE)
+						{
+							if(preg_match('/\\$entry\[(\d+)\]/', $pexp, $pexp_matches))
+								$paramExprs[] = $pexp_matches[1];
+							else //assume everything else is some form of constant
+							{
+								$expr_type = '"constant"';
+								$paramExprs[] = $pexp;
+							}
+						}
 						else
 							$paramExprs[] = $pexp;
 					}
 				}
 			}
 			
+			if($function_type === FSQL_FUNC_AGGREGATE)
+				$paramExprs[] = $expr_type;
+			
 			$final_param_list = implode(",", $paramExprs);
 
 			if($builtin)
-				$expr = "fSQLFunctions::$function($final_param_list, $expr_type)";
+				$expr = "fSQLFunctions::$function($final_param_list)";
 			else
-				$expr = "$function($final_param_list, $param_type)";
+				$expr = "$function($final_param_list)";
 		}
 		// column/alias/keyword
 		else if(preg_match("/\A(?:([^\W\d]\w*|\{\{left\}\})\.)?([^\W\d]\w*)\Z/is", $exprStr, $matches)) {
@@ -384,7 +399,7 @@ class fSQLParser
 	
 	function parseBegin($query)
 	{
-		if(preg_match('/\ABEGIN(?:\s+WORK)?\s*[;]?\Z/is', $query, $matches)) {
+		if(preg_match('/\ABEGIN(?:\s+WORK)?\s*[;]?\Z/is', $query)) {
 			$this->loadQueryClass('start');		
 			return new fSQLStartQuery($this->environment);
 		} else {
@@ -404,8 +419,8 @@ class fSQLParser
 	
 	function parseCreateTable($query)
 	{
-		if(preg_match('/\ACREATE(?:\s+(TEMPORARY))?\s+TABLE\s+(?:(IF\s+NOT\s+EXISTS)\s+)?(`?(?:[^\W\d]\w*`?\.`?){0,2}[^\W\d]\w*`?)(?:\s*\((.+)\)|\s+LIKE\s+((?:[^\W\d]\w*\.){0,2}[^\W\d]\w*))/is', $query, $matches)) {
-			
+		if(preg_match('/\ACREATE(?:\s+(TEMPORARY))?\s+TABLE\s+(?:(IF\s+NOT\s+EXISTS)\s+)?(`?(?:[^\W\d]\w*`?\.`?){0,2}[^\W\d]\w*`?)(?:\s*\((.+)\)|\s+LIKE\s+((?:[^\W\d]\w*\.){0,2}[^\W\d]\w*))/is', $query, $matches))
+		{	
 			list(, $temporary, $ifnotexists, $full_table_name, $column_list) = $matches;
 
 			$table_name_pieces = $this->environment->_parse_table_name($full_table_name);
@@ -418,45 +433,72 @@ class fSQLParser
 
 			if(!isset($matches[5])) {
 				//preg_match_all("/(?:(KEY|PRIMARY KEY|UNIQUE) (?:([^\W\d]\w*)\s*)?\((.+?)\))|(?:`?([^\W\d]\w*?)`?(?:\s+((?:TINY|MEDIUM|BIG)?(?:TEXT|BLOB)|(?:VAR)?(?:CHAR|BINARY)|INTEGER|(?:TINY|SMALL|MEDIUM|BIG)?INT|FLOAT|REAL|DOUBLE(?: PRECISION)?|BIT|BOOLEAN|DEC(?:IMAL)?|NUMERIC|DATE(?:TIME)?|TIME(?:STAMP)?|YEAR|ENUM|SET)(?:\((.+?)\))?)(\s+UNSIGNED)?(.*?)?(?:,|\)|$))/is", trim($column_list), $Columns);
-				preg_match_all('/(?:(?:CONSTRAINT\s+(?:[^\W\d]\w*\s+)?)?(KEY|INDEX|PRIMARY\s+KEY|UNIQUE)(?:\s+([^\W\d]\w*))?\s*\((.+?)\))|(?:`?([^\W\d]\w*?)`?(?:\s+((?:TINY|MEDIUM|LONG)?(?:TEXT|BLOB)|(?:VAR)?(?:CHAR|BINARY)|INTEGER|(?:TINY|SMALL|MEDIUM|BIG)?INT|FLOAT|REAL|DOUBLE(?: PRECISION)?|BIT|BOOLEAN|DEC(?:IMAL)?|NUMERIC|DATE(?:TIME)?|TIME(?:STAMP)?|YEAR|ENUM|SET)(?:\((.+?)\))?)(\s+UNSIGNED\s+)?(.*?)?(?:,|\)|$))/is', trim($column_list), $Columns);
+				preg_match_all('/(?:(?:CONSTRAINT\s+(?:([^\W\d]\w*)\s+)?)?(KEY|INDEX|PRIMARY\s+KEY|UNIQUE)(?:\s+([^\W\d]\w*))?\s*\(\s*(.+?)\s*\))|(?:`?([^\W\d]\w*?)`?(?:\s+((?:TINY|MEDIUM|LONG)?(?:TEXT|BLOB)|(?:VAR)?(?:CHAR|BINARY)|INTEGER|(?:TINY|SMALL|MEDIUM|BIG)?INT|FLOAT|REAL|DOUBLE(?:\s+PRECISION)?|BIT|BOOLEAN|DEC(?:IMAL)?|NUMERIC|DATE(?:TIME)?|TIME(?:STAMP)?|YEAR|ENUM|SET)(?:\((.+?)\))?)(\s+UNSIGNED\s+)?(.*?)?(?:,|\)|$))/is', trim($column_list), $Columns);
 
 				if(!$Columns) {
 					return $this->environment->_set_error('Parsing error in CREATE TABLE query');
 				}
 				
 				$new_columns = array();
+				$new_constraints = array();
 
 				$numMatches = count($Columns[0]);
 				for($c = 0; $c < $numMatches; $c++) {
 					//$column = str_replace("\"", "'", $column);
-					if($Columns[1][$c])
+					if($Columns[2][$c])
 					{
-						if(!$Columns[3][$c]) {
+						$constraint_name = $Columns[1][$c];
+						
+						if(!$Columns[4][$c]) {
 							return $this->environment->_set_error("Parse Error: Excepted column name in \"{$Columns[1][$c]}\"");
 						}
 						
-						$keytype = strtolower($Columns[1][$c]);
-						if($keytype === 'index')
-							$keytype = 'key';
-						$keycolumns = explode(',', $Columns[3][$c]);
+						$keytype = strtolower($Columns[2][$c]);
+						if($keytype === 'index' || $keytype === 'key')
+							$keytype = 'k';
+						else
+							$keytype = $keytype{0}.'k';
+						$keycolumns = preg_split('/\s*,\s*/', $Columns[4][$c]);
+						
+						if(!$constraint_name)
+							$constraint_name = "{$table_name}_{$keytype}";
+
+						switch($keytype)
+						{
+							case 'pk':	$keyTypeCode = FSQL_KEY_PRIMARY;	break;
+							case 'uk':	$keyTypeCode = FSQL_KEY_UNIQUE;		break;
+							default:	$keyTypeCode = FSQL_KEY_NON_UNIQUE;	break;
+						}
+						
+						$key_has_null_column = false;
 						foreach($keycolumns as $keycolumn)
 						{
-							$keycolumn = trim($keycolumn);
-							if($new_columns[$keycolumn]['key'] !== 'p')
-								$new_columns[$keycolumn]['key'] = $keytype{0}; 
+							$keyColumnData = $new_columns[$keycolumn];
+							if($keyColumnData['null'])
+							{
+								if($keyTypeCode === FSQL_KEY_PRIMARY)
+									return $this->_set_error("Primary key contains a nullable column named {$keycolumn}");
+								else
+									$key_has_null_column = true;
+							}
 						}
+						
+						if($key_has_null_column)
+							$keyTypeCode |= FSQL_KEY_NULLABLE;
+						
+						$new_constraints[$constraint_name] = array('type' => $keyTypeCode, 'columns' => $keycolumns);
 					}
 					else
 					{
-						$name = $Columns[4][$c];
-						$type = $Columns[5][$c];
-						$options =  $Columns[8][$c];
+						$name = $Columns[5][$c];
+						$type = $Columns[6][$c];
+						$options =  $Columns[9][$c];
 						
 						if(isset($new_columns[$name])) {
 							return $this->environment->_set_error("Column '{$name}' redefined");
 						}
 						
-						$type = strtoupper($type);
+						$type = preg_replace('/\s+/', '', strtoupper($type));
 						if(in_array($type, array('CHAR', 'VARCHAR', 'BINARY', 'VARBINARY', 'TEXT', 'TINYTEXT', 'MEDIUMTEXT', 'LONGTEXT', 'SET', 'BLOB', 'TINYBLOB', 'MEDIUMBLOB', 'LONGBLOB'))) {
 							$type = FSQL_TYPE_STRING;
 						} else if(in_array($type, array('BIT','TINYINT', 'SMALLINT','MEDIUMINT','INT','INTEGER','BIGINT'))) {
@@ -497,7 +539,7 @@ class fSQLParser
 							preg_match_all("/'.*?(?<!\\\\)'/", $Columns[6][$c], $values);
 							$restraint = $values[0];
 						} else {
-							$restraint = NULL;
+							$restraint = null;
 						}
 				
 						if(preg_match("/DEFAULT\s+((?:[\+\-]\s*)?\d+(?:\.\d+)?|NULL|(\"|').*?(?<!\\\\)(?:\\2))/is", $options, $matches)) {
@@ -544,10 +586,23 @@ class fSQLParser
 				
 						if(preg_match('/(PRIMARY\s+KEY|UNIQUE(?:\s+KEY)?)/is', $options, $keymatches)) {
 							$keytype = strtolower($keymatches[1]);
-							$key = $keytype{0}; 
+							$key = $keytype{0};
+							if($key === 'p')
+							{
+								$keyTypeCode = FSQL_KEY_PRIMARY;
+								if($null)
+									return $this->_set_error("Primary key contains a nullable column named {$name}");
+							}
+							else if($null)
+								$keyTypeCode = FSQL_KEY_UNIQUE | FSQL_KEY_NULLABLE;
+							else
+								$keyTypeCode = FSQL_KEY_UNIQUE;
+							
+							$constraint_name = "{$table_name}_{$key}k"; 
+							$new_constraints[$constraint_name] = array('type' => $keyTypeCode, 'columns'=>array($name));
 						}
 						else {
-							$key = 'n';
+							$key = '';
 						}
 						
 						$new_columns[$name] = array('type' => $type, 'auto' => $auto, 'default' => $default, 'key' => $key, 'null' => $null, 'restraint' => $restraint);
@@ -559,11 +614,12 @@ class fSQLParser
 				if($src_table === false)
 					return false;
 				
-				$new_columns = $src_table->getColumns();
+				$src_table_def =& $src_table->getDefinition();
+				$new_columns = $src_table_def->getColumns();
 			}
 			
 			$this->loadQueryClass('createTable');
-			return new fSQLCreateTableQuery($this->environment, $table_name_pieces, $new_columns, $ifnotexists, $temporary);
+			return new fSQLCreateTableQuery($this->environment, $table_name_pieces, $new_columns, $new_constraints, $ifnotexists, $temporary);
 		} else {
 			return $this->environment->_set_error('Invalid CREATE TABLE query');
 		}
@@ -585,7 +641,7 @@ class fSQLParser
 	
 	function parseCommit($query)
 	{
-		if(preg_match('/\ACOMMIT\s*[;]?\s*\Z/is', $query, $matches)) {
+		if(preg_match('/\ACOMMIT\s*[;]?\s*\Z/is', $query)) {
 			$this->loadQueryClass('commit');
 			return new fSQLCommitQuery($this->environment);
 		} else {
@@ -603,7 +659,8 @@ class fSQLParser
 				return false;
 			
 			$table_name = $table_name_pieces[2];
-			$columns = $table->getColumns();
+			$tableDef =& $table->getDefinition();
+			$columns = $tableDef->getColumns();
 			$columnNames = array_keys($columns);
 			
 			$where = null;
@@ -704,7 +761,8 @@ class fSQLParser
 			return $this->environment->_error_table_read_lock($table_name_pieces);
 		}
 
-		$tableColumns = $table->getColumns();
+		$tableDef =& $table->getDefinition();
+		$tableColumns = $tableDef->getColumns();
 		$tableCursor =& $table->getWriteCursor();
 
 		$check_names = 1;
@@ -719,7 +777,8 @@ class fSQLParser
 		// VALUES list but no column list
 		else if(preg_match('/^VALUES\s*\((.+)\)/is', $the_rest, $matches)) { 
 			$get_data_from = $matches[1];
-			$Columns = $table->getColumnNames();
+			$tableDef =& $table->getDefinition();
+			$Columns = $tableDef->getColumnNames();
 			$check_names = 0;
 		}
 		// SET syntax
@@ -784,7 +843,7 @@ class fSQLParser
 	
 	function parseRollback($query)
 	{
-		if(preg_match('/\AROLLBACK\s*[;]?\s*\Z/is', $query, $matches)) {
+		if(preg_match('/\AROLLBACK\s*[;]?\s*\Z/is', $query)) {
 			$this->loadQueryClass('rollback');
 			return new fSQLRollbackQuery($this->environment);
 		} else {
@@ -841,7 +900,8 @@ class fSQLParser
 					return $this->environment->_set_error("Table named '$saveas' already specified");
 
 				$joins[$saveas] = array('fullName' => $table_name_pieces, 'joined' => array());
-				$table_columns = $table->getColumns();
+				$tableDef =& $table->getDefinition();
+				$table_columns = $tableDef->getColumns();
 				$joined_info['tables'][$saveas] = $table_columns;
 				$joined_info['offsets'][$saveas] = count($joined_info['columns']);
 				$joined_info['columns'] = array_merge($joined_info['columns'], array_keys($table_columns));
@@ -874,7 +934,8 @@ class fSQLParser
 						else
 							return $this->environment->_set_error("Table named '$join_table_alias' already specified");
 						
-						$join_table_columns = $join_table->getColumns();
+						$join_table_def =& $join_table->getDefinition();
+						$join_table_columns = $join_table_def->getColumns();
 						$join_table_column_names = array_keys($join_table_columns);
 
 						$clause = strtoupper($join[4][$i]);
@@ -938,7 +999,8 @@ class fSQLParser
 					$star_tables = !empty($table_name) ? array($table_name) : array_keys($tables);				
 					foreach($star_tables as $tname) {
 						$start_index = $joined_info['offsets'][$tname];
-						$table_columns = $tables[$tname]->getColumns();
+						$tableDef =& $tables[$tname]->getDefinition();
+						$table_columns = $tableDef->getColumns();
 						$column_names = array_keys($table_columns);
 						foreach($column_names as $index => $column_name) {
 							$selectedInfo[] = array('column', $start_index + $index, $column_name, $table_columns[$column_name]);
@@ -948,11 +1010,12 @@ class fSQLParser
 					$alias = !empty($colmatches[3]) ? $colmatches[3] : $column;
 					
 					if($table_name) {
-						$table_columns = $tables[$table_name]->getColumns();
+						$tableDef =& $tables[$table_name]->getDefinition();
+						$table_columns = $tableDef->getColumns();
 						$column_names = array_keys($table_columns);
 						$index = array_search($column, $column_names) + $joined_info['offsets'][$table_name];
 						$columnData = $table_columns[$column];
-					} else if(strcasecmp($column, "null")){
+					} else if(strcasecmp($column, 'null')){
 						$index = array_search($column, $joined_info['columns']);
 						$owner_table_name = null;
 						foreach($joined_info['tables'] as $join_table_name => $join_table)
@@ -1059,7 +1122,7 @@ class fSQLParser
 	
 	function parseStart($query)
 	{
-		if(preg_match('/\ASTART\s+TRANSACTION\s*[;]?\Z/is', $query, $matches)) {			
+		if(preg_match('/\ASTART\s+TRANSACTION\s*[;]?\Z/is', $query)) {			
 			$this->loadQueryClass('start');
 			return new fSQLStartQuery($this->environment);
 		} else {
@@ -1079,8 +1142,9 @@ class fSQLParser
 			if($table === false) {
 				return false;
 			}
-		
-			$columns = $table->getColumns();
+			
+			$tableDef =& $table->getDefinition();
+			$columns = $tableDef->getColumns();
 			$columnNames = array_keys($columns);
 
 			if(preg_match_all("/`?((?:\S+)`?\s*=\s*(?:'(?:.*?)'|\S+))`?\s*(?:,|\Z)/is", $set_clause, $sets)) {
