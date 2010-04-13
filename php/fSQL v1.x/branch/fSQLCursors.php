@@ -18,6 +18,11 @@ class fSQLCursor
 		unset($this->entries, $this->current_row_id, $this->num_rows);	
 	}
 	
+	function currentRowId()
+	{
+		return $this->current_row_id;
+	}
+	
 	function findRow($row_id)
 	{
 		$this->first();

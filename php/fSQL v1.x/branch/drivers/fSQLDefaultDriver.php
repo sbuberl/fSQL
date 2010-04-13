@@ -40,17 +40,23 @@ class fSQLDefaultSchema extends fSQLStandardSchema
 			$engine = 'HASH_FILE';
 			$file = $table->getName().'.primary.cgi';
 			$key =& new fSQLDefaultKey($schema->getPath().$file);
-			$key->create($columns);
-			$tableDef =& $table->getDefinition();
-			$tableDef->addKey($name, $type, $columns, $engine, $file);
 		}
+		else
+		{
+			$engine = 'MEM';
+			$file = null;
+			$key =& new fSQLMemoryKey($type);
+		}
+		
+		$key->create($columns);
+		$tableDef =& $table->getDefinition();
+		$tableDef->addKey($name, $type, $columns, $engine, $file);
 		return $key;
 	}
 }
 
 class fSQLDefaultTableDef extends fSQLStandardTableDef
-{	
-	var $keys = array();
+{
 	var $primaryKeyName = null;
 	
 	function addKey($name, $type, $columns, $engine, $fileName)
@@ -113,18 +119,6 @@ else
 EOC;
 		
 		$this->readFunction = create_function('$row', $readCode);
-	}
-	
-	function getKeyNames()
-	{
-		$this->getColumns();
-		return array_keys($this->keys);
-	}
-	
-	function getKeysInfo()
-	{
-		$this->getColumns();
-		return $this->keys;
 	}
 	
 	function getPrimaryKeyName()
@@ -254,7 +248,6 @@ EOC;
  */
 class fSQLDefaultTable extends fSQLStandardTable
 {
-	var $loadedKeys = array();
 	var $primary = null;
 	
 	function create($columnDefs)
@@ -275,45 +268,8 @@ class fSQLDefaultTable extends fSQLStandardTable
 	
 	function close()
 	{
-		unset($this->loadedKeys);
 		unset($this->primary);
 		parent::close();
-	}
-	
-	function getKeyNames()
-	{
-		return $this->definition->getKeyNames();
-	}
-	
-	function getKeys()
-	{
-		$keys = array();
-		$keyNames = $this->definition->getKeyNames();
-		foreach($keyNames as $keyName)
-			$keys[] =& $this->getKey($keyName);
-		return $keys;
-	}
-	
-	function &getKey($key_name)
-	{
-		if(!isset($this->loadedKeys[$key_name]))
-		{
-			$key = false;
-			$allKeys = $this->definition->getKeysInfo();
-			if(isset($allKeys[$key_name]))
-			{
-				$keydata = $allKeys[$key_name];
-				if($keydata['engine'] === 'HASH_FILE')
-				{
-					$key =& new fSQLDefaultKey($this->schema->getPath().$keydata['file']);
-					$key->load();
-					$this->loadedKeys[$key_name] =& $key;
-				}
-			}
-			return $key;
-		}
-		else
-			return $this->loadedKeys[$key_name];
 	}
 	
 	function &getWriteCursor()
@@ -525,6 +481,13 @@ class fSQLDefaultKey extends fSQLKey
 		$this->addedRows[] = $row;
 	}
 	
+	function close()
+	{
+		if(isset($this->keyFile))
+			$this->keyFile->close();
+		unset($this->addedRows, $this->keyFile, $this->key, $this->lengths, $this->positions, $this->columns);
+		return true;
+	}
 	function create($columns)
 	{
 		$this->columns = $columns;
@@ -548,6 +511,7 @@ class fSQLDefaultKey extends fSQLKey
 	function drop()
 	{
 		$this->keyFile->drop();
+		$this->close();
 		return true;
 	}
 	

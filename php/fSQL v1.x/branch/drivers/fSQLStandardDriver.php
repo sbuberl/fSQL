@@ -283,6 +283,7 @@ class fSQLStandardSchema extends fSQLSchema
 
 class fSQLStandardTableDef extends fSQLTableDef
 {
+	var $keys = array();
 	var $columns = null;
 	var $columnsFile;
 	var $columnsLockFile;
@@ -312,6 +313,11 @@ class fSQLStandardTableDef extends fSQLTableDef
 		);
 	}
 	
+	function addKey($name, $type, $columns, $engine, $fileName)
+	{
+		return false;
+	}
+	
 	function drop()
 	{
 		if($this->lock === null)
@@ -330,6 +336,18 @@ class fSQLStandardTableDef extends fSQLTableDef
 		if($this->readFunction === null)
 			$columns = $this->getColumns();
 		return $this->readFunction;
+	}
+	
+	function getKeyNames()
+	{
+		$this->getColumns();
+		return array_keys($this->keys);
+	}
+	
+	function getKeysInfo()
+	{
+		$this->getColumns();
+		return $this->keys;
 	}
 	
 	function _buildReadWriteFuncs()
@@ -396,6 +414,7 @@ class fSQLStandardTable extends fSQLTable
 	var $rcursor = null;
 	var $wcursor = null;
 	var $entries = null;
+	var $loadedKeys = array();
 	var $dataLockFile;
 	var $dataFile;
 	var $lock = null;
@@ -419,11 +438,16 @@ class fSQLStandardTable extends fSQLTable
 			$this->rcursor->close();
 		if($this->wcursor !== null)
 			$this->wcursor->close();
-			
+		if(!empty($this->loadedKeys))
+		{
+			foreach(array_keys($this->loadedKeys) as $k)
+				$this->loadedKeys[$k]->close();
+		}
 		$this->dataLockFile->close();
 		$this->dataFile->close();
 		
 		unset(
+			$this->loadedKeys,
 			$this->entries,
 			$this->dataFile,
 			$this->dataLockFile,
@@ -467,6 +491,47 @@ class fSQLStandardTable extends fSQLTable
 	function _loadEntries()
 	{
 		return false;
+	}
+	
+	function getKeyNames()
+	{
+		return $this->definition->getKeyNames();
+	}
+	
+	function getKeys()
+	{
+		$keys = array();
+		$keyNames = $this->definition->getKeyNames();
+		foreach($keyNames as $keyName)
+			$keys[] =& $this->getKey($keyName);
+		return $keys;
+	}
+	
+	function &getKey($key_name)
+	{
+		if(!isset($this->loadedKeys[$key_name]))
+		{
+			$key = false;
+			$allKeys = $this->definition->getKeysInfo();
+			if(isset($allKeys[$key_name]))
+			{
+				$keydata = $allKeys[$key_name];
+				if($keydata['engine'] === 'HASH_FILE')
+				{
+					$key =& new fSQLDefaultKey($this->schema->getPath().$keydata['file']);
+					$key->load();
+					$this->loadedKeys[$key_name] =& $key;
+				}
+				else if($keydata['engine'] === 'MEM')
+				{
+					$key =& new fSQLMemoryKey($keydata['type']);
+					$this->loadedKeys[$key_name] =& $key;
+				}
+			}
+			return $key;
+		}
+		else
+			return $this->loadedKeys[$key_name];
 	}
 	
 	function rollback()

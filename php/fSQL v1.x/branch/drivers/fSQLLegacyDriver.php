@@ -47,21 +47,23 @@ class fSQLLegacySchema extends fSQLStandardSchema
 
 class fSQLLegacyTableDef extends fSQLStandardTableDef
 {
-	var $keys = array();
-	
 	function addKey($name, $type, $columns, $engine, $fileName)
 	{
-		if($type === FSQL_KEY_PRIMARY)
+		$colLookup = array_keys($this->columns);
+		$this->keys[$name] = array('type' => $type, 'columns' => $columns, 'engine'=>$engine, 'file' => $fileName);
+		foreach($columns as $colIndex)
 		{
-			$colLookup = array_keys($this->columns);
-			$this->keys[$name] = array('type' => $type, 'columns' => $columns, 'engine'=>$engine, 'file' => $fileName);
-			foreach($columns as $colIndex)
-			{
-				$colName = $colLookup[$colIndex];
+			$colName = $colLookup[$colIndex];
+			$oldKeyValue = $this->columns[$colName]['key'];
+			if($type === FSQL_KEY_PRIMARY)
 				$this->columns[$colName]['key'] = 'p'; 
-			}
-			$this->setColumns($this->columns);
+			else if($type & FSQL_KEY_UNIQUE && $oldKeyValue !== 'p')
+				$this->columns[$colName]['key'] = 'u';
+			else if($oldKeyValue !== 'p' && $oldKeyValue !== 'u')
+				$this->columns[$colName]['key'] = 'k'; 
 		}
+		$this->setColumns($this->columns);
+		return true;
 	}
 	
 	function _buildReadWriteFuncs()
@@ -136,7 +138,11 @@ EOC;
 				return null;
 			}
 			
+			// quite sad this is the only way to retrieve the table name at this point
+			$table_name = str_replace(basename($this->columnsFile->getPath()), '.columns.cgi', '');
+			
 			$num_columns = (int) $matches[1];
+			$this->keys = array();
 			for($i = 0; $i < $num_columns; $i++) {
 				$line =	file_read_line($columnsHandle);
 				if(preg_match("/(\S+): ([a-z][a-z]?);(.*);(0|1);(-?\d+(?:\.\d+)?|'(.*)'|NULL);(p|u|k|n);(0|1);/", $line, $matches)) {
@@ -154,9 +160,23 @@ EOC;
 					$restraint = '';
 					if(preg_match_all("/'.*?(?<!\\\\)'/", $matches[3], $restraint))
 						$restraint = $restraint[0];
-						
+					
+					$key = $matches[7];
+					if($key !== 'n')
+					{
+						if($key === 'p')
+						{
+							$key_name = $table_name.'_pk';
+							$key_type = FSQL_KEY_PRIMARY;
+						}
+						if(!isset($this->keys[$key_name]))
+							$this->keys[$key_name] = array('type' => $key_type, 'columns' => array($i), 'engine' => 'MEM', 'file' => '');
+						else   // add a column
+							$this->keys[$key_name]['columns'][] = $i;
+
+					}
 					$this->columns[$matches[1]] = array(
-						'type' => $type, 'auto' => (bool) $matches[4], 'default' => $default, 'key' => $matches[7], 'null' => (bool) $matches[8], 'restraint' => $restraint
+						'type' => $type, 'auto' => (bool) $matches[4], 'default' => $default, 'key' => $key, 'null' => (bool) $matches[8], 'restraint' => $restraint
 					);
 				} else {
 					return null;
@@ -275,18 +295,6 @@ class fSQLLegacyTable extends fSQLStandardTable
 		$this->dataLockFile->releaseRead();
 
 		return true;
-	}
-	
-	function getKeyNames()
-	{
-		$this->getColumns();
-		return array_keys($this->keys);
-	}
-	
-	function getKeysInfo()
-	{
-		$this->getColumns();
-		return $this->keys;
 	}
 	
 	function _overwriteFile($dataHandle, $entries)
