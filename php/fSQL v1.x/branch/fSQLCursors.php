@@ -118,8 +118,10 @@ class fSQLWriteCursor extends fSQLCursor
 	{
 		$this->entries[] = $entry;
 		$aKeys = array_keys($this->entries);
-		$this->newRows[] = end($aKeys);
+		$rowId = end($aKeys);
+		$this->newRows[] = $rowId;
 		$this->num_rows++;
+		return $rowId;
 	}
 	
 	function getNewRows()

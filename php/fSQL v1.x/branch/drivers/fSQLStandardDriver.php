@@ -525,6 +525,7 @@ class fSQLStandardTable extends fSQLTable
 				else if($keydata['engine'] === 'MEM')
 				{
 					$key =& new fSQLMemoryKey($keydata['type']);
+					$key->create($keydata['columns']);
 					$this->loadedKeys[$key_name] =& $key;
 				}
 			}
@@ -534,9 +535,30 @@ class fSQLStandardTable extends fSQLTable
 			return $this->loadedKeys[$key_name];
 	}
 	
+	function _closeLoadedKeys()
+	{
+		if(!empty($this->loadedKeys))
+		{
+			foreach(array_keys($this->loadedKeys) as $k)
+				$this->loadedKeys[$k]->close();
+			$this->loadedKeys = array();
+		}
+	}
+	
 	function rollback()
 	{
+		// force re-read of table data next time _loadEntries() is called
 		$this->queryLockFile->reset();
+		
+		// close the write cursor
+		if(isset($this->wcursor))
+		{
+			$this->wcursor->close();
+			$this->wcursor = null;	
+		}
+		
+		// close all loaded keys forcing refresh of them as well
+		$this->_closeLoadedKeys();
 	}
 
 	function drop()

@@ -315,14 +315,7 @@ class fSQLMemoryWriteCursor extends fSQLWriteCursor
 		$this->entries[] = $entry;
 		$this->num_rows++;
 		$aKeys = array_keys($this->entries);
-		$rowId = end($aKeys);
-		$keys = $this->table->getKeys();
-		foreach(array_keys($keys) as $k)
-		{
-			$key =& $keys[$k];
-			$idx = $key->extractIndex($entry);
-			$key->addEntry($rowId, $idx);
-		}
+		return end($aKeys);
 	}
 
 	function updateField($column, $value)

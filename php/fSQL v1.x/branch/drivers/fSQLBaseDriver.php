@@ -552,6 +552,11 @@ class fSQLKey
 		return true;
 	}
 	
+	function addEntry($rowid, $values)
+	{
+		return false;
+	}
+	
 	function create($columns)
 	{
 		return false;

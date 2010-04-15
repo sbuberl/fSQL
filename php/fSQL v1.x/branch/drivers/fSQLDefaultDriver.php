@@ -413,7 +413,7 @@ class fSQLDefaultTable extends fSQLStandardTable
 		foreach ( $newRows as $newRowId => $newRow ) {
 			$line = $this->_printRowToString($newRow);
 			$length = strlen($line);
-      		$this->primary->addEntry($newRowId, $this->primary->extractIndex($newRow), ftell($dataHandle), $length);
+      		$this->primary->setFileInfo($newRowId, ftell($dataHandle), $length);
       		fwrite($dataHandle, $line, $length);
 		}
 		
@@ -473,11 +473,9 @@ class fSQLDefaultKey extends fSQLKey
 		$this->keyFile = new fSQLFile($full_path);
 	}
 	
-	function addEntry($row, $key, $pos, $length)
+	function addEntry($row, $key)
 	{
 		$this->key[$key] = $row;
-		$this->positions[$row] = $pos;
-		$this->lengths[$row] = $length;
 		$this->addedRows[] = $row;
 	}
 	
@@ -621,6 +619,12 @@ class fSQLDefaultKey extends fSQLKey
 		return true;
 	}
 	
+	function setFileInfo($row, $pos, $length)
+	{
+		$this->positions[$row] = $pos;
+		$this->lengths[$row] = $length;
+	}
+	
 	function updatePosition($index, $pos)
 	{
 		$this->positions[$index] = $pos;
@@ -642,6 +646,7 @@ class fSQLDefaultWriteCursor extends fSQLWriteCursor
 		$this->newRows[] = $row_id;
 		$this->entries[$row_id] = $entry;
 		$this->num_rows++;
+		return $row_id;
 	}
 }
 

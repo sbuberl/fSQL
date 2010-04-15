@@ -113,7 +113,8 @@ if(preg_match("/{$readString}/", \$line, \$entry))
 {
 	array_shift(\$entry);
 	\$row = (int) array_shift(\$entry);
-	\$entries[\$row] = array($fullTranslateCode); 
+	\$entries[\$row] = array($fullTranslateCode);
+	return \$row;
 }
 EOC;
 		
@@ -139,7 +140,7 @@ EOC;
 			}
 			
 			// quite sad this is the only way to retrieve the table name at this point
-			$table_name = str_replace(basename($this->columnsFile->getPath()), '.columns.cgi', '');
+			$table_name = str_replace('.columns.cgi', '', basename($this->columnsFile->getPath()));
 			
 			$num_columns = (int) $matches[1];
 			$this->keys = array();
@@ -278,12 +279,21 @@ class fSQLLegacyTable extends fSQLStandardTable
 	
 			$num_entries = (int) rtrim($matches[1]);
 			$entries = array();
+			$this->_closeLoadedKeys();
+			$keys = $this->getKeys();
+			$keyIndicies = array_keys($keys);
 			
 			if($num_entries != 0)
 			{
 				$readFunction = $this->definition->getReadFunction();
 				for($i = 0;  $i < $num_entries; $i++) {
-					$readFunction($dataHandle, $entries);
+					$rowId = $readFunction($dataHandle, $entries);
+					foreach($keyIndicies as $k)
+					{
+						$key =& $keys[$k];
+						$idx = $key->extractIndex($entries[$rowId]);
+						$key->addEntry($rowId, $idx);
+					}
 				}
 			}
 			
@@ -376,10 +386,15 @@ class fSQLLegacyTable extends fSQLStandardTable
 			rewind($dataHandle);
 			
 			// if the length of the first line did not change,
-			// we can overwrite the first lineand successfully append.
+			// we can overwrite the first line and successfully append.
 			// othwerwise, need to overwrite the whole file.
 			if(strlen($newFirst) === strlen($oldFirst))
 			{
+				// overwrite first line
+				rewind($dataHandle);
+				fwrite($dataHandle, $newFirst, strlen($newFirst));
+			
+				// append new rows to the end
 				fseek($dataHandle, 0, SEEK_END);
 				foreach($newRowsIds as $rowId)
 				{
