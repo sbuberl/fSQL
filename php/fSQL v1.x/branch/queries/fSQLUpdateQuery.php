@@ -37,7 +37,6 @@ class fSQLUpdateQuery extends fSQLDMLQuery
 		$cursor =& $table->getWriteCursor();
 			
 		$col_indicies = array_flip($columnNames);
-		$updates = array();
 		
 		// find all unique keys and columns to watch.
 		$keys = $table->getKeys();
@@ -55,6 +54,7 @@ class fSQLUpdateQuery extends fSQLDMLQuery
 		
 		// generate code from SET info 
 		$code = '';
+		$updates = array();
 		foreach($this->setArray as $set) {
 			list($column, $value) = $set;
 			$new_value = $this->environment->_parse_value($columns[$column], $value);
@@ -63,10 +63,10 @@ class fSQLUpdateQuery extends fSQLDMLQuery
 			if(is_string($new_value))
 				$new_value = $this->environment->_prep_for_insert($new_value);
 			$col_index = $col_indicies[$column];
-			$updates[$col_index] = $new_value;
-			$code .= "\t\t\$cursor->updateField($col_index, $new_value);\r\n";
+			$updates[$col_index] = "$col_index => $new_value";
 		}
 		
+		$code .= "\t\t\$cursor->updateRow(array(".implode(',', $updates)."));\r\n";
 		// find all updated columns that are part of a unique key
 		// if there are any, call checkUnique to validate still unique.		
 		$updated_key_columns = array_intersect(array_keys($updates), $unique_key_columns);

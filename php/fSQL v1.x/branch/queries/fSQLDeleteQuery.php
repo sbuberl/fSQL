@@ -23,7 +23,7 @@ class fSQLDeleteQuery extends fSQLDMLQuery
 			return $this->environment->_error_table_read_lock($this->tableNamePieces);
 		
 		$cursor =& $table->getWriteCursor();
-
+		$cursor->first();
 		if($cursor->isDone())
 			return true;
 		

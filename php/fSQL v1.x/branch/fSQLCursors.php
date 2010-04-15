@@ -102,51 +102,63 @@ class fSQLCursor
 
 class fSQLWriteCursor extends fSQLCursor
 {
-	var $newRows = array();
+	var $table;
 	
-	var $updatedRows = array();
-	
-	var $deletedRows = array();
+	function fSQLWriteCursor(&$entries, &$table)
+	{
+		parent::fSQLCursor($entries);
+		$this->table =& $table;
+	}
 	
 	function close()
 	{
-		unset($this->newRows, $this->updatedRows, $this->deletedRows);
+		unset($this->table);  // don't close.  same reference probably exists elsewhere.
 		parent::close();
 	}
 	
-	function appendRow($entry)
+	function appendRow($entry, $rowid = false)
 	{
-		$this->entries[] = $entry;
-		$aKeys = array_keys($this->entries);
-		$rowId = end($aKeys);
-		$this->newRows[] = $rowId;
+		if($rowid !== false)
+		{
+			$this->entries[$rowid] = $entry;
+		}
+		else
+		{
+			$this->entries[] = $entry;
+			$aKeys = array_keys($this->entries);
+			$rowid = end($aKeys);
+		}
+		
 		$this->num_rows++;
-		return $rowId;
-	}
-	
-	function getNewRows()
-	{
-		return array_intersect_key($this->entries, array_flip($this->newRows));
+		$keys = $this->table->getKeys();
+		if(!empty($keys))
+		{
+			foreach(array_keys($keys) as $k)
+			{
+				$key =& $keys[$k];
+				$idx = $key->extractIndex($entry);
+				$key->addEntry($rowid, $idx);
+			}
+		}
+		
+		return $rowid;
 	}
 
-	function updateField($column, $value)
+	function updateRow($updates)
 	{
 		$row_id = $this->current_row_id;
 		if($row_id !== false)
 		{
-			if(isset($this->newRows[$row_id])) // row add in same transaction
+			foreach($updates as $column => $value)
+				$this->entries[$row_id][$column] = $value;
+			
+			$keys = $this->table->getKeys();
+			foreach(array_keys($keys) as $k)
 			{
-				$this->newRows[$row_id][$column] = $value; 
+				$key =& $keys[$k];
+				$idx = $key->extractIndex($this->entries[$row_id]);
+				$key->updateEntry($row_id, $idx);
 			}
-			else
-			{
-				if(!isset($this->updatedRows[$row_id]))
-					$this->updatedRows[$row_id] = array($column => $value);
-				else
-					$this->updatedRows[$row_id][$column] = $value;
-			}
-		
-			$this->entries[$row_id][$column] = $value;
 		}
 	}
 
@@ -156,22 +168,20 @@ class fSQLWriteCursor extends fSQLCursor
 		if($this->current_row_id !== false)
 		{
 			$this->num_rows--;
-			if(isset($this->newRows[$row_id])) // row added in same transaction
-				unset($this->newRows[$row_id]);
-			else if(!in_array($row_id, $this->deletedRows)) // double check not already in there
-				$this->deletedRows[] = $row_id;
 			unset($this->entries[$row_id]);
 			$this->current_row_id = key($this->entries);
 			if($this->current_row_id === null) { // key on an empty array is null?
 				$this->current_row_id = false;
 				$this->entries = array();
 			}
+			
+			$keys = $this->table->getKeys();
+			foreach(array_keys($keys) as $k)
+			{
+				$key =& $keys[$k];
+				$key->deleteEntry($row_id);
+			}
 		}
-	}
-	
-	function isUncommitted()
-	{
-		return !empty($this->newRows) || !empty($this->updatedRows) || !empty($this->deletedRows);
 	}
 }
 

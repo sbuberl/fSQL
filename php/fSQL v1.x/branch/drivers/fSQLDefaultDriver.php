@@ -277,7 +277,7 @@ class fSQLDefaultTable extends fSQLStandardTable
 		$this->_loadEntries();
 
 		if($this->wcursor === null)
-			$this->wcursor = new fSQLDefaultWriteCursor($this->entries);
+			$this->wcursor = new fSQLDefaultWriteCursor($this->entries, $this);
 		
 		return $this->wcursor;
 	}
@@ -393,7 +393,7 @@ class fSQLDefaultTable extends fSQLStandardTable
 					$length = $this->primary->lengths[$row_id];
 					$str_offset = $offset - $start + $delta;
 					$contents = substr_replace($contents, '', $str_offset, $length);
-					$this->primary->deleteEntry($row_id);
+					$this->primary->deleteFileInfo($row_id);
 					$delta -= $length;
 				}
 				else if($delta !== 0)
@@ -476,7 +476,9 @@ class fSQLDefaultKey extends fSQLKey
 	function addEntry($row, $key)
 	{
 		$this->key[$key] = $row;
+		$this->lengths[$row] = false;
 		$this->addedRows[] = $row;
+		return true;
 	}
 	
 	function close()
@@ -486,6 +488,7 @@ class fSQLDefaultKey extends fSQLKey
 		unset($this->addedRows, $this->keyFile, $this->key, $this->lengths, $this->positions, $this->columns);
 		return true;
 	}
+	
 	function create($columns)
 	{
 		$this->columns = $columns;
@@ -501,9 +504,14 @@ class fSQLDefaultKey extends fSQLKey
 	{
 		$index = array_search($row, $this->key);
 		unset($this->key[$index]);
+		$this->addedOnly = false;
+		return true;
+	}
+	
+	function deleteFileInfo($row)
+	{
 		unset($this->positions[$row]);
 		unset($this->lengths[$row]);
-		$this->addedOnly = false;
 	}
 	
 	function drop()
@@ -625,6 +633,13 @@ class fSQLDefaultKey extends fSQLKey
 		$this->lengths[$row] = $length;
 	}
 	
+	function updateEntry($row, $key)
+	{
+		$index = array_search($row, $this->key);
+		unset($this->key[$index]);
+		$this->key[$key] = $row;
+	}
+	
 	function updatePosition($index, $pos)
 	{
 		$this->positions[$index] = $pos;
@@ -638,15 +653,12 @@ class fSQLDefaultKey extends fSQLKey
 	}
 }
 
-class fSQLDefaultWriteCursor extends fSQLWriteCursor
+class fSQLDefaultWriteCursor extends fSQLStandardWriteCursor
 {
-	function appendRow($entry)
+	function appendRow($entry, $rowid = false)
 	{
-		$row_id = md5(uniqid(mt_rand(), true));
-		$this->newRows[] = $row_id;
-		$this->entries[$row_id] = $entry;
-		$this->num_rows++;
-		return $row_id;
+		$rowid = md5(uniqid(mt_rand(), true)); // ignore rowid param
+		return parent::appendRow($entry, $rowid);
 	}
 }
 

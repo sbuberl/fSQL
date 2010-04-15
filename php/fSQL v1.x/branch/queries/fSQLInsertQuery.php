@@ -100,17 +100,7 @@ class fSQLInsertQuery extends fSQLDMLQuery
 			}
 		}
 		
-		$rowId = $tableCursor->appendRow($newentry);
-		
-		if(!empty($keys))
-		{
-			foreach(array_keys($keys) as $k)
-			{
-				$key =& $keys[$k];
-				$idx = $key->extractIndex($newentry);
-				$key->addEntry($rowId, $idx);
-			}
-		}
+		$tableCursor->appendRow($newentry);
 		
 		$this->affected++;
 		

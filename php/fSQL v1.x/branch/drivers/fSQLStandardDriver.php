@@ -477,7 +477,7 @@ class fSQLStandardTable extends fSQLTable
 		$this->_loadEntries();
 
 		if($this->wcursor === null)
-			$this->wcursor = new fSQLWriteCursor($this->entries);
+			$this->wcursor = new fSQLStandardWriteCursor($this->entries, $this);
 		
 		return $this->wcursor;
 	}
@@ -770,6 +770,71 @@ class fSQLStandardView extends fSQLView
 		}
 		$this->lock = null;
 		return true;
+	}
+}
+
+class fSQLStandardWriteCursor extends fSQLWriteCursor
+{
+	var $newRows = array();
+	
+	var $updatedRows = array();
+	
+	var $deletedRows = array();
+	
+	function close()
+	{
+		unset($this->newRows, $this->updatedRows, $this->deletedRows);
+		parent::close();
+	}
+	
+	function appendRow($entry, $rowid = false)
+	{
+		$rowid = parent::appendRow($entry, $rowid);
+		$this->newRows[] = $rowid;
+		return $rowid;
+	}
+	
+	function getNewRows()
+	{
+		return array_intersect_key($this->entries, array_flip($this->newRows));
+	}
+
+	function updateRow($updates)
+	{
+		$row_id = $this->current_row_id;
+		if($row_id !== false)
+		{
+			// if not row is not new in this transaction,
+			// add updates to updatedRows array.
+			if(!isset($this->newRows[$row_id]))
+			{
+				if(!isset($this->updatedRows[$row_id]))
+					$this->updatedRows[$row_id] = array();
+				
+				foreach($updates as $column => $value)
+					$this->updatedRows[$row_id][$column] = $value;
+			}
+		
+			parent::updateRow($updates);
+		}
+	}
+
+	function deleteRow()
+	{
+		$row_id = $this->current_row_id;
+		if($this->current_row_id !== false)
+		{
+			if(isset($this->newRows[$row_id])) // row added in same transaction
+				unset($this->newRows[$row_id]);
+			else if(!in_array($row_id, $this->deletedRows)) // double check not already in there
+				$this->deletedRows[] = $row_id;
+			parent::deleteRow();
+		}
+	}
+	
+	function isUncommitted()
+	{
+		return !empty($this->newRows) || !empty($this->updatedRows) || !empty($this->deletedRows);
 	}
 }
 

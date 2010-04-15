@@ -562,6 +562,11 @@ class fSQLKey
 		return false;
 	}
 	
+	function deleteEntry($rowid)
+	{
+		return false;
+	}
+	
 	function drop()
 	{
 		return $this->close();
@@ -601,6 +606,11 @@ class fSQLKey
 	function lookup($key)
 	{
 		return false;
+	}
+	
+	function updateEntry($rowid, $values)
+	{
+		return $this->deleteEntry($rowid) && $this->addEntry($rowid, $values);
 	}
 }
 

@@ -226,7 +226,7 @@ class fSQLMemoryTable extends fSQLTable
 	function &getWriteCursor()
 	{
 		if($this->wcursor === null)
-			$this->wcursor =& new fSQLMemoryWriteCursor($this->entries, $this);
+			$this->wcursor =& new fSQLWriteCursor($this->entries, $this);
 		
 		return $this->wcursor;
 	}
@@ -300,53 +300,6 @@ class fSQLMemoryView extends fSQLView
 	}
 }
 
-class fSQLMemoryWriteCursor extends fSQLWriteCursor
-{	
-	var $table;
-	
-	function fSQLMemoryWriteCursor(&$entries, &$table)
-	{
-		parent::fSQLCursor($entries);
-		$this->table =& $table;
-	}
-	
-	function appendRow($entry)
-	{
-		$this->entries[] = $entry;
-		$this->num_rows++;
-		$aKeys = array_keys($this->entries);
-		return end($aKeys);
-	}
-
-	function updateField($column, $value)
-	{
-		$row_id = $this->current_row_id;
-		if($row_id !== false)
-		{
-			$this->entries[$row_id][$column] = $value;
-		}
-	}
-
-	function deleteRow()
-	{
-		$row_id = $this->current_row_id;
-		if($this->current_row_id !== false)
-		{
-			unset($this->entries[$row_id]);
-			$this->current_row_id = key($this->entries);
-			if($this->current_row_id === null) { // key on an empty array is null?
-				$this->current_row_id = false;
-				$this->entries = array();
-			}
-		}
-	}
-	
-	function isUncommitted()
-	{
-		return false;
-	}
-}
-
 class fSQLMemoryKey extends fSQLKey
 {
 	var $key = array();
@@ -385,10 +338,10 @@ class fSQLMemoryKey extends fSQLKey
 		return true;
 	}
 	
-	function deleteEntry($rowid, $values)
+	function deleteEntry($rowid)
 	{
-		$idx = $this->_buildKeyIndex($values);
-		if(isset($this->key[$idx]))
+		$idx = array_search($rowid, $this->key);
+		if($idx !== false && $idx !== null)
 			unset($this->key[$idx]);
 		return true;
 	}
