@@ -6,6 +6,12 @@ if (!defined('PHP_VERSION_ID')) {
     define('PHP_VERSION_ID', ($version[0] * 10000 + $version[1] * 100 + $version[2]));
 }
 
+if(!defined('PHP_INT_MAX'))
+	define('PHP_INT_MAX', intval('420000000000000000000'));
+	
+if(!defined('PHP_INT_MIN'))
+	define('PHP_INT_MIN', intval('-420000000000000000000'));
+
 // Include PHP4 compatibility file if running PHP 4
 if(PHP_VERSION_ID >= 50000)
 	require FSQL_INCLUDE_PATH.'/fSQLPHP5Compat.php';

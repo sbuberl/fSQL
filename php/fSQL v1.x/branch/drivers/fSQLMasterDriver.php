@@ -28,36 +28,36 @@ class fSQLMasterSchema extends fSQLMemorySchema
 	function create()
 	{
 		$databasesTable =& $this->createTable('databases', array(
-				'name' => array('type' => FSQL_TYPE_STRING, 'default' => '', 'null' => false, 'auto' => false, 'key' => 'p', 'restraint' => null),
-				'path' => array('type' => FSQL_TYPE_STRING, 'default' => '', 'null' => false, 'auto' => false, 'key' => 'n', 'restraint' => null)
+				'name' => array('type' => FSQL_TYPE_STRING, 'default' => '', 'null' => false, 'identity' => null, 'key' => 'p', 'restraint' => null),
+				'path' => array('type' => FSQL_TYPE_STRING, 'default' => '', 'null' => false, 'identity' => null, 'key' => 'n', 'restraint' => null)
 			)
 		);
 		
 		$schemasTable =& $this->createTable('schemas', array(
-				'database' => array('type' => FSQL_TYPE_STRING, 'default' => '', 'null' => false, 'auto' => false, 'key' => 'p', 'restraint' => null),
-				'name' => array('type' => FSQL_TYPE_STRING, 'default' => '', 'null' => false, 'auto' => false, 'key' => 'p', 'restraint' => null),
-				'path' => array('type' => FSQL_TYPE_STRING, 'default' => '', 'null' => false, 'auto' => false, 'key' => 'n', 'restraint' => null)
+				'database' => array('type' => FSQL_TYPE_STRING, 'default' => '', 'null' => false, 'identity' => null, 'key' => 'p', 'restraint' => null),
+				'name' => array('type' => FSQL_TYPE_STRING, 'default' => '', 'null' => false, 'identity' => null, 'key' => 'p', 'restraint' => null),
+				'path' => array('type' => FSQL_TYPE_STRING, 'default' => '', 'null' => false, 'identity' => null, 'key' => 'n', 'restraint' => null)
 			)
 		);
 		
 		$tablesTable =& $this->createTable('tables', array(
-				'database' => array('type' => FSQL_TYPE_STRING, 'default' => '', 'null' => false, 'auto' => false, 'key' => 'p', 'restraint' => null),
-				'schema' => array('type' => FSQL_TYPE_STRING, 'default' => '', 'null' => false, 'auto' => false, 'key' => 'p', 'restraint' => null),
-				'name' => array('type' => FSQL_TYPE_STRING, 'default' => '', 'null' => false, 'auto' => false, 'key' => 'p', 'restraint' => null),
-				'type' => array('type' => FSQL_TYPE_STRING, 'default' => '', 'null' => false, 'auto' => false, 'key' => 'n', 'restraint' => null)
+				'database' => array('type' => FSQL_TYPE_STRING, 'default' => '', 'null' => false, 'identity' => null, 'key' => 'p', 'restraint' => null),
+				'schema' => array('type' => FSQL_TYPE_STRING, 'default' => '', 'null' => false, 'identity' => null, 'key' => 'p', 'restraint' => null),
+				'name' => array('type' => FSQL_TYPE_STRING, 'default' => '', 'null' => false, 'identity' => null, 'key' => 'p', 'restraint' => null),
+				'type' => array('type' => FSQL_TYPE_STRING, 'default' => '', 'null' => false, 'identity' => null, 'key' => 'n', 'restraint' => null)
 			)
 		);
 		
 		$columnsTable =& $this->createTable('columns', array(
-				'database' => array('type' => FSQL_TYPE_STRING, 'default' => '', 'null' => false, 'auto' => false, 'key' => 'p', 'restraint' => null),
-				'schema' => array('type' => FSQL_TYPE_STRING, 'default' => '', 'null' => false, 'auto' => false, 'key' => 'p', 'restraint' => null),
-				'table' => array('type' => FSQL_TYPE_STRING, 'default' => '', 'null' => false, 'auto' => false, 'key' => 'p', 'restraint' => null),
-				'name' => array('type' => FSQL_TYPE_STRING, 'default' => '', 'null' => false, 'auto' => false, 'key' => 'p', 'restraint' => null),
-				'type' => array('type' => FSQL_TYPE_STRING, 'default' => '', 'null' => false, 'auto' => false, 'key' => 'n', 'restraint' => null),
-				'default' => array('type' => FSQL_TYPE_STRING, 'default' => null, 'null' => true, 'auto' => false, 'key' => 'n', 'restraint' => null),
-				'key' => array('type' => FSQL_TYPE_STRING, 'default' => '', 'null' => false, 'auto' => false, 'key' => 'n', 'restraint' => null),
-				'nullable' => array('type' => FSQL_TYPE_STRING, 'default' => '', 'null' => false, 'auto' => false, 'key' => 'n', 'restraint' => null),
-				'auto' => array('type' => FSQL_TYPE_STRING, 'default' => '', 'null' => false, 'auto' => false, 'key' => 'n', 'restraint' => null)
+				'database' => array('type' => FSQL_TYPE_STRING, 'default' => '', 'null' => false, 'identity' => null, 'key' => 'p', 'restraint' => null),
+				'schema' => array('type' => FSQL_TYPE_STRING, 'default' => '', 'null' => false, 'identity' => null, 'key' => 'p', 'restraint' => null),
+				'table' => array('type' => FSQL_TYPE_STRING, 'default' => '', 'null' => false, 'identity' => null, 'key' => 'p', 'restraint' => null),
+				'name' => array('type' => FSQL_TYPE_STRING, 'default' => '', 'null' => false, 'identity' => null, 'key' => 'p', 'restraint' => null),
+				'type' => array('type' => FSQL_TYPE_STRING, 'default' => '', 'null' => false, 'identity' => null, 'key' => 'n', 'restraint' => null),
+				'default' => array('type' => FSQL_TYPE_STRING, 'default' => null, 'null' => true, 'identity' => null, 'key' => 'n', 'restraint' => null),
+				'key' => array('type' => FSQL_TYPE_STRING, 'default' => '', 'null' => false, 'identity' => null, 'key' => 'n', 'restraint' => null),
+				'nullable' => array('type' => FSQL_TYPE_STRING, 'default' => '', 'null' => false, 'identity' => null, 'key' => 'n', 'restraint' => null),
+				'identity' => array('type' => FSQL_TYPE_STRING, 'default' => '', 'null' => false, 'identity' => null, 'key' => 'n', 'restraint' => null)
 			)
 		);
 		
@@ -122,7 +122,7 @@ class fSQLMasterSchema extends fSQLMemorySchema
 		{
 			$type = $environment->_typecode_to_name($columnDef['type']);
 			$nullable = $columnDef['type'] ? 'YES' : 'NO';
-			$auto = $columnDef['auto'] ? 'YES' : 'NO';
+			$identity = $columnDef['identity'] ? 'YES' : 'NO';
 			switch($columnDef['key'])
 			{
 				case 'p': $key = 'PRIMARY';	break;
@@ -131,7 +131,7 @@ class fSQLMasterSchema extends fSQLMemorySchema
 				default:  $key = '';  break;
 			}
 			$default = $columnDef['default'] !== null ? (string) $columnDef['default'] : null;
-			$columnsCursor->appendRow(array($db_name, $schema_name, $table_name, $col_name, $type, $default, $key, $nullable, $auto));
+			$columnsCursor->appendRow(array($db_name, $schema_name, $table_name, $col_name, $type, $default, $key, $nullable, $identity));
 		}
 	}
 	

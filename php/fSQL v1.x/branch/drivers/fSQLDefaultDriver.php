@@ -147,25 +147,30 @@ EOC;
 				if(preg_match("/(\S+): (column|key);(.*)/", $line, $matches))
 				{
 					list(, $name, $obType, $the_rest)  = $matches;
-					if($obType === 'column' && preg_match("/([a-z][a-z]?);(.*);(0|1);(-?\d+(?:\.\d+)?|'(.*)'|NULL);(0|1);/", $the_rest, $local_matches))
+					if($obType === 'column' && preg_match("/([a-z][a-z]?);(.*);(-?\d+(?:\.\d+)?|'(.*)'|NULL);(0|1);((?:0|1),-?\d+,-?\d+,-?\d+,-?\d+,(?:0|1))?;/", $the_rest, $local_matches))
 					{
 						$type = $local_matches[1];
-						$default = $local_matches[4];
+						$default = $local_matches[3];
 						if($default === 'NULL')
 							$default = null;
 						else if($default{0} === '\'')
-							$default = $local_matches[5];
+							$default = $local_matches[4];
 						else if($type === FSQL_TYPE_INTEGER)
 							$default = (int) $default;
 						else if($type === FSQL_TYPE_FLOAT)
 							$default = (float) $default;
 						
 						$restraint = '';
-						if(preg_match_all("/'.*?(?<!\\\\)'/", $local_matches[2], $restraint))
-							$restraint = $restraint[0];
+						if(preg_match_all("/'.*?(?<!\\\\)'/", $local_matches[2], $restraint_matches))
+							$restraint = $restraint_matches[0];
+						
+						if(!empty($local_matches[6]))
+							$identity = explode(',', $local_matches[6]);
+						else
+							$identity = null;
 						
 						$this->columns[$name] = array(
-							'type' => $type, 'auto' => (bool) $local_matches[3], 'default' => $default, 'key' => 'n', 'null' => (bool) $local_matches[6], 'restraint' => $restraint
+							'type' => $type, 'identity' => $identity, 'default' => $default, 'key' => 'n', 'null' => (bool) $local_matches[5], 'restraint' => $restraint
 						);
 						
 						continue;
@@ -204,8 +209,26 @@ EOC;
 	
 	function setColumns($columns)
 	{
+		// If identity value is only thing that changed,
+		// don't both rebuilding read function.
+		// TODO: find better way
+		$rebuild = false;
+		foreach($columns as $name => $column)
+		{
+			$new = $columns[$name];
+			$old = $this->columns[$name];
+			unset($old['identity'], $new['identity']);
+			if($old != $new)
+			{
+				$rebuild = true;
+				break;
+			}
+		}
+		
 		$this->columns = $columns;
-		$this->_buildReadWriteFuncs();
+
+		if($rebuild)
+			$this->_buildReadWriteFuncs();
 		
 		$toprint = '';
 		if(!empty($columns))
@@ -218,16 +241,19 @@ EOC;
 				else if(is_string($default))
 					$default = "'".$default."'";
 				
+				$identity = $column['identity'];
+				if($identity !== null)
+					$identity = vsprintf('%d,%d,%d,%d,%d,%d', $identity);
 				$restraint = is_array($column['restraint']) ? implode(',', $column['restraint']) : '';
 				
-				$toprint .= sprintf("%s: column;%s;%s;%d;%s;%d;\r\n", $name, $column['type'], $restraint, $column['auto'], $default, $column['null']);
+				$toprint .= sprintf("%s: column;%s;%s;%s;%d;%s;\r\n", $name, $column['type'], $restraint, $default, $column['null'], $identity);
 			}
 		}
 		
 		foreach($this->keys as $name => $key)
 		{
 			$key_column_list = implode(',', $key['columns']);
-			$toprint .= sprintf("%s: key;%d;%s;%s;%s\r\n", $name, $key['type'], $key_column_list, $key['engine'], $key['file']);
+			$toprint .= sprintf("%s: key;%d;%s;%s;%s;\r\n", $name, $key['type'], $key_column_list, $key['engine'], $key['file']);
 		}
 		
 		$this->columnsLockFile->acquireWrite();

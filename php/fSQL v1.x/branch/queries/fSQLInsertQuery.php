@@ -49,14 +49,15 @@ class fSQLInsertQuery extends fSQLDMLQuery
 			$data = strtr($data, array("$" => "\$", "\$" => "\\\$"));
 			
 			////Check for Auto_Increment
-			if((!strcasecmp($data, 'NULL') || strlen($data) === 0 || !strcasecmp($data, 'AUTO')) && $columnDef['auto']) {
-				$tableCursor->last();
-				$lastRow = $tableCursor->getRow();
-				if($lastRow !== NULL)
-					$this->insert_id = $lastRow[$col_index] + 1;
+			if((!strcasecmp($data, 'NULL') || strlen($data) === 0 || !strcasecmp($data, 'AUTO')) && $columnDef['identity']) {
+				$id = $table->nextValueFor($col_name);
+				if($id !== false)
+				{
+					$this->insert_id = $id;
+					$newentry[$col_index] = $this->insert_id;
+				}
 				else
-					$this->insert_id = 1;
-				$newentry[$col_index] = $this->insert_id;
+					return $this->environment->_set_error('Error getting next value for identity column: '.$col_name);
 			}
 			else
 			{

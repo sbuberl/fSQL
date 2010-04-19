@@ -159,8 +159,8 @@ EOC;
 						$default = (float) $default;
 
 					$restraint = '';
-					if(preg_match_all("/'.*?(?<!\\\\)'/", $matches[3], $restraint))
-						$restraint = $restraint[0];
+					if(preg_match_all("/'.*?(?<!\\\\)'/", $matches[3], $restraint_matches))
+						$restraint = $restraint_matches[0];
 					
 					$key = $matches[7];
 					if($key !== 'n')
@@ -174,12 +174,21 @@ EOC;
 							$this->keys[$key_name] = array('type' => $key_type, 'columns' => array($i), 'engine' => 'MEM', 'file' => '');
 						else   // add a column
 							$this->keys[$key_name]['columns'][] = $i;
+							
+					
+						if($matches[4])
+							// don't know real current value at this point so use 1 for now
+							$identity = array(false, 1, 1, 1, PHP_INT_MAX, false);
+						else
+							$identity = null;
 
 					}
 					$this->columns[$matches[1]] = array(
-						'type' => $type, 'auto' => (bool) $matches[4], 'default' => $default, 'key' => $key, 'null' => (bool) $matches[8], 'restraint' => $restraint
+						'type' => $type, 'identity' => $identity, 'default' => $default, 'key' => $key, 'null' => (bool) $matches[8], 'restraint' => $restraint
 					);
 				} else {
+					$this->columnsFile->releaseRead();
+					$this->columnsLockFile->releaseRead();
 					return null;
 				}
 			}
@@ -220,7 +229,7 @@ EOC;
 				
 				$restraint = is_array($column['restraint']) ? implode(',', $column['restraint']) : '';
 				
-				$toprint .= sprintf("%s: %s;%s;%d;%s;%s;%d;\r\n", $name, $column['type'], $restraint, $column['auto'], $default, $key, $column['null']);
+				$toprint .= sprintf("%s: %s;%s;%d;%s;%s;%d;\r\n", $name, $column['type'], $restraint, $column['identity'] !== null, $default, $key, $column['null']);
 			}
 		}
 		
@@ -257,6 +266,36 @@ class fSQLLegacyTable extends fSQLStandardTable
 		$this->dataFile->releaseWrite();
 
 		return $this;
+	}
+	
+	function nextValueFor($column)
+	{
+		$columns = $this->definition->getColumns();
+		if(!isset($columns[$column]))
+			return false;
+		
+		if($columns[$column]['identity'] !== null)
+		{
+			$this->_loadEntries();
+			if(!empty($this->entries))
+			{
+				$id_values = array();
+				$colIndicies = array_flip(array_keys($columns));
+				$colIndex = $colIndicies[$column];
+				foreach($this->entries as $entry)
+					$id_values[] = $entry[$colIndex];
+				$start = max($id_values) + 1;
+			}
+			else
+				$start = 1;
+			
+			if($start > PHP_INT_MAX) // valid because int gets promoted to float
+				return false;
+			
+			return $start;
+		}
+		else
+			return false;
 	}
 
 	function _loadEntries()

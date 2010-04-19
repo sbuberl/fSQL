@@ -29,7 +29,7 @@ class fSQLParser
 	
 	function parseCommandName($query)
 	{
-		preg_match("/\A[A-Z]+/i", $query, $function);
+		preg_match('/\A[A-Z]+/i', $query, $function);
 		return strtolower($function[0]);
 	}
 	
@@ -74,21 +74,20 @@ class fSQLParser
 	function buildWhere($statement, $join_info, $where_type = FSQL_WHERE_NORMAL)
 	{
 		if($statement) {
-			preg_match_all("/(\A\s*|\s+(?:AND|OR)\s+)(NOT\s+)?(\S+?)(\s*(?:!=|<>|>=|<=>?|>|<|=)\s*|\s+(?:IS(?:\s+NOT)?|(?:NOT\s+)?IN|(?:NOT\s+)?R?LIKE|(?:NOT\s+)?REGEXP)\s+)(\((.*?)\)|'.*?'|\S+)/is", $statement, $WHERE);
+			preg_match_all("/(\A\s*|\s+(?:AND|OR)\s+)(NOT\s+)?(\S+?)(\s*(?:!=|<>|>=|<=>?|>|<|=)\s*|\s+(?:IS(?:\s+NOT)?|(?:NOT\s+)?IN|(?:NOT\s+)?R?LIKE|(?:NOT\s+)?REGEXP)\s+)(\((.*?)\)|'.*?'|\S+)/is", $statement, $WHERE, PREG_SET_ORDER);
 			
-			$where_count = count($WHERE[0]);
-			if($where_count === 0)
+			if(empty($WHERE))
 				return null;
 			
-			$condition = "";
-						
-			for($i = 0; $i < $where_count; ++$i) {
-				$local_condition = "";
-				$logicalOp = trim($WHERE[1][$i]);
-				$not = !empty($WHERE[2][$i]);
-				$leftStr = $WHERE[3][$i];
-				$operator = preg_replace('/\s+/', ' ', trim(strtoupper($WHERE[4][$i])));
-				$rightStr = $WHERE[5][$i];
+			$condition = '';
+			foreach($WHERE as $where)
+			{
+				$local_condition = '';
+				$logicalOp = trim($where[1]);
+				$not = !empty($where[2]);
+				$leftStr = $where[3];
+				$operator = preg_replace('/\s+/', ' ', trim(strtoupper($where[4])));
+				$rightStr = $where[5];
 				
 				$left = $this->buildExpression($leftStr, $join_info, $where_type);
 				if($left === null)
@@ -107,11 +106,11 @@ class fSQLParser
 					$right_nullable = $right['type']['null'];
 
 					if($left_nullable && $right_nullable)
-						$nullcheck = "nullcheck";
+						$nullcheck = 'nullcheck';
 					else if($left_nullable)
-						$nullcheck = "nullcheck_left";
+						$nullcheck = 'nullcheck_left';
 					else if($right_nullable)
-						$nullcheck = "nullcheck_right";
+						$nullcheck = 'nullcheck_right';
 					else
 						$nullcheck = null;
 					
@@ -187,8 +186,8 @@ class fSQLParser
 				}
 				else
 				{
-					if(!empty($WHERE[6][$i])) {
-						$array_values = explode(',', $WHERE[6][$i]);
+					if(!empty($where[6])) {
+						$array_values = explode(',', $where[6]);
 						$valuesExpressions = array();
 						foreach($array_values as $value)
 						{
@@ -226,7 +225,7 @@ class fSQLParser
 		$columnData = null;
 		
 		// function call
-		if(preg_match("/\A([^\W\d]\w*)\s*\((.*?)\)/is", $exprStr, $matches)) {
+		if(preg_match('/\A([^\W\d]\w*)\s*\((.*?)\)/is', $exprStr, $matches)) {
 			$function = strtolower($matches[1]);
 			$params = $matches[2];
 			$final_param_list = '';
@@ -303,7 +302,7 @@ class fSQLParser
 			if($function_type === FSQL_FUNC_AGGREGATE)
 				$paramExprs[] = $expr_type;
 			
-			$final_param_list = implode(",", $paramExprs);
+			$final_param_list = implode(',', $paramExprs);
 
 			if($builtin)
 				$expr = "fSQLFunctions::$function($final_param_list)";
@@ -311,7 +310,7 @@ class fSQLParser
 				$expr = "$function($final_param_list)";
 		}
 		// column/alias/keyword
-		else if(preg_match("/\A(?:([^\W\d]\w*|\{\{left\}\})\.)?([^\W\d]\w*)\Z/is", $exprStr, $matches)) {
+		else if(preg_match('/\A(?:([^\W\d]\w*|\{\{left\}\})\.)?([^\W\d]\w*)\Z/is', $exprStr, $matches)) {
 			list( , $table_name, $column) =  $matches;
 			// table.column
 			if($table_name) {
@@ -334,13 +333,20 @@ class fSQLParser
 					$expr = "\$left_entry[$colIndex]";
 				}
 			}
-			// null/unknown
-			else if(!strcasecmp($exprStr, 'NULL')  || !strcasecmp($exprStr, 'UNKNOWN')) {
+			// null
+			else if(!strcasecmp($exprStr, 'NULL')) {
 				$expr = 'NULL';
+				$columnData = array('type' => FSQL_TYPE_STRING, 'default' => null, 'null' => true, 'key' => 'n', 'identity' => null, 'restraint' => array());
+			}
+			// unknown
+			else if(!strcasecmp($exprStr, 'UNKNOWN')) {
+				$expr = 'NULL';
+				$columnData = array('type' => FSQL_TYPE_BOOLEAN, 'default' => null, 'null' => true, 'key' => 'n', 'identity' => null, 'restraint' => array());
 			}
 			// true/false
 			else if(!strcasecmp($exprStr, 'TRUE') || !strcasecmp($exprStr, 'FALSE')) {
 				$expr = strtoupper($exprStr);
+				$columnData = array('type' => FSQL_TYPE_BOOLEAN, 'default' => null, 'null' => false, 'key' => 'n', 'identity' => null, 'restraint' => array());
 				$nullable = false;
 			}
 			else if($where_type === FSQL_WHERE_HAVING) { // column/alias in grouping clause
@@ -376,17 +382,17 @@ class fSQLParser
 			}
 		}
 		// number
-		else if(preg_match("/\A(?:[\+\-]\s*)?\d+(?:\.\d+)?\Z/is", $exprStr)) {
+		else if(preg_match('/\A(?:[\+\-]\s*)?\d+(?:\.\d+)?\Z/is', $exprStr)) {
 			$expr = $exprStr;
 			$type = strpos($exprStr, '.') === false ? FSQL_TYPE_INTEGER : FSQL_TYPE_FLOAT;
-			$columnData = array('type' => $type, 'default' => null, 'null' => false, 'key' => 'n', 'auto' => false, 'restraint' => array());
+			$columnData = array('type' => $type, 'default' => null, 'null' => false, 'key' => 'n', 'identity' => null, 'restraint' => array());
 		}
 		// string
 		else if(preg_match("/\A'.*?(?<!\\\\)'\Z/is", $exprStr)) {
 			$expr = $exprStr;
-			$columnData = array('type' => FSQL_TYPE_STRING, 'default' => null, 'null' => false, 'key' => 'n', 'auto' => false, 'restraint' => array());
+			$columnData = array('type' => FSQL_TYPE_STRING, 'default' => null, 'null' => false, 'key' => 'n', 'identity' => null, 'restraint' => array());
 		}
-		else if(($where_type & FSQL_WHERE_ON) && preg_match("/\A{{left}}\.([^\W\d]\w*)/is", $exprStr, $matches)) {
+		else if(($where_type & FSQL_WHERE_ON) && preg_match('/\A{{left}}\.([^\W\d]\w*)/is', $exprStr, $matches)) {
 			if(($colIndex = array_search($matches[1], $join_info['columns']))) {
 				$expr = "\$left_entry[$colIndex]";
 			}
@@ -432,8 +438,7 @@ class fSQLParser
 			$temporary = !empty($temporary);			
 
 			if(!isset($matches[5])) {
-				//preg_match_all("/(?:(KEY|PRIMARY KEY|UNIQUE) (?:([^\W\d]\w*)\s*)?\((.+?)\))|(?:`?([^\W\d]\w*?)`?(?:\s+((?:TINY|MEDIUM|BIG)?(?:TEXT|BLOB)|(?:VAR)?(?:CHAR|BINARY)|INTEGER|(?:TINY|SMALL|MEDIUM|BIG)?INT|FLOAT|REAL|DOUBLE(?: PRECISION)?|BIT|BOOLEAN|DEC(?:IMAL)?|NUMERIC|DATE(?:TIME)?|TIME(?:STAMP)?|YEAR|ENUM|SET)(?:\((.+?)\))?)(\s+UNSIGNED)?(.*?)?(?:,|\)|$))/is", trim($column_list), $Columns);
-				preg_match_all('/(?:(?:CONSTRAINT\s+(?:([^\W\d]\w*)\s+)?)?(KEY|INDEX|PRIMARY\s+KEY|UNIQUE)(?:\s+([^\W\d]\w*))?\s*\(\s*(.+?)\s*\))|(?:`?([^\W\d]\w*?)`?(?:\s+((?:TINY|MEDIUM|LONG)?(?:TEXT|BLOB)|(?:VAR)?(?:CHAR|BINARY)|INTEGER|(?:TINY|SMALL|MEDIUM|BIG)?INT|FLOAT|REAL|DOUBLE(?:\s+PRECISION)?|BIT|BOOLEAN|DEC(?:IMAL)?|NUMERIC|DATE(?:TIME)?|TIME(?:STAMP)?|YEAR|ENUM|SET)(?:\((.+?)\))?)(\s+UNSIGNED\s+)?(.*?)?(?:,|\)|$))/is', trim($column_list), $Columns);
+				preg_match_all('/(?:(?:CONSTRAINT\s+(?:([^\W\d]\w*)\s+)?)?(KEY|INDEX|PRIMARY\s+KEY|UNIQUE)(?:\s+([^\W\d]\w*))?\s*\(\s*(.+?)\s*\))|(?:`?([^\W\d]\w*?)`?(?:\s+((?:TINY|MEDIUM|LONG)?(?:TEXT|BLOB)|(?:VAR)?(?:CHAR|BINARY)|INTEGER|(?:TINY|SMALL|MEDIUM|BIG)?INT|FLOAT|REAL|DOUBLE(?:\s+PRECISION)?|BIT|BOOLEAN|DEC(?:IMAL)?|NUMERIC|DATE(?:TIME)?|TIME(?:STAMP)?|YEAR|ENUM|SET)(?:\((.+?)\))?)(\s+GENERATED\s+(?:BY\s+DEFAULT|ALWAYS)\s+AS\s+IDENTITY(?:\s*\(.*?\))?)?(.*?)?(?:,|\)|$))/is', trim($column_list), $Columns, PREG_SET_ORDER);
 
 				if(!$Columns) {
 					return $this->environment->_set_error('Parsing error in CREATE TABLE query');
@@ -442,23 +447,23 @@ class fSQLParser
 				$new_columns = array();
 				$new_constraints = array();
 
-				$numMatches = count($Columns[0]);
-				for($c = 0; $c < $numMatches; $c++) {
+				foreach($Columns as $Column)
+				{
 					//$column = str_replace("\"", "'", $column);
-					if($Columns[2][$c])
+					if($Column[2])
 					{
-						$constraint_name = $Columns[1][$c];
+						$constraint_name = $Column[1];
 						
-						if(!$Columns[4][$c]) {
+						if(!$Column[4]) {
 							return $this->environment->_set_error("Parse Error: Excepted column name in \"{$Columns[1][$c]}\"");
 						}
 						
-						$keytype = strtolower($Columns[2][$c]);
+						$keytype = strtolower($Column[2]);
 						if($keytype === 'index' || $keytype === 'key')
 							$keytype = 'k';
 						else
 							$keytype = $keytype{0}.'k';
-						$keycolumns = preg_split('/\s*,\s*/', $Columns[4][$c]);
+						$keycolumns = preg_split('/\s*,\s*/', $Column[4]);
 						
 						if(!$constraint_name)
 							$constraint_name = "{$table_name}_{$keytype}";
@@ -477,7 +482,7 @@ class fSQLParser
 							if($keyColumnData['null'])
 							{
 								if($keyTypeCode === FSQL_KEY_PRIMARY)
-									return $this->_set_error("Primary key contains a nullable column named {$keycolumn}");
+									return $this->environment->_set_error("Primary key contains a nullable column named {$keycolumn}");
 								else
 									$key_has_null_column = true;
 							}
@@ -490,15 +495,16 @@ class fSQLParser
 					}
 					else
 					{
-						$name = $Columns[5][$c];
-						$type = $Columns[6][$c];
-						$options =  $Columns[9][$c];
+						$name = $Column[5];
+						$type = $Column[6];
+						$generated = $Column[8];
+						$options =  $Column[9];
 						
 						if(isset($new_columns[$name])) {
 							return $this->environment->_set_error("Column '{$name}' redefined");
 						}
 						
-						$type = preg_replace('/\s+/', '', strtoupper($type));
+						$type = preg_replace('/\s+/', ' ', strtoupper($type));
 						if(in_array($type, array('CHAR', 'VARCHAR', 'BINARY', 'VARBINARY', 'TEXT', 'TINYTEXT', 'MEDIUMTEXT', 'LONGTEXT', 'SET', 'BLOB', 'TINYBLOB', 'MEDIUMBLOB', 'LONGBLOB'))) {
 							$type = FSQL_TYPE_STRING;
 						} else if(in_array($type, array('BIT','TINYINT', 'SMALLINT','MEDIUMINT','INT','INTEGER','BIGINT'))) {
@@ -533,10 +539,41 @@ class fSQLParser
 						
 						$null = (bool) !preg_match("/\s+not\s+null\b/i", $options);
 						
-						$auto = (bool) preg_match("/\s+AUTO_INCREMENT\b/i", $options);
+						$auto = false;
+						$identity = null;
+						if(preg_match('/\s+GENERATED\s+(BY\s+DEFAULT|ALWAYS)\s+AS\s+IDENTITY(?:\s*\(\s*(?:START\s+WITH\s+(-?\d+)\s*)?(?:\bINCREMENT\s+BY\s+(-?\d+)\s*)?(?:\b(?:NO\sMINVALUE|MINVALUE\s+(-?\d+))\s*)?(?:\b(?:NO\s+MAXVALUE|MAXVALUE\s+(-?\d+))\s*)?(\b(?:NO\s+)?CYCLE)?\))?/i', $generated, $identity_matches))
+						{
+							$always = !strcasecmp($identity_matches[1], 'ALWAYS');
+							$increment = isset($identity_matches[3]) ? (int) $identity_matches[3] : 1;
+							$min = isset($identity_matches[4]) ? (int) $identity_matches[4] : 1;
+							$max = isset($identity_matches[5]) ? (int) $identity_matches[5] : PHP_INT_MAX;
+							$cycle = isset($identity_matches[6]) && !strcasecmp($identity_matches[6], 'CYCLE');
+							
+							if($increment === 0)
+								return $this->environment->_set_error('Increment of zero in column defintion');
+								
+							if(!empty($identity_matches[2]))  // specified
+							{
+								$start = (int) $identity_matches[2];
+								if($start < $min || $start > $max)
+									return $this->environment->_set_error('Identity column start value not in valid range');
+							}
+							else if($increment > 0) // ascending
+								$start = $min;
+							else  // descending
+								$start = $max;
+							
+							$identity = array($always, $start, $increment, $min, $max, $cycle);
+							$null = false; 
+						}
+						else if(preg_match('/\s+AUTO_?INCREMENT\b/i', $options))
+						{
+							$identity = array(false, 1, 1, 1, PHP_INT_MAX, false);
+							$null = false;
+						}
 						
 						if($type === FSQL_TYPE_ENUM) {
-							preg_match_all("/'.*?(?<!\\\\)'/", $Columns[6][$c], $values);
+							preg_match_all("/'.*?(?<!\\\\)'/", $Column[7], $values);
 							$restraint = $values[0];
 						} else {
 							$restraint = null;
@@ -605,7 +642,7 @@ class fSQLParser
 							$key = '';
 						}
 						
-						$new_columns[$name] = array('type' => $type, 'auto' => $auto, 'default' => $default, 'key' => $key, 'null' => $null, 'restraint' => $restraint);
+						$new_columns[$name] = array('type' => $type, 'identity' => $identity, 'default' => $default, 'key' => $key, 'null' => $null, 'restraint' => $restraint);
 					}
 				}
 			} else {
@@ -803,7 +840,7 @@ class fSQLParser
 	
 		if($check_names === 1) {
 			if(count($dataValues) != count($Columns)) {
-				return $this->environment->_set_error("Number of inserted values and columns not equal");
+				return $this->environment->_set_error('Number of inserted values and columns not equal');
 			}
 
 			$dataValues = array_combine($Columns, $newData[1]);
@@ -811,7 +848,7 @@ class fSQLParser
 
 			foreach($TableColumns as $col_index => $col_name) {
 				if(!in_array($col_name, $Columns)) {
-					$Data[$col_index] = "NULL";
+					$Data[$col_index] = 'NULL';
 				} else {
 					$Data[$col_index] = $dataValues[$col_name];
 				}
@@ -829,9 +866,9 @@ class fSQLParser
 			$countColumns = count($Columns);
 			
 			if($countData < $countColumns) { 
-				$Data = array_pad($dataValues, $countColumns, "NULL");
+				$Data = array_pad($dataValues, $countColumns, 'NULL');
 			} else if($countData > $countColumns) { 
-				return $this->environment->_set_error("Trying to insert too many values");
+				return $this->environment->_set_error('Trying to insert too many values');
 			} else {
 				$Data = $dataValues;
 			}
@@ -1039,7 +1076,7 @@ class fSQLParser
 				}
 			}
 			// numeric constant
-			else if(preg_match("/\A(-?\d+(?:\.\d+)?)(?:\s+(?:AS\s+)?([^\W\d]\w*))?\Z/is", $column, $colmatches)) {
+			else if(preg_match('/\A(-?\d+(?:\.\d+)?)(?:\s+(?:AS\s+)?([^\W\d]\w*))?\Z/is', $column, $colmatches)) {
 				$value = $colmatches[1];
 				$alias = !empty($colmatches[2]) ? $colmatches[2] : $value;
 				$number_type = strpos($value, '.') === false ? FSQL_TYPE_INTEGER : FSQL_TYPE_FLOAT;
@@ -1056,7 +1093,7 @@ class fSQLParser
 									);
 			}
 			else {
-				return $this->environment->_set_error("Parse Error: Unknown value in SELECT clause: ". $column);
+				return $this->environment->_set_error("Parse Error: Unknown value in SELECT clause: $column");
 			}
 		}
 		
@@ -1082,7 +1119,7 @@ class fSQLParser
 					if(preg_match('/([^\W\d]\w*)(?:\s+(ASC|DESC))?/is', $ORDERBY[$i], $additional)) {
 						$index = array_search($additional[1], $joined_info['columns']);
 						if(empty($additional[2])) { $additional[2] = 'ASC'; }
-						$tosort[] = array('key' => $index, 'ascend' => !strcasecmp("ASC", $additional[2]));
+						$tosort[] = array('key' => $index, 'ascend' => !strcasecmp('ASC', $additional[2]));
 					}
 				}
 				$orderby = new fSQLOrderByClause($tosort);
@@ -1096,7 +1133,7 @@ class fSQLParser
 					if(preg_match('/([^\W\d]\w*)(?:\s+(ASC|DESC))?/is', $group_item, $additional)) {
 						$index = array_search($additional[1], $joined_info['columns']);
 						if(empty($additional[2])) { $additional[2] = 'ASC'; }
-						$group_list[] = array('key' => $index, 'ascend' => !strcasecmp("ASC", $additional[2]));
+						$group_list[] = array('key' => $index, 'ascend' => !strcasecmp('ASC', $additional[2]));
 					}
 				}
 			}

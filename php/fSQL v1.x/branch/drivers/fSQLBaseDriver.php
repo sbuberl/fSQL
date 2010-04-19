@@ -459,6 +459,39 @@ class fSQLTable
 	function drop() { return $this->close(); }
 	function temporary() { return false; }
 	
+	function nextValueFor($column)
+	{
+		$columns = $this->definition->getColumns();
+		if(!isset($columns[$column]))
+			return false;
+		
+		if($columns[$column]['identity'] !== null)
+		{
+			list(, $start, $increment, $min, $max, $canCycle) = $columns[$column]['identity'];
+			
+			$cycled = false;
+			if($increment > 0 && $start > $max)
+			{
+				$cycled = true;
+			}
+			else if($increment < 0 && $start < $min)
+			{
+				$cycled = true;	
+			}
+			
+			if($cycled && !$canCycle)
+				return false;
+				
+			$columns[$column]['identity'][1] += $increment;
+			
+			$this->definition->setColumns($columns);
+			
+			return $start;
+		}
+		else
+			return false;
+	}
+	
 	function getKeyNames() { return false; }
 	function getKeys() { return false ; }
 	

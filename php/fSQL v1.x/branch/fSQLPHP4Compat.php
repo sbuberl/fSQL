@@ -12,6 +12,7 @@
  *		- array_fill - 4.2.0
  *		- is_a - 4.2.0
  *		- array_key_exists - 4.2.0 (renamed from key_exists - 4.0.7)
+ *		- vsprintf - 4.1.0
  */
 
 if (!function_exists('array_combine')) {
@@ -66,6 +67,20 @@ if(!function_exists('array_key_exists'))
 	function array_key_exists($key, $search) {
       return in_array($key, array_keys($search));
    }
+}
+
+if(!function_exists('vsprintf'))
+{
+    function vsprintf($format, $args)
+    {
+        if (count($args) < 2) {
+            trigger_error('vsprintf() Too few arguments', E_USER_WARNING);
+            return;
+        }
+
+        array_unshift($args, $format);
+        return call_user_func_array('sprintf', $args);
+    }
 }
 
 // Portable recursive mkdir wrapper (recursive flag added in PHP 5)
