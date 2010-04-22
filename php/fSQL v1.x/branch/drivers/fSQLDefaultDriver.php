@@ -165,7 +165,10 @@ EOC;
 							$restraint = $restraint_matches[0];
 						
 						if(!empty($local_matches[6]))
-							$identity = explode(',', $local_matches[6]);
+						{
+							list($always, $start, $increment, $min, $max, $cycle) = explode(',', $local_matches[6]);
+							$identity = array((bool) $always, (int) $start, (int) $increment, (int) $min, (int) $max, (bool) $cycle);
+						}
 						else
 							$identity = null;
 						

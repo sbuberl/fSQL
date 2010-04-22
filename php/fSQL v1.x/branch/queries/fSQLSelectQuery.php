@@ -2,21 +2,21 @@
 
 class fSQLSelectQuery extends fSQLQuery
 {
-	var $selectedInfo = null;
+	var $selectedInfo;
 	
-	var $joins = null;
+	var $joins;
 	
-	var $where = null;
+	var $where;
 	
-	var $groupList = null;
+	var $groupList;
 	
-	var $having = null;
+	var $having ;
 	
-	var $orderby = null;
+	var $orderby;
 	
-	var $limit = null;
+	var $limit;
 	
-	var $distinct = false;
+	var $distinct;
 	
 	function fSQLSelectQuery(&$environment, $selectedInfo, $joins, $where, $groupList, $having, $orderby, $limit, $distinct)
 	{
@@ -256,10 +256,8 @@ EOT;
 		eval($code);
 		
 		// Execute an ORDER BY
-		if(!empty($this->orderby))
-		{
+		if($this->orderby !== null)
 			$this->orderby->sort($final_set);
-		}
 		
 		// Execute a LIMIT
 		if($this->limit !== null)

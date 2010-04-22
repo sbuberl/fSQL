@@ -496,7 +496,7 @@ class fSQLEnvironment
 	}
 
 	/**
-	* Returns query count.   
+	* Returns query count.
 	* @return integer
 	*/
 	function query_count()
@@ -693,13 +693,28 @@ class fSQLEnvironment
 	{
 		$this->query_count++;
 		$this->error_msg = null;
+		$this->affected = 0;
 		
 		$command = $this->parser->parse($this, $query);
 		if($command === false)
 			return false;
 		
 		$command->prepare();
-		return $command->execute();
+		$success = $command->execute();
+		
+		// if DML query (insert/update/delete), copy query's affected row count to environment's.
+		if(fsql_is_a($command, 'fSQLDMLQuery'))
+		{
+			$this->affected = $command->affected;
+			
+			// if insert/replace and identity was incremented, update environment last insert id.
+			if(fsql_is_a($command, 'fSQLInsertQuery') && isset($command->insert_id))
+			{
+				$this->insert_id = $command->insert_id;
+			}
+		}
+		
+		return $success;
 	}
 
 	/**
