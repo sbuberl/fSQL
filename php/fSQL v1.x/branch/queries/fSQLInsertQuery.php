@@ -85,7 +85,7 @@ class fSQLInsertQuery extends fSQLDMLQuery
 							if($this->replace)
 							{
 								// may have already ben deleted so check return
-								if($tableCursor->find($rowid))
+								if($tableCursor->findRow($rowid))
 								{
 									$tableCursor->deleteRow();
 									$this->affected++;

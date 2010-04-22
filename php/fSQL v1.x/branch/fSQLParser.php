@@ -45,6 +45,8 @@ class fSQLParser
 	{
 		switch($command)
 		{
+			case 'alter':
+				return $this->parseAlter($query);
 			case 'begin':
 				return $this->parseBegin($query);
 			case 'create':
@@ -401,6 +403,120 @@ class fSQLParser
 			return null;
 		
 		return array('type' => $columnData, 'expression' => $expr);
+	}
+	
+	function parseAlter($query)
+	{
+		if(preg_match('/\AALTER\s+TABLE/is', $query))
+		{
+			return $this->parseAlterTable($query);
+		}
+		else
+			return $this->environment->_set_error('Invalid ALTER query');
+	}
+	
+	function parseAlterTable($query)
+	{
+		if(preg_match('/\AALTER\s+TABLE\s+(`?(?:[^\W\d]\w*`?\.`?){0,2}[^\W\d]\w*`?)\s+(.*)/is', $query, $matches))
+		{
+			list(, $table_name, $changes) = $matches;
+			
+			$table_name_pieces = $this->environment->_parse_table_name($table_name);
+			$tableObj =& $this->environment->_find_table($table_name_pieces);
+			if($tableObj === false)
+				return false;
+			else if($tableObj->isReadLocked())
+				return $this->environment->_error_table_read_lock($table_name_pieces);
+			
+			$schema = $tableObj->getSchema();
+			$tableDef = $tableObj->getDefinition();
+			$columns =  $tableObj->getColumns();
+			
+			preg_match_all('/(?:ADD|ALTER|CHANGE|DROP|RENAME).*?(?:,|\Z)/is', trim($changes), $specs);
+			foreach($specs[0] as $spec) {
+				if(preg_match('/\AADD\s+(?:CONSTRAINT\s+`?[^\W\d]\w*`?\s+)?PRIMARY\s+KEY\s*\((.+?)\)/is', $spec, $matches)) {
+					$columnDef =& $columns[$matches[1]];
+					
+					foreach($columns as $name => $column) {
+						if($column['key'] === 'p') {
+							return $this->environment->_set_error('Primary key already exists');
+						}
+					}
+					
+					$columnDef['key'] = 'p';
+					$tableDef->setColumns($columns);
+					
+					return true;
+				} else if(preg_match("/\ACHANGE(?:\s+(?:COLUMN))?\s+`?([^\W\d]\w*)`?\s+(?:SET\s+DEFAULT\s+((?:[\+\-]\s*)?\d+(?:\.\d+)?|NULL|(\"|').*?(?<!\\\\)(?:\\3))|DROP\s+DEFAULT)(?:,|;|\Z)/is", $spec, $matches)) {
+					$columnDef =& $columns[$matches[1]];
+					if(isset($matches[2]))
+						$default = $matches[2];
+					else
+						$default = 'NULL';
+					
+					if(!$columnDef['null'] && strcasecmp($default, 'NULL')) {
+						if(preg_match("/\A(\"|')(.*)(?:\\1)\Z/is", $default, $matches)) {
+							if($columnDef['type'] === FSQL_TYPE_INTEGER)
+								$default = (int) $matches[2];
+							else if($columnDef['type'] === FSQL_TYPE_FLOAT)
+								$default = (float) $matches[2];
+							else if($columnDef['type'] === FSQL_TYPE_ENUM) {
+								if(in_array($default, $columnDef['restraint']))
+									$default = array_search($default, $columnDef['restraint']) + 1;
+								else
+									$default = 0;
+							}
+						} else {
+							if($columnDef['type'] === FSQL_TYPE_INTEGER)
+								$default = (int) $default;
+							else if($columnDef['type'] === FSQL_TYPE_FLOAT)
+								$default = (float) $default;
+							else if($columnDef['type'] === FSQL_TYPE_ENUM) {
+								$default = (int) $default;
+								if($default < 0 || $default > count($columnDef['restraint'])) {
+									return $this->environment->_set_error('Numeric ENUM value out of bounds');
+								}
+							}
+						}
+					} else if(!$columnDef['null']) {
+						if($columnDef['type'] === FSQL_TYPE_STRING)
+							// The default for string types is the empty string 
+							$default = '';
+						else
+							// The default for dates, times, and number types is 0
+							$default = 0;
+					}
+					
+					$columnDef['default'] = $default;
+					$tableDef->setColumns($columns);
+					
+					return true;
+				} else if(preg_match('/\ADROP\s+PRIMARY\s+KEY/is', $spec, $matches)) {
+					$found = false;
+					foreach($columns as $name => $column) {
+						if($column['key'] === 'p') {
+							$columns[$name]['key'] = 'n';
+							$found = true;
+						}
+					}
+					
+					if($found) {
+						$tableDef->setColumns($columns);
+						return true;
+					} else {
+						return $this->environment->_set_error('No primary key found');
+					}
+				}
+				else if(preg_match('/\ARENAME\s+(?:TO\s+)?(`?(?:[^\W\d]\w*`?\.`?){0,2}[^\W\d]\w*`?)/is', $spec, $matches)) {
+					return $this->environment->_do_rename($tableObj, $matches[1]);
+				}
+				else {
+					return $this->environment->_set_error('Invalid ALTER query');
+				}
+			}
+		} else {
+			return $this->environment->_set_error('Invalid ALTER query');
+		}
 	}
 	
 	function parseBegin($query)
@@ -1018,12 +1134,28 @@ class fSQLParser
 		
 		preg_match_all("/(?:\A|\s*)((?:(?:-?\d+(?:\.\d+)?)|'.*?(?<!\\\\)'|(?:[^\W\d]\w*\s*\(.*?\))|(?:(?:(?:[^\W\d]\w*)\.)?(?:(?:[^\W\d]\w*)|\*)))(?:\s+(?:AS\s+)?[^\W\d]\w*)?)\s*(?:\Z|,)/is", trim($matches[3]), $Columns);
 		
+		$oneAggregate = false;
+		$allAggregates = false;
 		$selectedInfo = array();
 		foreach($Columns[1] as $column) {
 			// function call	
-			if(preg_match('/\A((?:[^\W\d]\w*)\s*\((?:.*?)?\))(?:\s+(?:AS\s+)?([^\W\d]\w*))?\Z/is', $column, $colmatches)) {
+			if(preg_match('/\A(([^\W\d]\w*)\s*\((?:.*?)?\))(?:\s+(?:AS\s+)?([^\W\d]\w*))?\Z/is', $column, $colmatches)) {
 				$function_call = $colmatches[1];
-				$alias = !empty($colmatches[2]) ? $colmatches[2] : $function_call;
+				$function_name = strtolower($colmatches[2]);
+				if(!class_exists('fSQLFunctions'))
+					require_once FSQL_INCLUDE_PATH.'/fSQLFunctions.php';
+				
+				if(($function_info = fSQLFunctions::getFunctionInfo($function_name)) !== null) {
+					list($function_type, ) = $function_info;
+					if($function_type & FSQL_FUNC_AGGREGATE)
+						$oneAggregate = true;
+					else
+						$allAggregates = false;
+				}
+				else {
+					return $this->environment->_set_error('Call to unknown SQL function');
+				}
+				$alias = !empty($colmatches[3]) ? $colmatches[3] : $function_call;
 				$selectedInfo[] = array('function', $function_call, $alias);
 			}
 			// identifier/keyword/column/*
@@ -1152,6 +1284,11 @@ class fSQLParser
 				}
 			}
 		}
+		
+		// Used aggregate function in SELECT ... FROM table
+		// but no GROUP BY clause present
+		if($group_list === null && $oneAggregate)
+			$group_list = array();
 		
 		$this->loadQueryClass('select');
 		return new fSQLSelectQuery($this->environment, $selectedInfo, $joins, $where, $group_list, $having, $orderby, $limit, $distinct);

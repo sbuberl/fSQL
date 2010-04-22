@@ -174,15 +174,14 @@ EOC;
 							$this->keys[$key_name] = array('type' => $key_type, 'columns' => array($i), 'engine' => 'MEM', 'file' => '');
 						else   // add a column
 							$this->keys[$key_name]['columns'][] = $i;
-							
-					
-						if($matches[4])
-							// don't know real current value at this point so use 1 for now
-							$identity = array(false, 1, 1, 1, PHP_INT_MAX, false);
-						else
-							$identity = null;
-
 					}
+					
+					if($matches[4])
+						// don't know real current value at this point so use 1 for now
+						$identity = array(false, 1, 1, 1, PHP_INT_MAX, false);
+					else
+						$identity = null;
+					
 					$this->columns[$matches[1]] = array(
 						'type' => $type, 'identity' => $identity, 'default' => $default, 'key' => $key, 'null' => (bool) $matches[8], 'restraint' => $restraint
 					);

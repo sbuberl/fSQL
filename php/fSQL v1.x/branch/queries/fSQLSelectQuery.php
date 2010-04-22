@@ -99,24 +99,26 @@ class fSQLSelectQuery extends fSQLQuery
 			}
 		}
 		
+		$singleRow = false;
 		$fullColumnsInfo = array();
-		$group_key = NULL;
-		$final_code = NULL;
-		if(!empty($this->groupList))
+		$group_key = null;
+		$final_code = null;
+		if($this->groupList !== null)
 		{
 			$joined_info['group_columns'] = array();
 			
-			if(count($this->groupList) === 1)
+			$group_array = array();
+			$groupByCount = count($this->groupList);
+			if($groupByCount === 1)
 			{
 				$group_col = $this->groupList[0]['key'];
 				$group_key = '$entry[' . $group_col .']';
-				$group_array = array($group_key);
+				$group_array[] = $group_key;
 				$joined_info['group_columns'][] = $group_col;
 			}
-			else
+			else if($groupByCount > 1)
 			{
 				$all_ascend = 1;
-				$group_array = array();
 				$group_key_list = '';
 				foreach($this->groupList as $group_item)
 				{
@@ -128,8 +130,10 @@ class fSQLSelectQuery extends fSQLQuery
 				}
 				$group_key = 'serialize(array('. substr($group_key_list, 0, -2) . '))';
 			}
+			else // empty array -> aggregate function call in expression list but no GROUP BY
+				$singleRow = true;
 			
-			$select_line = "";
+			$select_line = '';
 			foreach($this->selectedInfo as $info) {
 				list($select_type, $select_value, $select_alias) = $info;
 				$column_info = null;
@@ -156,23 +160,34 @@ class fSQLSelectQuery extends fSQLQuery
 				$fullColumnsInfo[] = $column_info;
 			}
 			
-			$line = '$grouped_set['.$group_key.'][] = $entry;';
+			if(!$singleRow)
+				$line = '$grouped_set['.$group_key.'][] = $entry;';
+			else
+				$line = '$group[] = $entry;';
+			
 			$final_line = '$final_set[] = array('. substr($select_line, 0, -2) . ');';
 			$grouped_set = array();
 			
 			if($this->having !== null) {
-				$final_line = "if({$this->having}) {\r\n\t\t\t\t\t$final_line\r\n\t\t\t\t}";
+				$final_line = "if({$this->having}) {\r\n\t\t\t\t\t\t$final_line\r\n\t\t\t\t\t}";
 			}
 			
-			$final_code = <<<EOT
-			foreach(\$grouped_set as \$group) {
-				$final_line
-			}
+			if(!$singleRow)
+			{
+				$final_code = <<<EOT
+				foreach(\$grouped_set as \$group) {
+					$final_line
+				}
 EOT;
+			}
+			else
+			{
+				$final_code = $final_line;
+			}
 		}
 		else
 		{
-			$select_line = "";
+			$select_line = '';
 			foreach($this->selectedInfo as $info) {
 				list($select_type, $select_value, $select_alias) = $info;
 				$column_info = null;
@@ -206,29 +221,40 @@ EOT;
 			$group = $data;
 		}
 		
-		if(!empty($this->joins)) {
-			if($this->where !== null)
-				$line = "if({$this->where}) {\r\n\t\t\t\t\t$line\r\n\t\t\t\t}";
-				
-			$code = <<<EOT
-			foreach(\$data as \$entry) {
-				$line
-			}
-				
+		if($this->where !== null)
+			$singleRow = false;
+		
+		if(!empty($this->joins))
+		{
+			if(!$singleRow)
+			{
+				if($this->where !== null)
+					$line = "if({$this->where}) {\r\n\t\t\t\t\t\t$line\r\n\t\t\t\t\t}";
+					
+				$code = <<<EOT
+				foreach(\$data as \$entry) {
+					$line
+				}
+					
 $final_code
 EOT;
+			}
+			else // SELECTed aggregate without WHERE or GROUP BY
+			{
+				$group = $data;
+				$code = $final_line;
+			}
 		}
-		else
+		else // Tableless SELECT
 		{
 			$data = array(true);  // hack so it passes count and !empty expressions
 			$group = $data;
-			$code = $line;
+			$code = !$singleRow ? $line : $final_line;
 		}
 		
 		$final_set = array();
 		eval($code);
 		
-		//$final_set = array_filter($final_set, 'strlen');
 		// Execute an ORDER BY
 		if(!empty($this->orderby))
 		{
