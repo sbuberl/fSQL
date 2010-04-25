@@ -1,65 +1,49 @@
 <?php
 
-class fSQLFunctions
+fsql_load_class('fSQLStandardFunctions', FSQL_FRONTENDS_PATH.'/standard/');
+
+class fSQLMysqlFunctions extends fSQLStandardFunctions
 {
 	function getFunctionInfo($function_name)
 	{
 		static $functions = array(
-			'abs' => array(FSQL_FUNC_NORMAL, FSQL_TYPE_NUMERIC, true),
 			'acos' => array(FSQL_FUNC_NORMAL, FSQL_TYPE_FLOAT, true),
 			'ascii' => array(FSQL_FUNC_NORMAL, FSQL_TYPE_STRING, true),
 			'asin'  => array(FSQL_FUNC_NORMAL, FSQL_TYPE_FLOAT, true),
 			'atan' => array(FSQL_FUNC_NORMAL, FSQL_TYPE_FLOAT, true),
 			'atan2' => array(FSQL_FUNC_NORMAL, FSQL_TYPE_FLOAT, true),
-			'avg' => array(FSQL_FUNC_AGGREGATE, FSQL_TYPE_FLOAT, true),
 			'bin' => array(FSQL_FUNC_NORMAL, FSQL_TYPE_STRING, true),
 			'bit_length' => array(FSQL_FUNC_NORMAL, FSQL_TYPE_INTEGER, true),
-			'ceiling' => array(FSQL_FUNC_NORMAL, FSQL_TYPE_INTEGER, true),
 			'char' => array(FSQL_FUNC_NORMAL, FSQL_TYPE_STRING, true),
-			'concat' => array(FSQL_FUNC_NORMAL, FSQL_TYPE_STRING, true),
 			'concat_ws' => array(FSQL_FUNC_NORMAL, FSQL_TYPE_STRING, true),
 			'conv' => array(FSQL_FUNC_NORMAL, FSQL_TYPE_STRING, true),
 			'cos' => array(FSQL_FUNC_NORMAL, FSQL_TYPE_FLOAT, true),
 			'cot' => array(FSQL_FUNC_NORMAL, FSQL_TYPE_FLOAT, true),
-			'count' => array(FSQL_FUNC_AGGREGATE, FSQL_TYPE_INTEGER, false),
 			'crc32' => array(FSQL_FUNC_NORMAL, FSQL_TYPE_INTEGER, true),
-			'curdate' => array(FSQL_FUNC_NORMAL, FSQL_TYPE_DATE, false),
-			'curtime' => array(FSQL_FUNC_NORMAL, FSQL_TYPE_TIME, false),
-			'database' => array(FSQL_FUNC_ENV, FSQL_TYPE_STRING, true),
 			'dayofweek' => array(FSQL_FUNC_NORMAL, FSQL_TYPE_INTEGER, true),
 			'dayofyear' => array(FSQL_FUNC_NORMAL, FSQL_TYPE_INTEGER, true),
 			'degrees' => array(FSQL_FUNC_NORMAL, FSQL_TYPE_FLOAT, true),
 			'elt' => array(FSQL_FUNC_NORMAL, FSQL_TYPE_STRING, true),
-			'exp' => array(FSQL_FUNC_NORMAL, FSQL_TYPE_FLOAT, true),
 			'export_set' => array(FSQL_FUNC_NORMAL, FSQL_TYPE_STRING, true),
 			'field' => array(FSQL_FUNC_NORMAL, FSQL_TYPE_STRING, true),
 			'find_in_set' => array(FSQL_FUNC_NORMAL, FSQL_TYPE_STRING, true),
-			'floor' => array(FSQL_FUNC_NORMAL, FSQL_TYPE_INTEGER, true),
 			'format' => array(FSQL_FUNC_NORMAL, FSQL_TYPE_STRING, true),
 			'from_unixtime' => array(FSQL_FUNC_NORMAL, FSQL_TYPE_DATETIME, true),
 			'hex' => array(FSQL_FUNC_NORMAL, FSQL_TYPE_STRING, true),
 			'insert' => array(FSQL_FUNC_NORMAL, FSQL_TYPE_STRING, true),
 			'instr' => array(FSQL_FUNC_NORMAL, FSQL_TYPE_INTEGER, true),
-			'last_insert_id' => array(FSQL_FUNC_ENV, FSQL_TYPE_INTEGER, true),
+			'last_insert_id' => array(FSQL_FUNC_NORMAL, FSQL_TYPE_INTEGER, true),
 			'left' => array(FSQL_FUNC_NORMAL, FSQL_TYPE_STRING, true),
-			'length' => array(FSQL_FUNC_NORMAL, FSQL_TYPE_INTEGER, true),
-			'ln' => array(FSQL_FUNC_NORMAL, FSQL_TYPE_FLOAT, true),
 			'locate' => array(FSQL_FUNC_NORMAL, FSQL_TYPE_INTEGER, true),
 			'log' => array(FSQL_FUNC_NORMAL, FSQL_TYPE_FLOAT, true),
 			'log2' => array(FSQL_FUNC_NORMAL, FSQL_TYPE_FLOAT, true),
 			'log10' => array(FSQL_FUNC_NORMAL, FSQL_TYPE_FLOAT, true),
-			'lower' => array(FSQL_FUNC_NORMAL, FSQL_TYPE_STRING, true),
 			'lpad' => array(FSQL_FUNC_NORMAL, FSQL_TYPE_STRING, true),
 			'ltrim' => array(FSQL_FUNC_NORMAL, FSQL_TYPE_STRING, true),
 			'make_set',
-			'max' => array(FSQL_FUNC_AGGREGATE, FSQL_TYPE_FLOAT, true),
 			'md5' => array(FSQL_FUNC_NORMAL, FSQL_TYPE_STRING, true),
-			'min' => array(FSQL_FUNC_AGGREGATE, FSQL_TYPE_FLOAT, true),
-			'mod' => array(FSQL_FUNC_NORMAL, FSQL_TYPE_NUMERIC, true),
-			'now' => array(FSQL_FUNC_NORMAL, FSQL_TYPE_STRING, false),
 			'oct' => array(FSQL_FUNC_NORMAL, FSQL_TYPE_STRING, true),
 			'pi' => array(FSQL_FUNC_NORMAL, FSQL_TYPE_FLOAT, false),
-			'pow' => array(FSQL_FUNC_NORMAL, FSQL_TYPE_FLOAT, true),
 			'quote' => array(FSQL_FUNC_NORMAL, FSQL_TYPE_STRING, true),
 			'radians' => array(FSQL_FUNC_NORMAL, FSQL_TYPE_FLOAT, true),
 			'rand' => array(FSQL_FUNC_NORMAL, FSQL_TYPE_INTEGER, true),
@@ -68,7 +52,7 @@ class fSQLFunctions
 			'reverse' => array(FSQL_FUNC_NORMAL, FSQL_TYPE_STRING, true),
 			'right' => array(FSQL_FUNC_NORMAL, FSQL_TYPE_STRING, true),
 			'round' => array(FSQL_FUNC_NORMAL, FSQL_TYPE_FLOAT, true),
-			'row_count' => array(FSQL_FUNC_ENV, FSQL_TYPE_INTEGER, true),
+			'row_count' => array(FSQL_FUNC_NORMAL, FSQL_TYPE_INTEGER, true),
 			'rpad' => array(FSQL_FUNC_NORMAL, FSQL_TYPE_STRING, true),
 			'rtrim' => array(FSQL_FUNC_NORMAL, FSQL_TYPE_STRING, true),
 			'sha1' => array(FSQL_FUNC_NORMAL, FSQL_TYPE_STRING, true),
@@ -76,38 +60,27 @@ class fSQLFunctions
 			'sin'=> array(FSQL_FUNC_NORMAL, FSQL_TYPE_FLOAT, true),
 			'soundex' => array(FSQL_FUNC_NORMAL, FSQL_TYPE_STRING, true),
 			'space' => array(FSQL_FUNC_NORMAL, FSQL_TYPE_STRING, true),
-			'sqrt'=> array(FSQL_FUNC_NORMAL, FSQL_TYPE_FLOAT, true),
 			'strcmp' => array(FSQL_FUNC_NORMAL, FSQL_TYPE_INTEGER, true),
-			'substring' => array(FSQL_FUNC_NORMAL, FSQL_TYPE_STRING, true),
 			'substring_index' => array(FSQL_FUNC_NORMAL, FSQL_TYPE_INTEGER, true),
-			'sum' => array(FSQL_FUNC_AGGREGATE, FSQL_TYPE_FLOAT, true),
 			'tan' => array(FSQL_FUNC_NORMAL, FSQL_TYPE_FLOAT, true),
-			'trim' => array(FSQL_FUNC_NORMAL, FSQL_TYPE_STRING, true),
 			'truncate' => array(FSQL_FUNC_NORMAL, FSQL_TYPE_FLOAT, true),
 			'unhex' => array(FSQL_FUNC_NORMAL, FSQL_TYPE_INTEGER, true),
 			'unix_timestamp'  => array(FSQL_FUNC_NORMAL, FSQL_TYPE_TIMESTAMP, true),
-			'upper' => array(FSQL_FUNC_NORMAL, FSQL_TYPE_STRING, true),
-			'version' => array(FSQL_FUNC_NORMAL, FSQL_TYPE_STRING, false),
 			'weekday' => array(FSQL_FUNC_NORMAL, FSQL_TYPE_STRING, true)
 		);
 		
 		static $renamed_funcs = array(
-			'ceil' => 'ceiling',
-			'char_length' => 'length',
-			'character_length' => 'length',
-			'current_date' => 'curdate',
-			'current_time' => 'curtime',
-			'current_timestamp' => 'now',
+			'curdate' => 'current_date',
+			'curtime' => 'localtime',
+			'database' => 'current_catalog',
 			'day' => 'dayofmonth',
 			'lcase' => 'lower',
-			'localtime' => 'now',
-			'localtimestamp' => 'now',
+			'length' => 'char_length',
 			'mid' => 'substring',
-			'octet_length' => 'length',
+			'now' => 'localtimestamp',
 			'ord' => 'ascii',
-			'position' => 'locate',
-			'power' => 'pow',
-			'schema' => 'database',
+			'pow' => 'power',
+			'schema' => 'current_catalog',
 			'sha' => 'sha1',
 			'substr' => 'substring',
 			'ucase' => 'upper'
@@ -116,18 +89,16 @@ class fSQLFunctions
 		if(isset($renamed_funcs[$function_name]))
 			$function_name = $renamed_funcs[$function_name];
 		
-		return isset($functions[$function_name]) ? $functions[$function_name] : null;
+		if(isset($functions[$function_name]))
+			return $functions[$function_name];
+		else
+			parent::getFunctionInfo($function_name);
 	}
 	
 	//////Misc Functions
-	function database($env)
-	{
-		$db = $env->currentDB;
-		return $db !== null ? $db->name : null;
-	}
 	function last_insert_id($env)
 	{
-		return $env->insert_id;
+		return $this->enviroment->insert_id;
 	}
 	function md5($string)
 	{
@@ -135,24 +106,14 @@ class fSQLFunctions
 	}
 	function row_count($env)
 	{
-		return $env->affected;
+		return $this->environment->affected;
 	}
 	function sha1($string)
 	{
 		return ($string !== null) ? sha1($string) : null;
 	}
-	function version()
-	{
-		return FSQL_VERSION;
-	}
+
 	/////Math Functions
-	function abs($arg)
-	{
-		if(fSQLTypes::forceNumber($arg))
-			return abs($arg);
-		else
-			return null;
-	}
 	function acos($arg)
 	{
 		if(fSQLTypes::forceFloat($arg) && $arg >= -1.0 && $arg <= 1.0)
@@ -186,13 +147,6 @@ class fSQLFunctions
 	{
 		if(fSQLTypes::forceFloat($y) && fSQLTypes::forceFloat($x))
 			return atan2($y, $x);
-		else
-			return null;
-	}
-	function ceiling($arg)
-	{
-		if(fSQLTypes::forceFloat($arg))
-			return ceil($arg);
 		else
 			return null;
 	}
@@ -231,20 +185,6 @@ class fSQLFunctions
 		else
 			return null;
 	}
-	function exp($arg)
-	{
-		if(fSQLTypes::forceFloat($arg))
-			return exp($arg);
-		else
-			return null;
-	}
-	function floor($arg)
-	{
-		if(fSQLTypes::forceFloat($arg))
-			return floor($arg);
-		else
-			return null;
-	}
 	function format($number, $places)
 	{
 		if(fSQLTypes::forceFloat($number) && fSQLTypes::forceInteger($places))
@@ -256,13 +196,6 @@ class fSQLFunctions
 	{
 		if(fSQLTypes::forceInteger($arg))
 			return dechex($arg);
-		else
-			return null;
-	}
-	function ln($arg)
-	{
-		if(fSQLTypes::forceFloat($arg) && $arg >= 0.0)
-			return log($arg);
 		else
 			return null;
 	}
@@ -298,12 +231,6 @@ class fSQLFunctions
 		else
 			return null;
 	}
-	function mod($one, $two) {
-		if(fSQLTypes::forceNumber($one) && fSQLTypes::forceNumber($two) && $two != 0)
-			return $one % $two;
-		else
-			return null;
-	}
 	function oct($arg)
 	{
 		if(fSQLTypes::forceInteger($arg))
@@ -314,12 +241,6 @@ class fSQLFunctions
 	function pi()
 	{
 		return M_PI;
-	}
-	function pow($value, $exp) {
-		if(fSQLTypes::forceFloat($value) && fSQLTypes::forceFloat($exp))
-			return pow($value, $exp);
-		else
-			return null;
 	}
 	function radians($arg)
 	{
@@ -377,13 +298,6 @@ class fSQLFunctions
 		else
 			return null;
 	}
-	function sqrt($arg)
-	{
-		if(fSQLTypes::forceFloat($arg) && $arg >= 0.0)
-			return sqrt($arg);
-		else
-			return null;
-	}
 	function tan($arg)
 	{
 		if(fSQLTypes::forceFloat($arg))
@@ -403,63 +317,6 @@ class fSQLFunctions
 		else
 			return null;
 	}
-	 
-	 ///// Aggregate Functions
-	function avg($data, $column, $flag) {
-		$sum = fSQLFunctions::sum($data, $column, $flag);
-		return $sum !== null ? $sum / count($data) : null;
-	}
-	function count($data, $column, $flag) {
-		if($column == '*') { return count($data); }
-		else if($flag === "constant") { return (int) ($column !== null); }
-		else {
-			$i = 0;
-			foreach($data as $entry) {
-				if($entry[$column] !== null) { $i++; }
-			}
-			return $i;
-		}
-	}
-	function max($data, $column, $flag) {
-		$max = null;
-		if ($flag === "constant")
-			$max = $column;
-		else {
-			foreach($data as $entry){
-				if($entry[$column] > $max || $max === null) {
-					$max = $entry[$column];
-				} 
-			}
-		}
-		return $max;
-	}
-	function min($data, $column, $flag) {
-		$min = null;
-		if ($flag === "constant")
-			$min = $column;
-		else {
-			foreach($data as $entry){
-				if($entry[$column] < $min || $min === null) {
-					$min = $entry[$column];
-				} 
-			}
-		}
-		return $min;
-	}
-	function sum($data, $column, $flag) {
-		$i = null;
-		
-		if ($flag === "constant" && $column !== null)
-			$i = $column * sizeof($data);
-		else {
-			foreach($data as $entry)
-			{
-				$i += $entry[$column];
-			}
-		}
-
-		return $i;
-	}
 	
 	/////String Functions
 	function ascii($string) {
@@ -478,10 +335,6 @@ class fSQLFunctions
 		foreach($args as $arg)
 			$return[] = chr($arg);
 		return implode('', $return);
-	}
-	function concat() {
-		$args = func_get_args();
-		return (!in_array(null, $args, true)) ? implode('', $args) : null;
 	}
 	function concat_ws($sep) {
 		$args = func_get_args();
@@ -541,9 +394,6 @@ class fSQLFunctions
 		else
 			return null;
 	}
-	function length($string) {
-		return ($string !== null) ? strlen($string) : null;
-	}
 	function locate($string, $find, $start = 0) {
 		if($string !== null && $find !== null && fSQLTypes::forceInteger($start))
 		{
@@ -552,9 +402,6 @@ class fSQLFunctions
 		}
 		else
 			return null;
-	}
-	function lower($string) {
-		return ($string !== null) ? strtolower($string) : null;
 	}
 	function lpad($string, $length, $pad) { 
 		if($string !== null && fSQLTypes::forceInteger($length) && $pad !== null)
@@ -601,20 +448,6 @@ class fSQLFunctions
 	function strcmp($left, $right)	{
 		return ($left !== null && $right !== null) ? strcmp($left, $right) : null;
 	}
-	function substring($string, $pos) {
-		if($string !== null && fSQLTypes::forceInteger($pos))
-		{
-			if(func_num_args() === 3) {
-				$length = func_get_arg(2);
-				if(fSQLTypes::forceInteger($length))
-					return substr($string, $pos, $length);
-			}
-			else
-				return substr($string, $pos);
-		}
-		
-		return null;
-	}
 	function substring_index($string, $delim, $count) {
 		if($string !== null && $delim !== null && fSQLTypes::forceInteger($count))
 		{
@@ -628,22 +461,13 @@ class fSQLFunctions
 		else
 			return null;
 	}
-	function trim($string) {
-		return ($string !== null) ? trim($string) : null;
-	}
 	function unhex($string) {
 		return ($string !== null) ? hexdec($string) : null;
 	}
-	function upper($string) {
-		return ($string !== null) ? strtoupper($string) : null;
-	}
 	 
 	////Date/Time functions
-	function curdate()	{ 
-		return strftime(FSQL_FORMAT_DATE);
-	}
-	function curtime() 	{
-		return strftime(FSQL_FORMAT_TIME);
+	function dayofmonth($date) {
+		return ($date !== null) ? (int) strftime('%d', $date) : null;
 	}
 	function dayofweek($date) {
 		return ($date !== null) ? (int) strftime('%u', $date) : null;
@@ -655,9 +479,6 @@ class fSQLFunctions
 	{
 		if(!is_int($timestamp)) { $timestamp = FSQLFunctions::unix_timestamp($timestamp); }
 		return strftime($format, $timestamp);
-	}
-	function now() {
-		return strftime(FSQL_FORMAT_DATETIME);
 	}
 	function unix_timestamp() {
 		$num_args = func_num_args();

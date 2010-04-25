@@ -1,5 +1,23 @@
 <?php
 
+// Portable wrapper for loading classes without autoload
+function fsql_load_class($className, $path)
+{
+	if(!fsql_class_exists($className))
+	{
+		$fullPath = "$path/$className.php";
+		if(file_exists($fullPath))
+		{
+			require $fullPath;
+			return true;
+		}
+		else
+			return false;		
+	}
+	else
+		return true;
+}
+
 function create_directory($original_path, $type, &$environment)
 {
 	$paths = pathinfo($original_path);
@@ -226,8 +244,40 @@ EOC;
 
 class fSQLTypes
 {
+	function to_float($arg) {
+		if($arg === null)
+			return null;
+		else if(!is_numeric($arg))
+			return false;
+		return (float) $arg;
+	}
+	
+	function to_int($arg) {
+		if($arg === null)
+			return null;
+		else if(!is_numeric($arg))
+			return false;	
+		return !is_int($arg) ? (int) $arg : $arg;
+	}
+	
+	function to_number($arg) {
+		if($arg === null)
+			return null;
+		else if(!is_numeric($arg))
+			return false;
+		else if(is_string($arg))
+			$arg = strpos($arg, '.') === false ? (int) $arg : (float) $arg;
+		return true;
+	}
+	
+	function to_string($arg) {
+		if($arg === null)
+			return null;
+		return !is_string($arg) ? (string) $arg : $arg;
+	}
+	
 	function forceFloat(&$arg, $nullable = false) {
-		if($arg == null)
+		if($arg === null)
 			return $nullable;
 		else if(!is_numeric($arg))
 			return false;
@@ -237,17 +287,17 @@ class fSQLTypes
 	}
 	
 	function forceInteger(&$arg, $nullable = false) {
-		if($arg == null)
+		if($arg === null)
 			return $nullable;
 		else if(!is_numeric($arg))
 			return false;
-		else if(!is_float($arg))
-			$arg = (float) $arg;
+		else if(!is_int($arg))
+			$arg = (int) $arg;
 		return true;
 	}
 	
 	function forceNumber(&$arg, $nullable = false) {
-		if($arg == null)
+		if($arg === null)
 			return $nullable;
 		else if(!is_numeric($arg))
 			return false;
@@ -256,6 +306,24 @@ class fSQLTypes
 		return true;
 	}
 	
+	function forceString(&$arg, $nullable = false)
+	{
+		if($arg === null)
+			return $nullable;
+		else if(is_float($arg) || is_integer($arg))
+			$arg = (string) $arg;
+		return true;
+	}
+	
+	function isTrue($expr)
+	{
+		return !in_array($expr, array(0, 0.0, '', null), true);
+	}
+	
+	function isFalse($expr)
+	{
+		return in_array($expr, array(0, 0.0, ''), true);
+	}
 	
 	function _nullcheck_eq($left, $right)
 	{
@@ -350,7 +418,6 @@ class fSQLTypes
 	{
 		return ($right !== null) ? (($left >= $right) ? FSQL_TRUE : FSQL_FALSE) : FSQL_UNKNOWN;
 	}
-	
 }
 
 ?>

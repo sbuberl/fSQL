@@ -1,30 +1,29 @@
 <?php
 
-define('FSQL_JOIN_INNER',0,TRUE);
-define('FSQL_JOIN_LEFT',1,TRUE);
-define('FSQL_JOIN_RIGHT',2,TRUE);
-define('FSQL_JOIN_FULL',3,TRUE);
+define('FSQL_JOIN_INNER',0,true);
+define('FSQL_JOIN_LEFT',1,true);
+define('FSQL_JOIN_RIGHT',2,true);
+define('FSQL_JOIN_FULL',3,true);
 
-class fSQLParser
+class fSQLStandardParser
 {
 	var $environment;
 	
+	function fSQLStandardParser(&$environment)
+	{
+		$this->environment =& $environment;
+	}
+	
 	function loadQueryClass($command)
 	{
-		return $this->loadExtensionQueryClass($command, null);
+		return $this->loadExtensionQueryClass($command, 'standard');
 	}
 	
 	function loadExtensionQueryClass($command, $extension)
 	{
 		$command = ucfirst($command);
 		$className = 'fSQL'.$command.'Query';
-		if(!class_exists($className))
-		{
-			if($extension === null)
-				require FSQL_INCLUDE_PATH."/queries/$className.php";
-			else
-				require FSQL_EXTENSIONS_PATH."/$extension/queries/$className.php";
-		}
+		fsql_load_class($className, FSQL_FRONTENDS_PATH."/$extension/queries");
 	}
 	
 	function parseCommandName($query)
@@ -33,11 +32,10 @@ class fSQLParser
 		return strtolower($function[0]);
 	}
 	
-	function parse(&$environment, $query)
+	function parse($query)
 	{
-		$this->environment =& $environment;
 		$query = trim($query);
-		$command = fSQLParser::parseCommandName($query);
+		$command = $this->parseCommandName($query);
 		return $this->parseQuery($command, $query);
 	}
 	
@@ -163,9 +161,9 @@ class fSQLParser
 							if($rightExpr === 'NULL')
 								$local_condition = "($leftExpr === null ? FSQL_TRUE : FSQL_FALSE)";
 							else if($rightExpr === 'TRUE')
-								$local_condition = "($leftExpr == true ? FSQL_TRUE : FSQL_FALSE)";
+								$local_condition = "(fSQLTypes::isTrue($leftExpr)) ? FSQL_TRUE : FSQL_FALSE)";
 							else if($rightExpr === 'FALSE')
-								$local_condition = "(in_array($leftExpr, array(0, 0.0, ''), true) ? FSQL_TRUE : FSQL_FALSE)";
+								$local_condition = "(fSQLTypes::isFalse($leftExpr)) ? FSQL_TRUE : FSQL_FALSE)";
 							else
 								return null;
 							break;
@@ -220,6 +218,30 @@ class fSQLParser
 		}
 		return null;
 	}
+	
+	function parseExpression(&$exprStr)
+	{
+		
+		if(preg_match('/\A([^\W\d]\w*)/is', $exprStr, $matches)) {
+			$exprStr = substr($exprStr, strlen($matches[0]));
+			if(preg_match('/\A\s*\(\s*)/is', $exprStr, $matches)) { // function call
+				$exprStr = substr($exprStr, strlen($matches[0]));
+			}
+			else // identifier
+				1;
+		}
+		// number
+		else if(preg_match('/\A(?:[\+\-]\s*)?\d+(?:\.\d+)?/is', $exprStr)) {
+			$expr = $exprStr;
+			$type = strpos($exprStr, '.') === false ? FSQL_TYPE_INTEGER : FSQL_TYPE_FLOAT;
+			$columnData = array('type' => $type, 'default' => null, 'null' => false, 'key' => 'n', 'identity' => null, 'restraint' => array());
+		}
+		// string
+		else if(preg_match("/\A'.*?(?<!\\\\)'/is", $exprStr)) {
+			$expr = $exprStr;
+			$columnData = array('type' => FSQL_TYPE_STRING, 'default' => null, 'null' => false, 'key' => 'n', 'identity' => null, 'restraint' => array());
+		}
+	}
  
 	function buildExpression($exprStr, $join_info, $where_type = FSQL_WHERE_NORMAL)
 	{
@@ -235,35 +257,39 @@ class fSQLParser
 			$paramExprs = array();
 			$expr_type = '"non-constant"';
 			
-			if(isset($this->registered_functions[$function])) {
-				$builtin = false;
-				$type = FSQL_TYPE_STRING; // ?
-				$function_type = FSQL_FUNC_NORMAL;
-			} else {
-				if(!class_exists('fSQLFunctions'))
-					require_once FSQL_INCLUDE_PATH.'/fSQLFunctions.php';
+			if(($function_info = $this->environment->_lookup_function($function)) !== false) {
+				list($function_type, $type, $nullable) = $function_info;
+				$columnData = array('type' => $type, 'default' => null, 'null' => $nullable, 'key' => 'n', 'auto' => false, 'restraint' => array());
 				
-				if(($function_info = fSQLFunctions::getFunctionInfo($function)) !== null) {
-					$builtin = true;
-					list($function_type, $type, $nullable) = $function_info;
-					$columnData = array('type' => $type, 'default' => null, 'null' => $nullable, 'key' => 'n', 'auto' => false, 'restraint' => array());
-					switch($function_type)
-					{
-						case FSQL_FUNC_AGGREGATE:
-							$paramExprs[] = '$group';
-							break;
-						case FSQL_FUNC_ENV:
-							$paramExprs[] = '$this->environment';
-							break;
-					}
+				if($function_type & FSQL_FUNC_AGGREGATE)
+					$paramExprs[] = '$group';
+			}
+			else {
+				$this->_set_error('Call to unknown SQL function');
+				return null;
+			}
+
+			if($function_type & FSQL_FUNC_CUSTOM_PARSE)
+			{
+				$originalFunction = $function;
+				$ucFunction = ucfirst($function);
+				$parseFunction = "parse{$ucFunction}Function";
+				$parsedData = $this->$parseFunction($join_info, $where_type | 1, $params);
+				if($parsedData !== false)
+				{
+					list($function, $paramExprs,) = $parsedData;
+					if(strpos($function, '::') !== false)  // hack to not call fSQLFunctions
+						$function_type = FSQL_FUNC_REGISTERED;
+					if(isset($parsedData[2]))  // used by CAST() to override based on params
+						$columnData['type'] = $parsedData[2];
 				}
-				else {
-					$this->_set_error('Call to unknown SQL function');
+				else
+				{
+					$this->environment->_set_error("Error parsing parameters for function $originalFunction");
 					return null;
 				}
 			}
-
-			if(!empty($params)) {
+			else if(strlen($params) !== 0) {
 				$parameter = explode(',', $params);
 				foreach($parameter as $param) {
 					$param = trim($param);
@@ -306,8 +332,8 @@ class fSQLParser
 			
 			$final_param_list = implode(',', $paramExprs);
 
-			if($builtin)
-				$expr = "fSQLFunctions::$function($final_param_list)";
+			if($function_type !== FSQL_FUNC_REGISTERED)
+				$expr = "\$this->environment->functions->$function($final_param_list)";
 			else
 				$expr = "$function($final_param_list)";
 		}
@@ -620,38 +646,7 @@ class fSQLParser
 							return $this->environment->_set_error("Column '{$name}' redefined");
 						}
 						
-						$type = preg_replace('/\s+/', ' ', strtoupper($type));
-						if(in_array($type, array('CHAR', 'VARCHAR', 'BINARY', 'VARBINARY', 'TEXT', 'TINYTEXT', 'MEDIUMTEXT', 'LONGTEXT', 'SET', 'BLOB', 'TINYBLOB', 'MEDIUMBLOB', 'LONGBLOB'))) {
-							$type = FSQL_TYPE_STRING;
-						} else if(in_array($type, array('BIT','TINYINT', 'SMALLINT','MEDIUMINT','INT','INTEGER','BIGINT'))) {
-							$type = FSQL_TYPE_INTEGER;
-						} else if(in_array($type, array('FLOAT','REAL','DOUBLE','DOUBLE PRECISION','NUMERIC','DEC','DECIMAL'))) {
-							$type = FSQL_TYPE_FLOAT;
-						} else {
-							switch($type)
-							{
-								case 'DATETIME':
-									$type = FSQL_TYPE_DATETIME;
-									break;
-								case 'DATE':
-									$type = FSQL_TYPE_DATE;
-									break;
-								case 'ENUM':
-									$type = FSQL_TYPE_ENUM;
-									break;
-								case 'TIME':
-									$type = FSQL_TYPE_TIME;
-									break;
-								case 'TIMESTAMP':
-									$type = FSQL_TYPE_TIMESTAMP;
-									break;
-								case 'YEAR':
-									$type = FSQL_TYPE_YEAR;
-									break;
-								default:
-									break;
-							}
-						}
+						$type = $this->environment->_typename_to_code($type);
 						
 						$null = (bool) !preg_match("/\s+not\s+null\b/i", $options);
 						
@@ -1010,24 +1005,40 @@ class fSQLParser
 		$tables = array();
 		$simple = true;
 		$distinct = false;
-		$isTableless = false;
-		if(preg_match('/(.+?)\s+(?:WHERE|(?:GROUP|ORDER)\s+BY|LIMIT)\s+(.+?)/is',$query)) {
+		$isTableless = true;
+		
+		/*if(preg_match('/(.+?)\s+(?:WHERE|(?:GROUP|ORDER)\s+BY|LIMIT)\s+(.+?)/is',$query)) {
 			$simple = false;
 			preg_match('/SELECT(?:\s+(ALL|DISTINCT(?:ROW)?))?(\s+RANDOM(?:\((?:\d+)\)?)?\s+|\s+)(.+?)\s+FROM\s+(.+?)\s+(?:WHERE|(?:GROUP|ORDER)\s+BY|LIMIT)\s+/is', $query, $matches);
 			$matches[4] = preg_replace('/(.+?)\s+(WHERE|(?:GROUP|ORDER)\s+BY|LIMIT)\s+(.+?)/is', '\\1', $matches[4]);
 		}
-		else if(preg_match('/SELECT(?:\s+(ALL|DISTINCT(?:ROW)?))?(\s+RANDOM(?:\((?:\d+)\)?)?\s+|\s+)(.*?)\s+FROM\s+(.+)/is', $query, $matches)) { /* I got the matches, do nothing else */ }
+		else if(preg_match('/SELECT(?:\s+(ALL|DISTINCT(?:ROW)?))?(\s+RANDOM(?:\((?:\d+)\)?)?\s+|\s+)(.*?)\s+FROM\s+(.+)/is', $query, $matches)) { }
 		else { preg_match('/SELECT(?:\s+(ALL|DISTINCT(?:ROW)?))?(\s+RANDOM(?:\((?:\d+)\)?)?\s+|\s+)(.*)/is', $query, $matches); $isTableless = true; }
-
+*/
+		if(!preg_match('/SELECT(?:\s+(ALL|DISTINCT(?:ROW)?))?(\s+RANDOM(?:\((?:\d+)\)?)?\s+|\s+)(.*)/is', $query, $matches))
+			return $this->environment->_set_error('Invalid SELECT query');
+		
 		$distinct = strncasecmp($matches[1], 'DISTINCT', 8) === 0;
 		$has_random = $matches[2] !== ' ';
+		
+		$Columns = array();
+		$the_rest = $matches[3];
+		$stop = false;
+		while(!$stop && preg_match("/((?:\A|\s*)((?:(?:-?\d+(?:\.\d+)?)|'.*?(?<!\\\\)'|(?:[^\W\d]\w*\s*\(.*?\))|(?:(?:(?:[^\W\d]\w*)\.)?(?:(?:[^\W\d]\w*)|\*)))(?:\s+(?:AS\s+)?[^\W\d]\w*)?)\s*)(?:\Z|(from|where|having|(:group|order)?\s+by|limit)|,)/is", $the_rest, $ColumnPiece))
+		{
+			$Columns[] = $ColumnPiece[2];
+			$stop = !empty($ColumnPiece[3]);
+			$idx = !$stop ? 0 : 1;
+			$the_rest = substr($the_rest, strlen($ColumnPiece[$idx]));;
+		}
 		
 		//expands the tables and loads their data
 		$joins = array();
 		$joined_info = array( 'tables' => array(), 'offsets' => array(), 'columns' =>array() );
-		if(!$isTableless)
+		if(preg_match('/\AFROM\s+(.+)/is', $the_rest, $from_matches))
 		{
-			$tbls = explode(',', $matches[4]);
+			$isTableless = false;
+			$tbls = explode(',', $from_matches[1]);
 			foreach($tbls as $table_name) {
 				if(preg_match('/\A\s*(`?(?:[^\W\d]\w*`?\.`?){0,2}[^\W\d]\w*`?)(.*)/is', $table_name, $tbl_data)) {
 					list(, $table_name, $the_rest) = $tbl_data;
@@ -1132,20 +1143,17 @@ class fSQLParser
 			}
 		}
 		
-		preg_match_all("/(?:\A|\s*)((?:(?:-?\d+(?:\.\d+)?)|'.*?(?<!\\\\)'|(?:[^\W\d]\w*\s*\(.*?\))|(?:(?:(?:[^\W\d]\w*)\.)?(?:(?:[^\W\d]\w*)|\*)))(?:\s+(?:AS\s+)?[^\W\d]\w*)?)\s*(?:\Z|,)/is", trim($matches[3]), $Columns);
+		//preg_match_all("/(?:\A|\s*)((?:(?:-?\d+(?:\.\d+)?)|'.*?(?<!\\\\)'|(?:[^\W\d]\w*\s*\(.*?\))|(?:(?:(?:[^\W\d]\w*)\.)?(?:(?:[^\W\d]\w*)|\*)))(?:\s+(?:AS\s+)?[^\W\d]\w*)?)\s*(?:\Z|,)/is", trim($matches[3]), $Columns);
 		
 		$oneAggregate = false;
 		$allAggregates = false;
 		$selectedInfo = array();
-		foreach($Columns[1] as $column) {
+		foreach($Columns as $column) {
 			// function call	
 			if(preg_match('/\A(([^\W\d]\w*)\s*\((?:.*?)?\))(?:\s+(?:AS\s+)?([^\W\d]\w*))?\Z/is', $column, $colmatches)) {
 				$function_call = $colmatches[1];
 				$function_name = strtolower($colmatches[2]);
-				if(!class_exists('fSQLFunctions'))
-					require_once FSQL_INCLUDE_PATH.'/fSQLFunctions.php';
-				
-				if(($function_info = fSQLFunctions::getFunctionInfo($function_name)) !== null) {
+				if(($function_info = $this->environment->_lookup_function($function_name)) !== false) {
 					list($function_type, ) = $function_info;
 					if($function_type & FSQL_FUNC_AGGREGATE)
 						$oneAggregate = true;
@@ -1235,53 +1243,50 @@ class fSQLParser
 		$orderby = null;
 		$limit = null;
 		
-		if(!$simple)
-		{
-			if(preg_match('/\s+LIMIT\s+(?:(?:(\d+)\s*,\s*(\-1|\d+))|(\d+))/is', $query, $additional)) {
-				list(, $limit_start, $limit_stop) = $additional;
-				if($additional[3]) { $limit_stop = $additional[3]; $limit_start = 0; }
-				else if($additional[2] != -1) { $limit_stop += $limit_start; }
-				$limit = array($limit_start, $limit_stop);
-			}
-			
-			if(preg_match('/\s+ORDER\s+BY\s+(?:(.*)\s+LIMIT|(.*))?/is', $query, $additional)) {
-				if(!empty($additional[1])) { $ORDERBY = explode(',', $additional[1]); }
-				else { $ORDERBY = explode(',', $additional[2]); }
-				for($i = 0; $i < count($ORDERBY); ++$i) {
-					if(preg_match('/([^\W\d]\w*)(?:\s+(ASC|DESC))?/is', $ORDERBY[$i], $additional)) {
-						$index = array_search($additional[1], $joined_info['columns']);
-						if(empty($additional[2])) { $additional[2] = 'ASC'; }
-						$tosort[] = array('key' => $index, 'ascend' => !strcasecmp('ASC', $additional[2]));
-					}
+		if(preg_match('/\s+LIMIT\s+(?:(?:(\d+)\s*,\s*(\-1|\d+))|(\d+))/is', $query, $additional)) {
+			list(, $limit_start, $limit_stop) = $additional;
+			if(isset($additional[3])) { $limit_stop = (int) $additional[3]; $limit_start = 0; }
+			else if($additional[2] != -1) { $limit_stop += $limit_start; }
+			$limit = array($limit_start, $limit_stop);
+		}
+		
+		if(preg_match('/\s+ORDER\s+BY\s+(?:(.*)\s+LIMIT|(.*))?/is', $query, $additional)) {
+			if(!empty($additional[1])) { $ORDERBY = explode(',', $additional[1]); }
+			else { $ORDERBY = explode(',', $additional[2]); }
+			for($i = 0; $i < count($ORDERBY); ++$i) {
+				if(preg_match('/([^\W\d]\w*)(?:\s+(ASC|DESC))?/is', $ORDERBY[$i], $additional)) {
+					$index = array_search($additional[1], $joined_info['columns']);
+					if(empty($additional[2])) { $additional[2] = 'ASC'; }
+					$tosort[] = array('key' => $index, 'ascend' => !strcasecmp('ASC', $additional[2]));
 				}
-				$orderby = new fSQLOrderByClause($tosort);
 			}
+			$orderby = new fSQLOrderByClause($tosort);
+		}
 
-			if(preg_match('/\s+GROUP\s+BY\s+(?:(.*)\s+(?:HAVING|ORDER\s+BY|LIMIT)|(.*))?/is', $query, $additional)) {
-				$group_clause = !empty($additional[1]) ? $additional[1] : $additional[2];
-				$GROUPBY = explode(',', $group_clause);
-				foreach($GROUPBY as $group_item)
-				{
-					if(preg_match('/([^\W\d]\w*)(?:\s+(ASC|DESC))?/is', $group_item, $additional)) {
-						$index = array_search($additional[1], $joined_info['columns']);
-						if(empty($additional[2])) { $additional[2] = 'ASC'; }
-						$group_list[] = array('key' => $index, 'ascend' => !strcasecmp('ASC', $additional[2]));
-					}
+		if(preg_match('/\s+GROUP\s+BY\s+(?:(.*)\s+(?:HAVING|ORDER\s+BY|LIMIT)|(.*))?/is', $query, $additional)) {
+			$group_clause = !empty($additional[1]) ? $additional[1] : $additional[2];
+			$GROUPBY = explode(',', $group_clause);
+			foreach($GROUPBY as $group_item)
+			{
+				if(preg_match('/([^\W\d]\w*)(?:\s+(ASC|DESC))?/is', $group_item, $additional)) {
+					$index = array_search($additional[1], $joined_info['columns']);
+					if(empty($additional[2])) { $additional[2] = 'ASC'; }
+					$group_list[] = array('key' => $index, 'ascend' => !strcasecmp('ASC', $additional[2]));
 				}
 			}
-			
-			if(preg_match('/\s+HAVING\s+((?:.+)(?:(?:((?:\s+)(?:AND|OR)(?:\s+))?(?:.+)?)*)?)(?:\s+(?:ORDER\s+BY|LIMIT))?/is', $query, $additional)) {
-				$having = $this->buildWhere($additional[1], $joined_info, FSQL_WHERE_HAVING);
-				if(!$having) {
-					return $this->environment->_set_error('Invalid/Unsupported HAVING clause');
-				}
+		}
+		
+		if(preg_match('/\s+HAVING\s+((?:.+)(?:(?:((?:\s+)(?:AND|OR)(?:\s+))?(?:.+)?)*)?)(?:\s+(?:ORDER\s+BY|LIMIT))?/is', $query, $additional)) {
+			$having = $this->buildWhere($additional[1], $joined_info, FSQL_WHERE_HAVING);
+			if(!$having) {
+				return $this->environment->_set_error('Invalid/Unsupported HAVING clause');
 			}
-			
-			if(preg_match('/\s+WHERE\s+((?:.+)(?:(?:((?:\s+)(?:AND|OR)(?:\s+))?(?:.+)?)*)?)(?:\s+(?:(?:GROUP|ORDER)\s+BY|LIMIT))?/is', $query, $first_where)) {
-				$where = $this->buildWhere($first_where[1], $joined_info);
-				if(!$where) {
-					return $this->_set_error('Invalid/Unsupported WHERE clause');
-				}
+		}
+		
+		if(preg_match('/\s+WHERE\s+((?:.+)(?:(?:((?:\s+)(?:AND|OR)(?:\s+))?(?:.+)?)*)?)(?:\s+(?:(?:GROUP|ORDER)\s+BY|LIMIT))?/is', $query, $first_where)) {
+			$where = $this->buildWhere($first_where[1], $joined_info);
+			if(!$where) {
+				return $this->_set_error('Invalid/Unsupported WHERE clause');
 			}
 		}
 		
@@ -1347,6 +1352,145 @@ class fSQLParser
 		} else {
 			return $this->environment->_set_error('Invalid UPDATE query');
 		}
+	}
+
+	function buildParametersInOrder($join_info, $where_type, $paramList)
+	{
+		$params = array();
+		array_shift($paramList);
+		foreach($paramList as $match)
+		{
+			$expr = $this->buildExpression($match, $join_info, $where_type);
+			if($expr === null) // parse error
+				return null;
+			$params[] = $expr['expression'];
+		}
+		return $params;
+	}
+	
+	function parseCastFunction($join_info, $where_type, $paramsStr)
+	{
+		var_dump($paramsStr);
+		if(preg_match("/\A\s*(.*)\s+AS\s+(\w+(?:\s+\w+)*?)\s*(?:\(.*\)\s*)?\Z/is", $paramsStr, $matches))
+		{
+			$type = $this->environment->_typename_to_code($matches[2]);
+			if($type === false)
+				return $this->environment->_set_error("Invalid type in CAST function: {$matches[2]}");
+			$length = isset($matches[3]) ? $matches[3] : null;
+			
+			$expression = $this->buildExpression($matches[1], $join_info, $where_type);
+			if($expression !== null)
+			{				
+				switch($type)
+				{
+					case FSQL_TYPE_FLOAT:
+						$function = 'fSQLTypes::to_float';
+						break;
+					case FSQL_TYPE_INTEGER:
+						$function = 'fSQLTypes::to_int';
+						break;
+					case FSQL_TYPE_NUMERIC:
+						$function = 'fSQLTypes::to_number';
+						break;
+					case FSQL_TYPE_STRING:
+						$function = 'fSQLTypes::to_string';
+						break;
+				}
+				
+				return array($function, array($expression['expression']));
+			}
+		}
+		
+		return $this->environment->_set_error('Error parsing cast() function parameters');
+	}
+	
+	function parseExtractFunction($join_info, $where_type, $paramsStr)
+	{
+		if(preg_match("/\A\s*(\w+)\s+FROM\s+(.+?)\s*\Z/is", $paramsStr, $matches))
+		{
+			$field = strtolower($matches[1]);
+			$field = "'$field'";
+			$expr = $this->buildExpression($matches[2], $join_info, $where_type);
+			if($expr !== null)
+			{
+				return array('extract', array($field, $expr['expression']));
+			}
+		}
+		
+		return $this->environment->_set_error('Error parsing extract() function parameters');
+	}
+	
+	function parseOverlayFunction($join_info, $where_type, $paramsStr)
+	{
+		if(preg_match("/\A\s*(.+?)\s+PLACING\s+(.+?)\s+FROM\s+(.+?)(?:\s+FOR\s+(.+?))?\s*\Z/is", $paramsStr, $matches))
+		{
+			$params = $this->buildParametersInOrder($join_info, $where_type, $matches);
+			return $params !== null ? array('overlay', $params) : false;
+		}
+		else
+			return $this->environment->_set_error('Error parsing overlay() function parameters');
+	}
+	
+	function parsePositionFunction($join_info, $where_type, $params)
+	{
+		if(preg_match("/\A\s*(.+?)\s+IN\s+(.+?)\s*\Z/is", $params, $matches))
+		{
+			$substring = $this->buildExpression($matches[1], $join_info, $where_type);
+			$string = $this->buildExpression($matches[2], $join_info, $where_type);
+			if($substring !== null && $string !== null)
+			{
+				return array('position', array($substring['expression'], $string['expression']));
+			}
+		}
+		
+		return $this->environment->_set_error('Error parsing position() function parameters');
+	}
+	
+	function parseSubstringFunction($join_info, $where_type, $paramsStr)
+	{
+		if(preg_match("/\A\s*(.+?)\s+FROM\s+(.+?)(?:\s+FOR\s+(.+?))?\s*\Z/is", $paramsStr, $matches))
+		{
+			$params = $this->buildParametersInOrder($join_info, $where_type, $matches);
+			return $params !== null ? array('substring', $params) : false;
+		}
+		else
+			return $this->environment->_set_error('Error parsing substring() function parameters');
+	}
+	
+	function parseTrimFunction($join_info, $where_type, $paramsStr)
+	{
+		if(preg_match("/\A\s*(?:(?:(LEADING|TRAILING|BOTH)\s+)?(?:(.+?)\s+)?FROM\s+)?(.+?)\s*\Z/is", $paramsStr, $matches))
+		{
+			switch(strtoupper($matches[1]))
+			{
+				case 'LEADING':
+					$function = 'ltrim';
+					break;
+				case 'TRAILING':
+					$function = 'rtrim';
+					break;
+				default:
+					$function = 'trim';
+					break;
+			}
+			
+			$string = $this->buildExpression($matches[3], $join_info, $where_type);
+			if($string === null)
+				return false;
+			$params = array($string['expression']);
+			
+			if(!empty($matches[2]))
+			{
+				$characters = $this->buildExpression($matches[2], $join_info, $where_type);
+				if($characters === null)
+					return false;
+				$params[] = $characters['expression'];
+			}
+			
+			return array($function, $params);
+		}
+		else
+			return $this->environment->_set_error('Error parsing trim() function parameters');
 	}
 }
 

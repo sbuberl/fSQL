@@ -17,5 +17,12 @@ function fsql_is_a($object, $classname)
 {
 	return $object instanceof $classname;
 }
+
+// Portable wrapper for loading class_exists that does not ever
+// autoload (like PHP 5 does by default)
+function fsql_class_exists($className)
+{
+	return class_exists($className, false);
+}
 	
 ?>

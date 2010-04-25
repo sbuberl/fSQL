@@ -1,7 +1,6 @@
 <?php
 
-if(!class_exists('fSQLStandardDriver'))
-	require FSQL_INCLUDE_PATH.'/drivers/fSQLStandardDriver.php';
+fsql_load_class('fSQLStandardDriver', FSQL_INCLUDE_PATH.'/drivers');
 
 class fSQLLegacyDriver extends fSQLStandardDriver
 {

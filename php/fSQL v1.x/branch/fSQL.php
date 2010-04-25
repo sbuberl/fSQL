@@ -49,13 +49,15 @@ define('FSQL_KEY_NON_UNIQUE', 2, true);
 define('FSQL_KEY_UNIQUE', 4, true);
 define('FSQL_KEY_PRIMARY', 12, true);
 
+define('FSQL_FUNC_REGISTERED', 0, true);
 define('FSQL_FUNC_NORMAL', 1, true);
-define('FSQL_FUNC_AGGREGATE', 2, true);
-define('FSQL_FUNC_ENV', 3, true);
+define('FSQL_FUNC_CUSTOM_PARSE', 2, true);
+define('FSQL_FUNC_BUILTIN_ID', 4, true);
+define('FSQL_FUNC_AGGREGATE', 8, true);
 
-define('FSQL_FORMAT_DATETIME', '%Y-%m-%d %H:%M:%S');
-define('FSQL_FORMAT_DATE', '%Y-%m-%d');
-define('FSQL_FORMAT_TIME', '%H:%M:%S');
+define('FSQL_FORMAT_TIMESTAMP', 'Y-m-d H:i:s');
+define('FSQL_FORMAT_DATE', 'Y-m-d');
+define('FSQL_FORMAT_TIME', 'H:i:s');
 
 define('FSQL_EXTENSION', '.cgi',true);
 
@@ -68,19 +70,19 @@ if(!defined('FSQL_INCLUDE_PATH')) {
 }
 
 /**
- * fSQL library's extensions path is given relatively to FSQL_INCLUDE_PATH.
+ * fSQL library's frontends path is given relatively to FSQL_INCLUDE_PATH.
  */
-define('FSQL_EXTENSIONS_PATH', FSQL_INCLUDE_PATH.'/extensions');
+define('FSQL_FRONTENDS_PATH', FSQL_INCLUDE_PATH.'/frontends');
 
 require FSQL_INCLUDE_PATH.'/fSQLPHPCompat.php';
 require FSQL_INCLUDE_PATH.'/fSQLCursors.php';
-require FSQL_INCLUDE_PATH.'/fSQLParser.php';
 require FSQL_INCLUDE_PATH.'/fSQLQuery.php';
 require FSQL_INCLUDE_PATH.'/fSQLTransactions.php';
 require FSQL_INCLUDE_PATH.'/fSQLUtilities.php';
 require FSQL_INCLUDE_PATH.'/drivers/fSQLBaseDriver.php';
 require FSQL_INCLUDE_PATH.'/drivers/fSQLMemoryDriver.php';
 require FSQL_INCLUDE_PATH.'/drivers/fSQLMasterDriver.php';
+require FSQL_FRONTENDS_PATH.'/standard/fSQLStandardFrontend.php';
 
 /**
  * This class provides a working environment for fSQL mechanisms. Class contains
@@ -174,6 +176,10 @@ class fSQLEnvironment
 	* @var fSQLParser
 	*/
 	var $parser;
+
+	var $functions = null;
+	
+	var $frontend = null;
 	
 	/**
 	 * The default backend driver.
@@ -193,8 +199,26 @@ class fSQLEnvironment
 		list($usec, $sec) = explode(' ', microtime());
 		srand((float) $sec + ((float) $usec * 100000));
 		
-		// create a new parser.
-		$this->parser =& new fSQLParser();
+		$this->set_frontend('standard');
+	}
+	
+	/**
+	* Changes the frontend to use for parsing.  The default
+	* frontend is 'standard'.
+	* @param string $frontend 
+	*/
+	function set_frontend($frontend)
+	{
+		$className = 'fSQL'.ucfirst(strtolower($frontend)).'Frontend';
+		if($this->frontend === null || !fsql_is_a($this->frontend, $className))
+		{
+			// include mysql extension if not exists.
+			fsql_load_class($className, FSQL_FRONTENDS_PATH."/$frontend");
+			$this->frontend =& new $className();
+			$this->parser = null;
+			$this->functions = null;
+		}
+		return true;
 	}
 
 	/**
@@ -207,14 +231,8 @@ class fSQLEnvironment
 	function select_driver($name)
 	{
 		$class_name = 'fSQL'.ucfirst(strtolower($name)).'Driver';
-		if(!class_exists($class_name))
-		{
-			$classFileName = FSQL_INCLUDE_PATH.'/drivers/'.$class_name.'.php';
-			if(file_exists($classFileName))
-				require $classFileName;
-			else
-				return $this->_set_error("No driver class for $name was found");
-		}
+		if(!fsql_load_class($class_name, FSQL_INCLUDE_PATH.'/drivers'))
+			return $this->_set_error("No driver class for $name was found");
 		
 		$driver =& new $class_name();
 		if($driver->isAbstract())
@@ -348,6 +366,8 @@ class fSQLEnvironment
 			$this->affected,
 			$this->insert_id,
 			$this->auto,
+			$this->frontend,
+			$this->functions,
 			$this->parser,
 			$this->resultSets,
 			$this->databases,
@@ -373,28 +393,6 @@ class fSQLEnvironment
 	}
 
 	/**
-	* This method enables and disables MYSQL extension according to value 
-	* of $enable and current parser type. If enable is true and parser is 
-	* not mysql, a mysql parser is created. If enable is false and the parser 
-	* is mysql sql parser is created.
-	* @param bool $enable 
-	*/
-	function enable_mysql_exstensions($enable)
-	{
-		if($enable && !fsql_is_a($this->parser, 'fSQLParserMySQL'))
-		{
-			// include mysql extension if not exists.
-			if(!class_exists('fSQLParserMySQL'))
-				require FSQL_EXTENSIONS_PATH.'/mysql/fSQLParserMySQL.php';
-			$this->parser =& new fSQLParserMySQL($this);
-		}
-		else if(!$enable && fsql_is_a($this->parser, 'fSQLParserMySQL'))
-		{
-			$this->parser =& new fSQLParser($this);
-		}
-	}
-
-	/**
 	* Registers php equivalent of a given sql function. 
 	* @param string $sqlName
 	* @param string $phpName
@@ -404,6 +402,18 @@ class fSQLEnvironment
 	{
 		$this->registered_functions[$sqlName] = $phpName;
 		return true;
+	}
+	
+	function _lookup_function($function)
+	{
+		if(isset($this->environment->registered_functions[$function])) {
+			return array(FSQL_FUNC_REGISTERED, FSQL_TYPE_STRING, true);
+		} else {
+			if(!isset($this->functions))
+				$this->functions =& $this->frontend->createFunctions($this);
+			
+			return $this->functions->getFunctionInfo($function);
+		}
 	}
 
 	/**
@@ -622,7 +632,7 @@ class fSQLEnvironment
 		
 		return $table;
 	}
-	
+
 	/**
 	* Unlocks all locked tables in the environment 
 	* @see fSQLStandardTable::unlock
@@ -695,7 +705,10 @@ class fSQLEnvironment
 		$this->error_msg = null;
 		$this->affected = 0;
 		
-		$command = $this->parser->parse($this, $query);
+		if(!isset($this->parser))
+			$this->parser =& $this->frontend->createParser($this);
+		
+		$command = $this->parser->parse($query);
 		if($command === false)
 			return false;
 		
@@ -1165,6 +1178,35 @@ class fSQLEnvironment
 			case FSQL_TYPE_YEAR:		return 'YEAR';
 			default:					return false;
 		}
+	}
+	
+	function _typename_to_code($type)
+	{
+		$type = preg_replace('/\s+/', ' ', strtoupper($type));
+		if(in_array($type, array('CHAR', 'VARCHAR', 'BINARY', 'VARBINARY', 'TEXT', 'TINYTEXT', 'MEDIUMTEXT', 'LONGTEXT', 'SET', 'BLOB', 'TINYBLOB', 'MEDIUMBLOB', 'LONGBLOB'))) {
+			return FSQL_TYPE_STRING;
+		} else if(in_array($type, array('BIT','TINYINT', 'SMALLINT','MEDIUMINT','INT','INTEGER','BIGINT'))) {
+			return FSQL_TYPE_INTEGER;
+		} else if(in_array($type, array('FLOAT','REAL','DOUBLE','DOUBLE PRECISION','NUMERIC','DEC','DECIMAL'))) {
+			return FSQL_TYPE_FLOAT;
+		} else {
+			switch($type)
+			{
+				case 'DATETIME':
+					return FSQL_TYPE_DATETIME;
+				case 'DATE':
+					return FSQL_TYPE_DATE;
+				case 'ENUM':
+					return FSQL_TYPE_ENUM;
+				case 'TIME':
+					return FSQL_TYPE_TIME;
+				case 'TIMESTAMP':
+					return FSQL_TYPE_TIMESTAMP;
+				case 'YEAR':
+					return FSQL_TYPE_YEAR;
+			}
+		}
+		return false;
 	}
 }
 

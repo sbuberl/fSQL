@@ -60,8 +60,7 @@ class fSQLUpdateQuery extends fSQLDMLQuery
 			$new_value = $this->environment->_parse_value($columns[$column], $value);
 			if($new_value === false)
 				return $this->environment->_set_error('Unknown value: '.$value);
-			if(is_string($new_value))
-				$new_value = $this->environment->_prep_for_insert($new_value);
+			$new_value = $this->environment->_prep_for_insert($new_value);
 			$col_index = $col_indicies[$column];
 			$updates[$col_index] = "$col_index => $new_value";
 		}
