@@ -1035,7 +1035,7 @@ class fSQLStandardParser
 		//expands the tables and loads their data
 		$joins = array();
 		$joined_info = array( 'tables' => array(), 'offsets' => array(), 'columns' =>array() );
-		if(preg_match('/\AFROM\s+(.+)/is', $the_rest, $from_matches))
+		if(preg_match('/\Afrom\s+(.+)\s*(?:\Z|\b(from|where|having|(:group|order)?\s+by|limit)\b)?/is', $the_rest, $from_matches))
 		{
 			$isTableless = false;
 			$tbls = explode(',', $from_matches[1]);
@@ -1283,10 +1283,10 @@ class fSQLStandardParser
 			}
 		}
 		
-		if(preg_match('/\s+WHERE\s+((?:.+)(?:(?:((?:\s+)(?:AND|OR)(?:\s+))?(?:.+)?)*)?)(?:\s+(?:(?:GROUP|ORDER)\s+BY|LIMIT))?/is', $query, $first_where)) {
+		if(preg_match('/\s+WHERE\s+((?:.+)(?:(?:((?:\s+)(?:AND|OR)(?:\s+))?(?:.+)?)*)?)(?:\s+(?:HAVING|(?:GROUP|ORDER)\s+BY|LIMIT))?/is', $query, $first_where)) {
 			$where = $this->buildWhere($first_where[1], $joined_info);
 			if(!$where) {
-				return $this->_set_error('Invalid/Unsupported WHERE clause');
+				return $this->environment->_set_error('Invalid/Unsupported WHERE clause');
 			}
 		}
 		
