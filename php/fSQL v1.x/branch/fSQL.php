@@ -33,15 +33,15 @@ define('FSQL_WHERE_HAVING_AGG',9,true);
 
 define('FSQL_TYPE_BOOLEAN','b',true);
 define('FSQL_TYPE_DATE','d',true);
-define('FSQL_TYPE_DATETIME','dt',true);
 define('FSQL_TYPE_ENUM','e',true);
 define('FSQL_TYPE_FLOAT','f',true);
 define('FSQL_TYPE_INTEGER','i',true);
 define('FSQL_TYPE_NUMERIC','n',true);
 define('FSQL_TYPE_STRING','s',true);
 define('FSQL_TYPE_TIME','t',true);
+define('FSQL_TYPE_TIME_WITH_TZ','T',true);
 define('FSQL_TYPE_TIMESTAMP','ts',true);
-define('FSQL_TYPE_YEAR','y',true);
+define('FSQL_TYPE_TIMESTAMP_WITH_TZ','TS',true);
 
 define('FSQL_KEY_NONE', 0, true);
 define('FSQL_KEY_NULLABLE', 1, true);
@@ -1167,46 +1167,25 @@ class fSQLEnvironment
 	{
 		switch($type)
 		{
-			case FSQL_TYPE_DATE:		return 'DATE';
-			case FSQL_TYPE_DATETIME:	return 'DATETIME';
-			case FSQL_TYPE_ENUM:		return 'ENUM';
-			case FSQL_TYPE_FLOAT:		return 'DOUBLE';
-			case FSQL_TYPE_INTEGER:		return 'INTEGER';
-			case FSQL_TYPE_STRING:		return 'TEXT';
-			case FSQL_TYPE_TIME:		return 'TIME';
-			case FSQL_TYPE_TIMESTAMP:	return 'TIMESTAMP';
-			case FSQL_TYPE_YEAR:		return 'YEAR';
-			default:					return false;
+			case FSQL_TYPE_BOOLEAN:				return 'BOOLEAN';
+			case FSQL_TYPE_DATE:				return 'DATE';
+			case FSQL_TYPE_ENUM:				return 'ENUM';
+			case FSQL_TYPE_FLOAT:				return 'DOUBLE';
+			case FSQL_TYPE_INTEGER:				return 'INTEGER';
+			case FSQL_TYPE_STRING:				return 'TEXT';
+			case FSQL_TYPE_TIME:				return 'TIME';
+			case FSQL_TYPE_TIME_WITH_TZ:		return 'TIME WITH TIME ZONE';
+			case FSQL_TYPE_TIMESTAMP:			return 'TIMESTAMP';
+			case FSQL_TYPE_TIMESTAMP_WITH_TZ:	return 'TIMESTAMP WITH TIME ZONE';
+			default:							return false;
 		}
 	}
 	
 	function _typename_to_code($type)
 	{
 		$type = preg_replace('/\s+/', ' ', strtoupper($type));
-		if(in_array($type, array('CHAR', 'VARCHAR', 'BINARY', 'VARBINARY', 'TEXT', 'TINYTEXT', 'MEDIUMTEXT', 'LONGTEXT', 'SET', 'BLOB', 'TINYBLOB', 'MEDIUMBLOB', 'LONGBLOB'))) {
-			return FSQL_TYPE_STRING;
-		} else if(in_array($type, array('BIT','TINYINT', 'SMALLINT','MEDIUMINT','INT','INTEGER','BIGINT'))) {
-			return FSQL_TYPE_INTEGER;
-		} else if(in_array($type, array('FLOAT','REAL','DOUBLE','DOUBLE PRECISION','NUMERIC','DEC','DECIMAL'))) {
-			return FSQL_TYPE_FLOAT;
-		} else {
-			switch($type)
-			{
-				case 'DATETIME':
-					return FSQL_TYPE_DATETIME;
-				case 'DATE':
-					return FSQL_TYPE_DATE;
-				case 'ENUM':
-					return FSQL_TYPE_ENUM;
-				case 'TIME':
-					return FSQL_TYPE_TIME;
-				case 'TIMESTAMP':
-					return FSQL_TYPE_TIMESTAMP;
-				case 'YEAR':
-					return FSQL_TYPE_YEAR;
-			}
-		}
-		return false;
+		$types = $this->frontend->getTypes();
+		return isset($types[$type]) ? $types[$type] : false;
 	}
 }
 

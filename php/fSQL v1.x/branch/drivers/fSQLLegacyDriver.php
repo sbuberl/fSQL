@@ -82,7 +82,6 @@ class fSQLLegacyTableDef extends fSQLStandardTableDef
 				case FSQL_TYPE_INTEGER:
 				case FSQL_TYPE_ENUM:
 				case FSQL_TYPE_TIMESTAMP:
-				case FSQL_TYPE_YEAR:
 					$typeMatch = '-?\d+';
 					$translateCode =  "((int) \$entry[$i])";
 					break;

@@ -71,6 +71,11 @@ class fSQLStandardParser
 		}
 	}
 	
+	function getTypeParseRegex()
+	{
+		return 'TEXT|BLOB|VAR(?:CHAR|BINARY)|N?CLOB|NVARCHAR|(?:(?:NATIONAL\s+)?CHARACTER|N?CHAR|BINARY)(?:\s+(?:LARGE\s+OBJECT|VARYING))?|INT(?:EGER)?|(?:SMALL|BIG)INT|FLOAT|REAL|DOUBLE(?:\s+PRECISION)?|BIT|BOOLEAN|DEC(?:IMAL)?|NUMERIC|DATE|TIME(?:STAMP)?(?:\s+WITH(?:OUT)?\s+TIME\s+ZONE)?|ENUM';
+	}
+	
 	function buildWhere($statement, $join_info, $where_type = FSQL_WHERE_NORMAL)
 	{
 		if($statement) {
@@ -153,7 +158,7 @@ class fSQLStandardParser
 								$local_condition = "(($leftExpr <= $rightExpr) ? FSQL_TRUE : FSQL_FALSE)";
 							break;
 						case '<=>':
-							$local_condition .= "(($leftExpr == $rightExpr) ? FSQL_TRUE : FSQL_FALSE)";
+							$local_condition = "(($leftExpr == $rightExpr) ? FSQL_TRUE : FSQL_FALSE)";
 							break;
 						case 'IS NOT':
 							$not = !$not;
@@ -161,9 +166,9 @@ class fSQLStandardParser
 							if($rightExpr === 'NULL')
 								$local_condition = "($leftExpr === null ? FSQL_TRUE : FSQL_FALSE)";
 							else if($rightExpr === 'TRUE')
-								$local_condition = "(fSQLTypes::isTrue($leftExpr)) ? FSQL_TRUE : FSQL_FALSE)";
+								$local_condition = "(fSQLTypes::isTrue($leftExpr) ? FSQL_TRUE : FSQL_FALSE)";
 							else if($rightExpr === 'FALSE')
-								$local_condition = "(fSQLTypes::isFalse($leftExpr)) ? FSQL_TRUE : FSQL_FALSE)";
+								$local_condition = "(fSQLTypes::isFalse($leftExpr) ? FSQL_TRUE : FSQL_FALSE)";
 							else
 								return null;
 							break;
@@ -221,7 +226,6 @@ class fSQLStandardParser
 	
 	function parseExpression(&$exprStr)
 	{
-		
 		if(preg_match('/\A([^\W\d]\w*)/is', $exprStr, $matches)) {
 			$exprStr = substr($exprStr, strlen($matches[0]));
 			if(preg_match('/\A\s*\(\s*)/is', $exprStr, $matches)) { // function call
@@ -580,8 +584,8 @@ class fSQLStandardParser
 			$temporary = !empty($temporary);			
 
 			if(!isset($matches[5])) {
-				preg_match_all('/(?:(?:CONSTRAINT\s+(?:([^\W\d]\w*)\s+)?)?(KEY|INDEX|PRIMARY\s+KEY|UNIQUE)(?:\s+([^\W\d]\w*))?\s*\(\s*(.+?)\s*\))|(?:`?([^\W\d]\w*?)`?(?:\s+((?:TINY|MEDIUM|LONG)?(?:TEXT|BLOB)|(?:VAR)?(?:CHAR|BINARY)|INTEGER|(?:TINY|SMALL|MEDIUM|BIG)?INT|FLOAT|REAL|DOUBLE(?:\s+PRECISION)?|BIT|BOOLEAN|DEC(?:IMAL)?|NUMERIC|DATE(?:TIME)?|TIME(?:STAMP)?|YEAR|ENUM|SET)(?:\((.+?)\))?)(\s+GENERATED\s+(?:BY\s+DEFAULT|ALWAYS)\s+AS\s+IDENTITY(?:\s*\(.*?\))?)?(.*?)?(?:,|\)|$))/is', trim($column_list), $Columns, PREG_SET_ORDER);
-
+				$typesRegex = $this->getTypeParseRegex();
+				preg_match_all("/(?:(?:CONSTRAINT\s+(?:([^\W\d]\w*)\s+)?)?(KEY|INDEX|PRIMARY\s+KEY|UNIQUE)(?:\s+([^\W\d]\w*))?\s*\(\s*(.+?)\s*\))|(?:`?([^\W\d]\w*?)`?(?:\s+({$typesRegex})(?:\((.+?)\))?)(\s+GENERATED\s+(?:BY\s+DEFAULT|ALWAYS)\s+AS\s+IDENTITY(?:\s*\(.*?\))?)?(.*?)?(?:,|\)|\$))/is", trim($column_list), $Columns, PREG_SET_ORDER);
 				if(!$Columns) {
 					return $this->environment->_set_error('Parsing error in CREATE TABLE query');
 				}
@@ -638,7 +642,7 @@ class fSQLStandardParser
 					else
 					{
 						$name = $Column[5];
-						$type = $Column[6];
+						$typeName = $Column[6];
 						$generated = $Column[8];
 						$options =  $Column[9];
 						
@@ -646,7 +650,9 @@ class fSQLStandardParser
 							return $this->environment->_set_error("Column '{$name}' redefined");
 						}
 						
-						$type = $this->environment->_typename_to_code($type);
+						$type = $this->environment->_typename_to_code($typeName);
+						if($type === false)
+							return $this->environment->_set_error("Unsupported data type: $typeName");
 						
 						$null = (bool) !preg_match("/\s+not\s+null\b/i", $options);
 						
@@ -799,7 +805,7 @@ class fSQLStandardParser
 	
 	function parseDelete($query)
 	{
-		if(preg_match('/\ADELETE\s+FROM\s+(`?(?:[^\W\d]\w*`?\.`?){0,2}[^\W\d]\w*`?)(?:\s+(WHERE\s+.+))?\s*[;]?\Z/is', $query, $matches))
+		if(preg_match('/\ADELETE\s+FROM\s+(`?(?:[^\W\d]\w*`?\.`?){0,2}[^\W\d]\w*`?)(?:\s+WHERE\s+(.+))?\s*[;]?\Z/is', $query, $matches))
 		{
 			$table_name_pieces = $this->environment->_parse_table_name($matches[1]);
 			$table =& $this->environment->_find_table($table_name_pieces);
@@ -812,9 +818,9 @@ class fSQLStandardParser
 			$columnNames = array_keys($columns);
 			
 			$where = null;
-			if(isset($matches[2]) && preg_match('/^WHERE\s+((?:.+)(?:(?:(?:\s+(AND|OR)\s+)?(?:.+)?)*)?)/i', $matches[2], $first_where))
+			if(isset($matches[2]))
 			{
-				$where = $this->buildWhere($first_where[1], array('tables' => array($table_name => $columns), 'offsets' => array($table_name => 0), 'columns' => $columnNames));
+				$where = $this->buildWhere($matches[2], array('tables' => array($table_name => $columns), 'offsets' => array($table_name => 0), 'columns' => $columnNames));
 				if(!$where) {
 					return $this->environment->_set_error('Invalid/Unsupported WHERE clause');
 				}
@@ -1015,7 +1021,7 @@ class fSQLStandardParser
 		else if(preg_match('/SELECT(?:\s+(ALL|DISTINCT(?:ROW)?))?(\s+RANDOM(?:\((?:\d+)\)?)?\s+|\s+)(.*?)\s+FROM\s+(.+)/is', $query, $matches)) { }
 		else { preg_match('/SELECT(?:\s+(ALL|DISTINCT(?:ROW)?))?(\s+RANDOM(?:\((?:\d+)\)?)?\s+|\s+)(.*)/is', $query, $matches); $isTableless = true; }
 */
-		if(!preg_match('/SELECT(?:\s+(ALL|DISTINCT(?:ROW)?))?(\s+RANDOM(?:\((?:\d+)\)?)?\s+|\s+)(.*)/is', $query, $matches))
+		if(!preg_match('/SELECT(?:\s+(ALL|DISTINCT(?:ROW)?))?(\s+RANDOM(?:\((?:\d+)\)?)?\s+|\s+)(.*)\s*[;]?\Z/is', $query, $matches))
 			return $this->environment->_set_error('Invalid SELECT query');
 		
 		$distinct = strncasecmp($matches[1], 'DISTINCT', 8) === 0;
@@ -1035,13 +1041,15 @@ class fSQLStandardParser
 		//expands the tables and loads their data
 		$joins = array();
 		$joined_info = array( 'tables' => array(), 'offsets' => array(), 'columns' =>array() );
-		if(preg_match('/\Afrom\s+(.+)\s*(?:\Z|\b(from|where|having|(:group|order)?\s+by|limit)\b)?/is', $the_rest, $from_matches))
+		if(preg_match('/\Afrom\s+(.+?)(\s+(?:where|having|(:group|order)?\s+by|limit|fetch)\s+(?:.+))?\s*\Z/is', $the_rest, $from_matches))
 		{
 			$isTableless = false;
+			if(isset($from_matches[2]))
+				$the_rest = $from_matches[2];
 			$tbls = explode(',', $from_matches[1]);
 			foreach($tbls as $table_name) {
 				if(preg_match('/\A\s*(`?(?:[^\W\d]\w*`?\.`?){0,2}[^\W\d]\w*`?)(.*)/is', $table_name, $tbl_data)) {
-					list(, $table_name, $the_rest) = $tbl_data;
+					list(, $table_name, $table_unparsed) = $tbl_data;
 					
 					$table_name_pieces = $this->environment->_parse_table_name($table_name);
 					$table =& $this->environment->_find_table($table_name_pieces);
@@ -1050,9 +1058,9 @@ class fSQLStandardParser
 					
 					$saveas = $table->getFullName();
 
-					if(preg_match('/\A\s+(?:AS\s+)?([^\W\d]\w*)(.*)/is', $the_rest, $alias_data)) {
+					if(preg_match('/\A\s+(?:AS\s+)?([^\W\d]\w*)(.*)/is', $table_unparsed, $alias_data)) {
 						if(!in_array(strtolower($alias_data[1]), array('natural', 'left', 'right', 'full', 'outer', 'cross', 'inner')))
-							list(, $saveas, $the_rest) = $alias_data;
+							list(, $saveas, $table_unparsed) = $alias_data;
 					}
 				} else {
 					return $this->environment->_set_error('Invalid table list');
@@ -1070,8 +1078,8 @@ class fSQLStandardParser
 				$joined_info['offsets'][$saveas] = count($joined_info['columns']);
 				$joined_info['columns'] = array_merge($joined_info['columns'], array_keys($table_columns));
 
-				if(!empty($the_rest)) {
-					preg_match_all('/((?:(?:NATURAL\s+)?(?:LEFT|RIGHT|FULL)(?:\s+OUTER)?|NATURAL|INNER|CROSS)\s+)?JOIN\s+(`?(?:[^\W\d]\w*`?\.`?){0,2}[^\W\d]\w*`?)(?:\s+(?:AS\s+)?([^\W\d]\w*)(?=\s*\Z|\s+(?:USING|ON|INNER|NATURAL|CROSS|LEFT|RIGHT|FULL|JOIN)))?(?:\s+(USING|ON)\s*(?:(?:\((.*?)\))|(?:(?:\()?((?:\S+)\s*=\s*(?:\S+)(?:\))?))))?/is', $the_rest, $join);
+				if(!empty($table_unparsed)) {
+					preg_match_all('/((?:(?:NATURAL\s+)?(?:LEFT|RIGHT|FULL)(?:\s+OUTER)?|NATURAL|INNER|CROSS)\s+)?JOIN\s+(`?(?:[^\W\d]\w*`?\.`?){0,2}[^\W\d]\w*`?)(?:\s+(?:AS\s+)?([^\W\d]\w*)(?=\s*\Z|\s+(?:USING|ON|INNER|NATURAL|CROSS|LEFT|RIGHT|FULL|JOIN)))?(?:\s+(USING|ON)\s*(?:(?:\((.*?)\))|(?:(?:\()?((?:\S+)\s*=\s*(?:\S+)(?:\))?))))?/is', $table_unparsed, $join);
 					$numJoins = count($join[0]);
 					for($i = 0; $i < $numJoins; ++$i) {
 						$join_name = strtoupper($join[1][$i]);
@@ -1243,51 +1251,69 @@ class fSQLStandardParser
 		$orderby = null;
 		$limit = null;
 		
-		if(preg_match('/\s+LIMIT\s+(?:(?:(\d+)\s*,\s*(\-1|\d+))|(\d+))/is', $query, $additional)) {
-			list(, $limit_start, $limit_stop) = $additional;
-			if(isset($additional[3])) { $limit_stop = (int) $additional[3]; $limit_start = 0; }
-			else if($additional[2] != -1) { $limit_stop += $limit_start; }
-			$limit = array($limit_start, $limit_stop);
+		if(preg_match('/\s+WHERE\s+((?:.+?)(?:(?:(?:(?:\s+)(?:AND|OR)(?:\s+))?(?:.+?)?)*?)?)(\s+(?:HAVING|(?:GROUP|ORDER)\s+BY|LIMIT|FETCH).*)?\Z/is', $query, $additional)) {
+			$the_rest = isset($additional[2]) ? $additional[2] : '';
+			$where = $this->buildWhere($additional[1], $joined_info);
+			if(!$where) 
+				return $this->environment->_set_error('Invalid/Unsupported WHERE clause');
 		}
 		
-		if(preg_match('/\s+ORDER\s+BY\s+(?:(.*)\s+LIMIT|(.*))?/is', $query, $additional)) {
-			if(!empty($additional[1])) { $ORDERBY = explode(',', $additional[1]); }
-			else { $ORDERBY = explode(',', $additional[2]); }
-			for($i = 0; $i < count($ORDERBY); ++$i) {
-				if(preg_match('/([^\W\d]\w*)(?:\s+(ASC|DESC))?/is', $ORDERBY[$i], $additional)) {
-					$index = array_search($additional[1], $joined_info['columns']);
-					if(empty($additional[2])) { $additional[2] = 'ASC'; }
-					$tosort[] = array('key' => $index, 'ascend' => !strcasecmp('ASC', $additional[2]));
-				}
-			}
-			$orderby = new fSQLOrderByClause($tosort);
-		}
-
-		if(preg_match('/\s+GROUP\s+BY\s+(?:(.*)\s+(?:HAVING|ORDER\s+BY|LIMIT)|(.*))?/is', $query, $additional)) {
-			$group_clause = !empty($additional[1]) ? $additional[1] : $additional[2];
-			$GROUPBY = explode(',', $group_clause);
+		if(preg_match('/\s+GROUP\s+BY\s+(.*?)(\s+(?:HAVING|ORDER\s+BY|LIMIT|FETCH).*)?\Z/is', $the_rest, $additional)) {
+			$the_rest = isset($additional[2]) ? $additional[2] : '';
+			$GROUPBY = explode(',', $additional[1]);
 			foreach($GROUPBY as $group_item)
 			{
 				if(preg_match('/([^\W\d]\w*)(?:\s+(ASC|DESC))?/is', $group_item, $additional)) {
 					$index = array_search($additional[1], $joined_info['columns']);
-					if(empty($additional[2])) { $additional[2] = 'ASC'; }
-					$group_list[] = array('key' => $index, 'ascend' => !strcasecmp('ASC', $additional[2]));
+					$ascend = !empty($additional[2]) ? !strcasecmp('ASC', $additional[2]) : true;
+					$group_list[] = array('key' => $index, 'ascend' => $ascend);
 				}
 			}
 		}
-		
-		if(preg_match('/\s+HAVING\s+((?:.+)(?:(?:((?:\s+)(?:AND|OR)(?:\s+))?(?:.+)?)*)?)(?:\s+(?:ORDER\s+BY|LIMIT))?/is', $query, $additional)) {
+
+		if(preg_match('/\s+HAVING\s+((?:.+?)(?:(?:(?:(?:\s+)(?:AND|OR)(?:\s+))?(?:.+?)?)*?)?)(?:\s+(?:ORDER\s+BY|LIMIT|FETCH).*)?\Z/is', $the_rest, $additional)) {
+			$the_rest = isset($additional[2]) ? $additional[2] : '';
 			$having = $this->buildWhere($additional[1], $joined_info, FSQL_WHERE_HAVING);
 			if(!$having) {
 				return $this->environment->_set_error('Invalid/Unsupported HAVING clause');
 			}
 		}
-		
-		if(preg_match('/\s+WHERE\s+((?:.+)(?:(?:((?:\s+)(?:AND|OR)(?:\s+))?(?:.+)?)*)?)(?:\s+(?:HAVING|(?:GROUP|ORDER)\s+BY|LIMIT))?/is', $query, $first_where)) {
-			$where = $this->buildWhere($first_where[1], $joined_info);
-			if(!$where) {
-				return $this->environment->_set_error('Invalid/Unsupported WHERE clause');
+
+		if(preg_match('/\s+ORDER\s+BY\s+(.*?)(\s+(?:LIMIT|FETCH).*)?\Z/is', $the_rest, $additional)) {
+			$the_rest = isset($additional[2]) ? $additional[2] : '';
+			$ORDERBY = explode(',', $additional[1]);
+			foreach($ORDERBY as $order_item) {
+				if(preg_match('/([^\W\d]\w*)(?:\s+(ASC|DESC))?/is', $order_item, $additional)) {
+					$index = array_search($additional[1], $joined_info['columns']);
+					$ascend = !empty($additional[2]) ? !strcasecmp('ASC', $additional[2]) : true;
+					$tosort[] = array('key' => $index, 'ascend' => $ascend);
+				}
 			}
+			$orderby = new fSQLOrderByClause($tosort);
+		}
+
+		if(preg_match('/\s+FETCH\s+FIRST\s+(?:(\d+)\s+)?ROWS?\s+ONLY\b/is', $the_rest, $additional)) {
+			$limit_stop = isset($additional[1]) ? (int) $additional[1] : 1;
+			$limit = array(0, $limit_stop);
+		}
+		
+		if(preg_match('/\s+LIMIT\s+(?:(?:(\d+)\s*,\s*(\-1|\d+))|(?:(\d+)\s+OFFSET\s+(\d+))|(\d+))/is', $the_rest, $additional)) {
+			if($limit === null) {
+				// LIMIT length
+				if(isset($additional[5])) {
+					$limit_stop = (int) $additional[5]; $limit_start = 0;
+				}
+				// LIMIT length OFFSET offset (mySQL, Postgres, SQLite)
+				else if(isset($additional[3]))
+					list(, $limit_stop, $limit_start) = $additional;
+				// LIMIT offset, length (mySQL, SQLite)
+				else
+					list(, $limit_start, $limit_stop) = $additional;
+				
+				$limit = array((int) $limit_start, (int) $limit_stop);
+			}
+			else
+				return $this->environment->_set_error('LIMIT forbidden when FETCH FIRST already specified');
 		}
 		
 		// Used aggregate function in SELECT ... FROM table
@@ -1311,11 +1337,10 @@ class fSQLStandardParser
 	
 	function parseUpdate($query)
 	{
-		if(preg_match('/\AUPDATE(?:\s+(IGNORE))?\s+(`?(?:[^\W\d]\w*`?\.`?){0,2}[^\W\d]\w*`?)\s+SET\s+(.*)(?:\s+WHERE\s+.+)?\s*[;]?\Z/is', $query, $matches)) {
+		if(preg_match('/\AUPDATE(?:\s+(IGNORE))?\s+(`?(?:[^\W\d]\w*`?\.`?){0,2}[^\W\d]\w*`?)\s+SET\s+(.+?)(?:\s+WHERE\s+(.+))?\s*[;]?\Z/is', $query, $matches)) {
 			list(, $ignore, $table_name, $set_clause) = $matches;
 			$ignore = !empty($ignore);
-			$set_clause = preg_replace('/(.+?)(\s+WHERE\s+)(.*)/is', '\\1', $set_clause);
-
+			
 			$table_name_pieces = $this->environment->_parse_table_name($table_name);
 			$table =& $this->environment->_find_table($table_name_pieces);
 			if($table === false) {
@@ -1339,9 +1364,9 @@ class fSQLStandardParser
 				$SET[0] =  preg_split('/\s*=\s*/', $set_clause);
 
 			$where = null;
-			if(preg_match('/\s+WHERE\s+((?:.+)(?:(?:(?:\s+(AND|OR)\s+)?(?:.+)?)*)?)/is', $query, $sets))
+			if(isset($matches[4]))
 			{
-				$where = $this->buildWhere($sets[1], array('tables' => array($table_name => $columns), 'offsets' => array($table_name => 0), 'columns' => $columnNames));
+				$where = $this->buildWhere($matches[4], array('tables' => array($table_name => $columns), 'offsets' => array($table_name => 0), 'columns' => $columnNames));
 				if(!$where) {
 					return $this->environment->_set_error('Invalid/Unsupported WHERE clause');
 				}
@@ -1370,7 +1395,6 @@ class fSQLStandardParser
 	
 	function parseCastFunction($join_info, $where_type, $paramsStr)
 	{
-		var_dump($paramsStr);
 		if(preg_match("/\A\s*(.*)\s+AS\s+(\w+(?:\s+\w+)*?)\s*(?:\(.*\)\s*)?\Z/is", $paramsStr, $matches))
 		{
 			$type = $this->environment->_typename_to_code($matches[2]);

@@ -16,6 +16,32 @@ class fSQLMysqlFrontend extends fSQLStandardFrontend
 		$parser =& new fSQLMysqlParser($env);
 		return $parser;
 	}
+	
+	function getTypes()
+	{
+		static $types = null;
+		if($types === null)
+		{
+			$types = array_merge(parent::getTypes(), array(
+				'TINYTEXT' => FSQL_TYPE_STRING,
+				'MEDIUMTEXT' => FSQL_TYPE_STRING,
+				'LONGTEXT' => FSQL_TYPE_STRING,
+				
+				'SET' => FSQL_TYPE_STRING,
+				
+				'TINYBLOB' => FSQL_TYPE_STRING,
+				'MEDIUMBLOB' => FSQL_TYPE_STRING,
+				'LONGBLOB' => FSQL_TYPE_STRING,
+				
+				'TINYINT' => FSQL_TYPE_INTEGER,
+				'MEDIUMINT' => FSQL_TYPE_INTEGER,
+				
+				'DATETIME' => FSQL_TYPE_TIMESTAMP,
+				'YEAR' => FSQL_TYPE_INTEGER
+			));
+		}
+		return $types;
+	}
 }
 
 ?>

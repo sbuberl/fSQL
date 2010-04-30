@@ -19,6 +19,7 @@ class fSQLStandardFunctions
 			'ceiling' => array(FSQL_FUNC_NORMAL, FSQL_TYPE_INTEGER, true),
 			'count' => array(FSQL_FUNC_AGGREGATE, FSQL_TYPE_INTEGER, false),
 			'char_length' => array(FSQL_FUNC_NORMAL, FSQL_TYPE_INTEGER, true),
+			'coalesce' => array(FSQL_FUNC_NORMAL, FSQL_TYPE_STRING, true),
 			'concat' => array(FSQL_FUNC_NORMAL, FSQL_TYPE_STRING, true),
 			'current_catalog' => array(FSQL_FUNC_NORMAL, FSQL_TYPE_STRING, true),
 			'current_date' => array(FSQL_FUNC_NORMAL, FSQL_TYPE_DATE, false),
@@ -36,6 +37,7 @@ class fSQLStandardFunctions
 			'max' => array(FSQL_FUNC_AGGREGATE, FSQL_TYPE_FLOAT, true),
 			'min' => array(FSQL_FUNC_AGGREGATE, FSQL_TYPE_FLOAT, true),
 			'mod' => array(FSQL_FUNC_NORMAL, FSQL_TYPE_NUMERIC, true),
+			'nullif' => array(FSQL_FUNC_NORMAL, FSQL_TYPE_STRING, true),
 			'overlay' => array(FSQL_FUNC_CUSTOM_PARSE, FSQL_TYPE_STRING, true),
 			'position' => array(FSQL_FUNC_CUSTOM_PARSE, FSQL_TYPE_INTEGER, true),
 			'power' => array(FSQL_FUNC_NORMAL, FSQL_TYPE_FLOAT, true),
@@ -78,6 +80,26 @@ class fSQLStandardFunctions
 	function version()
 	{
 		return FSQL_VERSION;
+	}
+	
+
+	function coalesce()
+	{
+		$args = func_get_args();
+		foreach($args as $arg)
+		{
+			if($arg !== null)
+				return $arg;
+		}
+		return null;
+	}
+	
+	function nullif($arg1, $arg2)
+	{
+		if($arg1 !== null && $arg2 !== null)
+			return $arg1 == $arg2 ? $arg1 : null;
+		else
+			return null;
 	}
 	
 	/////Math Functions

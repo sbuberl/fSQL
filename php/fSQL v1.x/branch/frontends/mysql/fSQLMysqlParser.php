@@ -7,6 +7,11 @@ class fSQLParserMySQL extends fSQLParser
 		return $this->loadExtensionQueryClass($command, 'mysql');
 	}
 	
+	function getTypeParseRegex()
+	{
+		return '(?:TINY|MEDIUM|LONG)(?:TEXT|BLOB)|(?:TINY|MEDIUM)INT|DATETIME|YEAR|SET'.parent::getTypeParseRegex();
+	}
+	
 	function parseQuery($command, $query)
 	{
 		switch($command)

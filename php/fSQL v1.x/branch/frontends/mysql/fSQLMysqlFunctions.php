@@ -28,7 +28,7 @@ class fSQLMysqlFunctions extends fSQLStandardFunctions
 			'field' => array(FSQL_FUNC_NORMAL, FSQL_TYPE_STRING, true),
 			'find_in_set' => array(FSQL_FUNC_NORMAL, FSQL_TYPE_STRING, true),
 			'format' => array(FSQL_FUNC_NORMAL, FSQL_TYPE_STRING, true),
-			'from_unixtime' => array(FSQL_FUNC_NORMAL, FSQL_TYPE_DATETIME, true),
+			'from_unixtime' => array(FSQL_FUNC_NORMAL, FSQL_TYPE_TIMESTAMP, true),
 			'hex' => array(FSQL_FUNC_NORMAL, FSQL_TYPE_STRING, true),
 			'insert' => array(FSQL_FUNC_NORMAL, FSQL_TYPE_STRING, true),
 			'instr' => array(FSQL_FUNC_NORMAL, FSQL_TYPE_INTEGER, true),
