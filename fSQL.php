@@ -6,6 +6,14 @@ define("FSQL_BOTH", 3,TRUE);
 
 define("FSQL_EXTENSION", ".cgi",TRUE);
 
+define('FSQL_TYPE_DATE','d',true);
+define('FSQL_TYPE_DATETIME','dt',true);
+define('FSQL_TYPE_ENUM','e',true);
+define('FSQL_TYPE_FLOAT','f',true);
+define('FSQL_TYPE_INTEGER','i',true);
+define('FSQL_TYPE_STRING','s',true);
+define('FSQL_TYPE_TIME','t',true);
+
 // This function is in PHP5 but nowhere else so we're making it in case we're on PHP4
 if (!function_exists('array_combine')) {
 	function array_combine($keys, $values) {
@@ -1061,25 +1069,25 @@ class fSQLEnvironment
 						
 						$type = strtoupper($type);
 						if(in_array($type, array('CHAR', 'VARCHAR', 'BINARY', 'VARBINARY', 'TEXT', 'TINYTEXT', 'MEDIUMTEXT', 'LONGTEXT', 'SET', 'BLOB', 'TINYBLOB', 'MEDIUMBLOB', 'LONGBLOB'))) {
-							$type = 's';
+							$type = FSQL_TYPE_STRING;
 						} else if(in_array($type, array('BIT','TINYINT', 'SMALLINT','MEDIUMINT','INT','INTEGER','BIGINT'))) {
-							$type = 'i';
+							$type = FSQL_TYPE_INTEGER;
 						} else if(in_array($type, array('FLOAT','REAL','DOUBLE','DOUBLE PRECISION','NUMERIC','DEC','DECIMAL'))) {
-							$type = 'f';
+							$type = FSQL_TYPE_FLOAT;
 						} else {
 							switch($type)
 							{
 								case 'DATETIME':
-									$type = 'dt';
+									$type = FSQL_TYPE_DATETIME;
 									break;
 								case 'DATE':
-									$type = 'd';
+									$type = FSQL_TYPE_DATE;
 									break;
 								case 'ENUM':
-									$type = 'e';
+									$type = FSQL_TYPE_ENUM;
 									break;
 								case 'TIME':
-									$type = 't';
+									$type = FSQL_TYPE_TIME;
 									break;
 								default:
 									break;
@@ -2806,6 +2814,21 @@ class fSQLEnvironment
 	function free_result($id)
 	{
 		unset($this->Columns[$id], $this->data[$id], $this->cursors[$id]);
+	}
+
+	function _typecode_to_name($type)
+	{
+		switch($type)
+		{
+			case FSQL_TYPE_DATE:				return 'DATE';
+			case FSQL_TYPE_DATETIME:			return 'DATETIME';
+			case FSQL_TYPE_ENUM:				return 'ENUM';
+			case FSQL_TYPE_FLOAT:				return 'DOUBLE';
+			case FSQL_TYPE_INTEGER:				return 'INTEGER';
+			case FSQL_TYPE_STRING:				return 'TEXT';
+			case FSQL_TYPE_TIME:				return 'TIME';
+			default:							return false;
+		}
 	}
 
 	function _fsql_strip_stringtags($string)
