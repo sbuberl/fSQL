@@ -2559,97 +2559,121 @@ class fSQLEnvironment
 			return NULL;
 		}
 	}
- 
+
 	function _query_show($query)
 	{
-		if(preg_match("/\ASHOW\s+TABLES(?:\s+FROM\s+`?([A-Z][A-Z0-9\_]*)`?)?\s*[;]?\s*\Z/is", $query, $matches)) {
-			
+		if(preg_match("/\ASHOW\s+(FULL\s+)?TABLES(?:\s+FROM\s+`?([A-Z][A-Z0-9\_]*)`?)?\s*[;]?\s*\Z/is", $query, $matches)) {
 			$randval = rand();
-			
-			if(!$matches[1])
+			$full = !empty($matches[1]);
+
+			if(!$matches[2])
 				$db =& $this->currentDB;
 			else
-				$db =& $this->databases[$matches[1]];
-		
+				$db =& $this->databases[$matches[2]];
+
 			$tables = $db->listTables();
 			$data = array();
-			
+
 			foreach($tables as $table_name) {
 				$table_name = '\''.$table_name.'\'';
-				$data[] = array("name" => $table_name);
+				if($full) {
+					$data[] = array("Name" => $table_name, 'Table_type' => 'BASE TABLE');
+				} else {
+					$data[] = array("Name" => $table_name);
+				}
 			}
-			
-			$this->Columns[$randval] = array("name");
+
+			$columns = array("Name");
+			if($full) {
+				$columns[] = 'Table_type';
+			}
+
+			$this->Columns[$randval] = $columns;
 			$this->cursors[$randval] = array(0, 0);
 			$this->data[$randval] = $data;
-		
+
 			return $randval;
 		} else if(preg_match("/\ASHOW\s+DATABASES\s*[;]?\s*\Z/is", $query, $matches)) {
 			$randval = rand();
-			
+
 			$dbs = array_keys($this->databases);
 			foreach($dbs as $db) {
 				$db = '\''.$db.'\'';
 				$data[] = array("name" => $db);
 			}
-			
+
 			$this->Columns[$randval] = array("name");
 			$this->cursors[$randval] = array(0, 0);
 			$this->data[$randval] = $data;
-		
+
 			return $randval;
-		} else {
+		} else if(preg_match('/\ASHOW\s+(FULL\s+)?COLUMNS\s+(?:FROM|IN)\s+`?([^\W\d]\w*)`?(?:\s+(?:FROM|IN)\s+`?([^\W\d]\w*)`?)?\s*[;]?\s*\Z/is', $query, $matches)) {
+			return $this->_show_columns($matches[3], $matches[2], !empty($matches[1]));
+		 } else {
 			$this->_set_error("Invalid SHOW query");
 			return NULL;
 		}
 	}
-	
+
+	function _show_columns($db_name, $table_name, $full)
+	{
+		$randval = rand();
+
+		if(!$db_name)
+			$db =& $this->currentDB;
+		else
+			$db =& $this->databases[$db_name];
+
+		$tableObj =& $db->getTable($table_name);
+		if(!$tableObj->exists()) {
+			$this->_error_table_not_exists($db->name, $matches[2]);
+			return NULL;
+		}
+		$columns =  $tableObj->getColumns();
+
+		$data = array();
+
+		foreach($columns as $name => $column) {
+			$name = '\''.$name.'\'';
+			$type = $this->_typecode_to_name($column['type']);
+			var_dump($column['default']);
+			$null = ($column['null']) ? "'YES'" : "''";
+			$extra = ($column['auto']) ? "'auto_increment'" : "''";
+
+			if($column['key'] == 'p')
+				$key = "'PRI'";
+			else if($column['key'] == 'u')
+				$key = "'UNI'";
+			else
+				$key = "''";
+
+			if(!$full) {
+				$row = array("Field" => $name, "Type" => "'$type'", "Null" => $null, "Default" => $column['default'], "Key" => $key, "Extra" => $extra);
+			} else {
+				$row = array("Field" => $name, "Type" => "'$type'", 'Collation' => "NULL", "Null" => $null, "Default" => $column['default'], "Key" => $key,
+					"Extra" => $extra, "Privileges" => "'select,insert,update,references'", "Comment" => "''");
+			}
+
+			$data[] = $row;
+		}
+
+		$this->Columns[$randval] = array_keys($data[0]);
+		$this->cursors[$randval] = array(0, 0);
+		$this->data[$randval] = $data;
+
+		return $randval;
+	}
+
 	function _query_describe($query)
 	{
 		if(preg_match("/\ADESC(?:RIBE)?\s+`?(?:([A-Z][A-Z0-9\_]*)`?\.`?)?([A-Z][A-Z0-9\_]*)`?\s*[;]?\s*\Z/is", $query, $matches)) {
-			
-			$randval = rand();
-			
-			if(!$matches[1])
-				$db =& $this->currentDB;
-			else
-				$db =& $this->databases[$matches[1]];
-		
-			$tableObj =& $db->getTable($matches[2]);
-			if(!$tableObj->exists()) {
-				$this->_error_table_not_exists($db->name, $matches[2]);
-				return NULL;
-			}
-			$columns =  $tableObj->getColumns();
-			
-			$data = array();
-			
-			foreach($columns as $name => $column) {
-				$name = '\''.$name.'\'';
-				$null = ($column['null']) ? "'YES'" : "''";
-				$extra = ($column['auto']) ? "'auto_increment'" : "''";
-				
-				if($column['key'] == 'p')
-					$key = "'PRI'";
-				else if($column['key'] == 'u')
-					$key = "'UNI'";
-				else
-					$key = "''";
-
-				$data[] = array("Field" => $name, "Type" => "''", "Null" => $null, "Default" => $column['default'], "Key" => $key, "Extra" => $extra);
-			}
-			
-			$this->Columns[$randval] = array_keys($data);
-			$this->cursors[$randval] = array(0, 0);
-			$this->data[$randval] = $data;
-		
-			return $randval;
+			return $this->_show_columns($matches[1], $matches[2], false);
 		} else {
 			$this->_set_error('Invalid DESCRIBE query');
 			return NULL;
 		}
 	}
-	
+
 	function _query_use($query)
 	{
 		if(preg_match("/\AUSE\s+`?([A-Z][A-Z0-9\_]*)`?\s*[;]?\s*\Z/is", $query, $matches)) {
