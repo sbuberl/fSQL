@@ -1093,24 +1093,24 @@ class fSQLEnvironment
 									break;
 							}
 						}
-						
-						if(eregi("not null", $options)) 
+
+						if(preg_match("/not\s+null/i", $options))
 							$null = 0;
 						else
 							$null = 1;
-						
-						if(eregi("AUTO_INCREMENT", $options))
+
+						if(preg_match("/AUTO_INCREMENT/i", $options))
 							$auto = 1;
 						else
 							$auto = 0;
-						
+
 						if($type == 'e') {
 							preg_match_all("/'.*?(?<!\\\\)'/", $Columns[6][$c], $values);
 							$restraint = $values[0];
 						} else {
 							$restraint = NULL;
 						}
-				
+
 						if(preg_match("/DEFAULT\s+((?:[\+\-]\s*)?\d+(?:\.\d+)?|NULL|(\"|').*?(?<!\\\\)(?:\\2))/is", $options, $matches)) {
 							$default = $matches[1];
 							if(!$null && strcasecmp($default, "NULL")) {
@@ -2101,7 +2101,7 @@ class fSQLEnvironment
 			$return = (preg_match("/\A{$value}\Z/is", $var)) ? 1 : 0;
 			$return ^= $not;
 		} else if($operator == "REGEXP" || $operator == "RLIKE") {
-			$return = (eregi($value, $var)) ? 1 : 0;
+			$return = (preg_match("/".$value."/i", $var)) ? 1 : 0;
 			$return ^= $not;
 		}
 		/*else if($operator == "IN") {
