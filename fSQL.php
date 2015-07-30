@@ -761,18 +761,18 @@ class fSQLEnvironment
 	var $affected = 0;
 	var $insert_id = 0;
 	var $auto = 1;
-	
+
 	var $allow_func = array('abs','acos','asin','atan2','atan','ceil','cos','crc32','exp','floor',
 	   'ltrim','md5','pi','pow','rand','rtrim','round','sha1','sin','soundex','sqrt','strcmp','tan');
 	var $custom_func = array('concat','concat_ws','count','curdate','curtime','database','dayofweek',
 	   'dayofyear','elt','from_unixtime','last_insert_id', 'left','locate','log','log2','log10','lpad','max','min',
-	   'mod','now','repeat','right','row_count','sign','substring_index','sum','truncate','unix_timestamp',
-	   'weekday');
+	   'mod','month','now','repeat','right','row_count','sign','substring_index','sum','truncate','unix_timestamp',
+	   'weekday','year');
 	var $renamed_func = array('conv'=>'base_convert','ceiling' => 'ceil','degrees'=>'rad2deg','format'=>'number_format',
 	   'length'=>'strlen','lower'=>'strtolower','ln'=>'log','power'=>'pow','quote'=>'addslashes',
 	   'radians'=>'deg2rad','repeat'=>'str_repeat','replace'=>'strtr','reverse'=>'strrev',
 	   'rpad'=>'str_pad','sha' => 'sha1', 'substring'=>'substr','upper'=>'strtoupper');
-	
+
 	function define_db($name, $path)
 	{
 		$path = realpath($path);
@@ -2957,8 +2957,8 @@ class fSQLEnvironment
 	 
 	////Date/Time functions
 	function _fsql_functions_now()		{ return $this->_fsql_functions_from_unixtime(time()); }
-	function _fsql_functions_curdate()	{ return $this->from_unixtime(time(), "%Y-%m-%d"); }
-	function _fsql_functions_curtime() 	{ return $this->from_unixtime(time(), "%H:%M:%S"); }
+	function _fsql_functions_curdate()	{ return $this->_fsql_functions_from_unixtime(time(), "%Y-%m-%d"); }
+	function _fsql_functions_curtime() 	{ return $this->_fsql_functions_from_unixtime(time(), "%H:%M:%S"); }
 	function _fsql_functions_dayofweek($date) 	{ return $this->_fsql_functions_from_unixtime($date, "%w"); }
 	function _fsql_functions_weekday($date)		{ return $this->_fsql_functions_from_unixtime($date, "%u"); }
 	function _fsql_functions_dayofyear($date)		{ return round($this->_fsql_functions_from_unixtime($date, "%j")); }
