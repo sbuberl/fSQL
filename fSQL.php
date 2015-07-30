@@ -1670,8 +1670,8 @@ class fSQLEnvironment
 					
 					for($i = 0; $i < count($join[0]); $i++) {
 						$join_tables .= ", {$join[2][$i]}";
-						if(!strcasecmp($join[3][$i], "ON")) { 
-							$list = preg_split("/\s+AND\s+/i", $join[4][$i]);
+						if(!strcasecmp($join[3][$i], "ON")) {
+							$list = preg_split("/\s+AND\s+/i", isset($list[4][$i]) ? $join[4][$i] : $join[5][$i]);
 						//	echo "<pre>";
 						//	print_r($list);
 						//	print_r($join);
@@ -1826,7 +1826,8 @@ class fSQLEnvironment
 						}
 					}
 				}
-				
+				unset($table);
+
 				if(isset($where)) {
 					$done = array();
 					$reset = 0;
