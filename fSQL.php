@@ -1973,7 +1973,6 @@ class fSQLEnvironment
 				$parameter = explode(",", $functions[2]);
 				foreach($parameter as $param) {
 					if(!preg_match("/'(.+?)'/is", $param) && !is_numeric($param) && $is_grouping == 0) {
-						var_dump($param, $function); 
 						if(preg_match("/(?:\S+)\.(?:\S+)/", $param)) { list($name, $var) = explode(".", $param); }
 						else { $var = $param; }
 						$parameters[] = $entry[$var];
@@ -2636,7 +2635,6 @@ class fSQLEnvironment
 		foreach($columns as $name => $column) {
 			$name = '\''.$name.'\'';
 			$type = $this->_typecode_to_name($column['type']);
-			var_dump($column['default']);
 			$null = ($column['null']) ? "'YES'" : "''";
 			$extra = ($column['auto']) ? "'auto_increment'" : "''";
 
@@ -2780,7 +2778,13 @@ class fSQLEnvironment
 	function fetch_assoc($results) { return $this->fetch_array($results, FSQL_ASSOC); }
 	function fetch_row	($results) { return $this->fetch_array($results, FSQL_NUM); }
 	function fetch_both	($results) { return $this->fetch_array($results, FSQL_BOTH); }
- 
+
+	function fetch_single($results, $column = 0) {
+		$type = is_numeric($column) ? FSQL_NUM : FSQL_ASSOC;
+		$row = $this->fetch_array($results, $type);
+		return $row != NULL ? $row[$column] : false;
+	}
+
 	function fetch_object($results)
 	{
 		$row = $this->fetch_array($results, FSQL_ASSOC);
