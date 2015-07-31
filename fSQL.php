@@ -1642,13 +1642,20 @@ class fSQLEnvironment
 			$simple = 1;
 			$distinct = 0;
 			
-			if(preg_match("/(.*?)(?:WHERE|(LEFT|RIGHT|INNER)\s+JOIN|ORDER\s+BY|LIMIT)(.*?)/is",$select)) {
+
+			if(preg_match("/\A(.+?)\s+(?:WHERE|(LEFT|RIGHT|INNER)\s+JOIN|ORDER\s+BY|LIMIT)\s+(.+)\s*;\s*\Z/is",$select)) {
 				$simple = 0;
-				preg_match("/SELECT(?:\s+(ALL|DISTINCT(?:ROW)?))?(\s+RANDOM(?:\((?:\d+)\)?)?\s+|\s+)(.*?) FROM\s+((?:\w+(?:\s+)(?:AS\s+)?(?:\w+)?)(?:(?:\s)?(?:,)(?:\s)?(?:\w+\s+(?:AS\s+)?(?:\w+)?)(?:\s+WHERE|\s+(?:LEFT|RIGHT|INNER)\s+JOIN|\s+ORDER\s+BY|\s+LIMIT)?)*)/is", $select, $matches);
-				$matches[4] = preg_replace("/(.+?)\s+(WHERE|(LEFT|RIGHT|INNER)|ORDER\s+BY|LIMIT)(.*)?/is", "\\1", $matches[4]);
+				preg_match("/\ASELECT(?:\s+(ALL|DISTINCT(?:ROW)?))?(\s+RANDOM(?:\((?:\d+)\)?)?\s+|\s+)(.*?) FROM\s+((?:\w+(?:\s+)(?:AS\s+)?(?:\w+)?)(?:(?:\s)?(?:,)(?:\s)?(?:\w+\s+(?:AS\s+)?(?:\w+)?)(?:\s+WHERE|\s+(?:LEFT|RIGHT|INNER)\s+JOIN|\s+ORDER\s+BY|\s+LIMIT)?)*)/is", $select, $matches);
+				$matches[4] = preg_replace("/(.+?)\s+(?:WHERE|(LEFT|RIGHT|INNER)\s+JOIN|ORDER\s+BY|LIMIT)\s+(.+)/is", "\\1", $matches[4]);
 			}
 			else if(preg_match("/SELECT(?:\s+(ALL|DISTINCT(?:ROW)?))?(\s+RANDOM(?:\((?:\d+)\)?)?\s+|\s+)(.*?)\s+FROM\s+(.+)/is", $select, $matches)) { /* I got the matches, do nothing else */ }
-			else { preg_match("/SELECT(?:\s+(ALL|DISTINCT(?:ROW)?))?(\s+RANDOM(?:\((?:\d+)\)?)?\s+|\s+)(.*)/is", $select, $matches); $matches[4] = "FSQL"; }
+			else if(preg_match("/SELECT(?:\s+(ALL|DISTINCT(?:ROW)?))?(\s+RANDOM(?:\((?:\d+)\)?)?\s+|\s+)(.*)/is", $select, $matches)) {
+				$matches[4] = "FSQL";
+			}
+			else {
+				$this->_set_error("Invalid SELECT query");
+				return NULL;
+			}
 
 			$distinct = !strncasecmp($matches[1], "DISTINCT", 8);
 			$has_random = $matches[2] != " ";
@@ -1868,15 +1875,18 @@ class fSQLEnvironment
 									}
 									//echo "$tname -> $value_tbl = Sorting with this other table:\n";
 									//print_r($tables[$value_tbl]['entries']);
-									foreach($tables[$value_tbl]['entries'] as $other_entry) {
-										//echo "\nif(".strval(trim($entry[$var], "'"))." == ".strval($other_entry[$value_col]).")\n";
-										if(strval(trim($entry[$var], "'")) == strval(trim($other_entry[$value_col],"'"))) {
-											$entry = array_merge($entry, $other_entry);
-											//print_r($entry);
-											if($temp['operator'] == " ~=~ ") { $proceed .= "1"; }
+									if(!empty($tables[$value_tbl]['entries'])) {
+										foreach($tables[$value_tbl]['entries'] as $other_entry) {
+											//echo "\nif(".strval(trim($entry[$var], "'"))." == ".strval($other_entry[$value_col]).")\n";
+											if(strval(trim($entry[$var], "'")) == strval(trim($other_entry[$value_col],"'"))) {
+												$entry = array_merge($entry, $other_entry);
+												if($temp['operator'] == " ~=~ ") { $proceed .= "1"; }
+											}
+											if($temp['operator'] == "=") { $proceed .= "1"; }
+											$reset = 1;
 										}
-										if($temp['operator'] == "=") { $proceed .= "1"; }
-										$reset = 1;
+									} else {
+										$proceed .= "0";
 									}
 									$done[] = $i;
 								}
