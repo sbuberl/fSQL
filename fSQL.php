@@ -1029,7 +1029,7 @@ class fSQLEnvironment
 
 			if(!isset($matches[6])) {
 				//preg_match_all("/(?:(KEY|PRIMARY KEY|UNIQUE) (?:([A-Z][A-Z0-9\_]*)\s*)?\((.+?)\))|(?:`?([A-Z][A-Z0-9\_]*?)`?(?:\s+((?:TINY|MEDIUM|BIG)?(?:TEXT|BLOB)|(?:VAR)?(?:CHAR|BINARY)|INTEGER|(?:TINY|SMALL|MEDIUM|BIG)?INT|FLOAT|REAL|DOUBLE(?: PRECISION)?|BIT|BOOLEAN|DEC(?:IMAL)?|NUMERIC|DATE(?:TIME)?|TIME(?:STAMP)?|YEAR|ENUM|SET)(?:\((.+?)\))?)(\s+UNSIGNED)?(.*?)?(?:,|\)|$))/is", trim($column_list), $Columns);
-				preg_match_all("/(?:(?:CONSTRAINT\s+(?:[A-Z][A-Z0-9\_]*\s+)?)?(KEY|INDEX|PRIMARY\s+KEY|UNIQUE)(?:\s+([A-Z][A-Z0-9\_]*))?\s*\((.+?)\))|(?:`?([A-Z][A-Z0-9\_]*?)`?(?:\s+((?:TINY|MEDIUM|LONG)?(?:TEXT|BLOB)|(?:VAR)?(?:CHAR|BINARY)|INTEGER|(?:TINY|SMALL|MEDIUM|BIG)?INT|FLOAT|REAL|DOUBLE(?: PRECISION)?|BIT|BOOLEAN|DEC(?:IMAL)?|NUMERIC|DATE(?:TIME)?|TIME(?:STAMP)?|YEAR|ENUM|SET)(?:\((.+?)\))?)\s*(UNSIGNED\s+)?(.*?)?(?:,|\)|$))/is", trim($column_list), $Columns);
+				preg_match_all("/(?:(?:CONSTRAINT\s+(?:`?[A-Z][A-Z0-9\_]*`?\s+)?)?(KEY|INDEX|PRIMARY\s+KEY|UNIQUE)(?:\s+`?([A-Z][A-Z0-9\_]*)`?)?\s*\(`?(.+?)`?\))|(?:`?([A-Z][A-Z0-9\_]*?)`?(?:\s+((?:TINY|MEDIUM|LONG)?(?:TEXT|BLOB)|(?:VAR)?(?:CHAR|BINARY)|INTEGER|(?:TINY|SMALL|MEDIUM|BIG)?INT|FLOAT|REAL|DOUBLE(?: PRECISION)?|BIT|BOOLEAN|DEC(?:IMAL)?|NUMERIC|DATE(?:TIME)?|TIME(?:STAMP)?|YEAR|ENUM|SET)(?:\((.+?)\))?)\s*(UNSIGNED\s+)?(.*?)?(?:,|\)|$))/is", trim($column_list), $Columns);
 
 				if(!$Columns) {
 					$this->_set_error("Parsing error in CREATE TABLE query");
@@ -1708,12 +1708,12 @@ class fSQLEnvironment
 			//expands the tables and loads their data
 			$tbls = explode(",", $matches[4]);
 			foreach($tbls as $table_name) {
-				if(preg_match("/(?:([A-Z][A-Z0-9\_]*)\.)?([A-Z][A-Z0-9\_]*)\s+(?:AS\s+)?([A-Z][A-Z0-9\_]*)/is", $table_name, $tbl_data)) {
+				if(preg_match("/(?:`?([A-Z][A-Z0-9\_]*)`?\.)?`?([A-Z][A-Z0-9\_]*)`?\s+(?:AS\s+)?`?([A-Z][A-Z0-9\_]*)`?/is", $table_name, $tbl_data)) {
 					list(, $db_name, $table_name, $saveas) = $tbl_data;
 					if(empty($db_name)) {
 						$db_name = $this->currentDB->name;
 					}
-				} else if(preg_match("/(?:([A-Z][A-Z0-9\_]*)\.)?([A-Z][A-Z0-9\_]*)/is", $table_name, $tbl_data)) {
+				} else if(preg_match("/(?:`?([A-Z][A-Z0-9\_]*)`?\.)?`?([A-Z][A-Z0-9\_]*)`?/is", $table_name, $tbl_data)) {
 					list(, $db_name, $table_name) = $tbl_data;
 					if(empty($db_name)) {
 						$db_name = $this->currentDB->name;
@@ -2029,10 +2029,15 @@ class fSQLEnvironment
 				else if($change && $operator == "=") { $operator = " ~=~ "; }
 
 				if(!$next || (strtoupper($next) != "AND" && strtoupper($next) != "OR")) { $next = ""; }
-				
+
 				if(!preg_match("/'(.+?)'/is", $var) && !is_numeric($var)) {
-					if(preg_match("/(?:\S+)\.(?:\S+)/", $var) && !preg_match("/(.+?)\((.+?)?\)/is",$var) ) {
-						list($from_tbl, $new_var) = explode(".", $var);
+					$isFunction = preg_match("/(.+?)\((.+?)?\)/is",$var);
+					if(preg_match("/`?([A-Z][A-Z0-9\_]*)`?\.`?([A-Z][A-Z0-9\_]*)`?/is", $var, $var_pieces) && !$isFunction) {
+						list(, $from_tbl, $new_var) = $var_pieces;
+					}
+					else if(preg_match("/`?([A-Z][A-Z0-9\_]*)`?/is", $var, $var_pieces) && !$isFunction) {
+						$from_tbl = NULL;
+						$new_var = $var_pieces[1];
 					}
 					else { $from_tbl = NULL; $new_var = $var; }
 				} else { $from_tbl = NULL; $new_var = $var; }
