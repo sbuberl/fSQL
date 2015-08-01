@@ -205,6 +205,7 @@ class fSQLTable
 	{
 		$table =& new fSQLTable;
 		$table->columns = $columnDefs;
+		$table->temporary = true;
 		return $table;
 	}
 	
@@ -235,7 +236,17 @@ class fSQLTable
 		
 		return $this->cursor;
 	}
-	
+
+	function newCursor()
+	{
+		$cursor =& new fSQLTableCursor;
+		$cursor->entries =& $this->entries;
+		$cursor->num_rows = count($this->entries);
+		$cursor->pos = 0;
+
+		return $cursor;
+	}
+
 	function insertRow($data) {
 		$this->entries[] = $data;
 		$this->uncommited = true;
@@ -293,6 +304,7 @@ class fSQLCachedTable
 		$this->columnsFile = new fSQLFileLock($this->columns_path.'.cgi');
 		$this->dataLockFile = new fSQLFileLock($this->data_path.'.lock.cgi');
 		$this->dataFile = new fSQLFileLock($this->data_path.'.cgi');
+		$this->temporary = false;
 	}
 	
 	function &create($path_to_db, $table_name, $columnDefs)
@@ -416,7 +428,19 @@ class fSQLCachedTable
 		
 		return $this->cursor;
 	}
-	
+
+	function newCursor()
+	{
+		$this->_loadEntries();
+
+		$cursor =& new fSQLTableCursor;
+		$cursor->entries =& $this->entries;
+		$cursor->num_rows = count($this->entries);
+		$cursor->pos = 0;
+
+		return $cursor;
+	}
+
 	function _loadEntries()
 	{
 		$this->dataLockFile->acquireRead();
@@ -1393,19 +1417,20 @@ class fSQLEnvironment
 		
 		return TRUE;
 	}
-	
+
 	////Update data in the DB
 	function _query_update($query) {
 		$this->affected = 0;
-		if(preg_match("/\AUPDATE\s+`?(?:([A-Z][A-Z0-9\_]*)`?\.`?)?([A-Z][A-Z0-9\_]*)`?\s+SET\s+(.*)(?:\s+WHERE .+)?\Z/is", $query, $matches)) {
-			$matches[3] = preg_replace("/(.+?)(\s+WHERE)(.*)/is", "\\1", $matches[3]);
-			$table_name = $matches[2];
+		if(preg_match("/\AUPDATE(?:\s+(IGNORE))?\s+(?:`?([^\W\d]\w*)`?\.)?`?([^\W\d]\w*)`?\s+SET\s+(.+?)(?:\s+WHERE\s+(.+?))?\s*\Z/is", $query, $matches)) {
+			$matches[4] = preg_replace("/(.+?)(\s+WHERE)(.*)/is", "\\1", $matches[4]);
+			$ignore = !empty($matches[1]);
+			$table_name = $matches[3];
 
-			if(!$matches[1])
+			if(!$matches[2])
 				$db =& $this->currentDB;
 			else
-				$db =& $this->databases[$matches[1]];
-				
+				$db =& $this->databases[$matches[2]];
+
 			$table =& $db->getTable($table_name);
 			if(!$table->exists()) {
 				$this->_error_table_not_exists($db->name, $table_name);
@@ -1415,11 +1440,12 @@ class fSQLEnvironment
 				$this->_error_table_read_lock($db->name, $table_name);
 				return null;
 			}
-		
+
 			$columns = $table->getColumns();
 			$cursor =& $table->getCursor();
+			$keyCursor = $table->newCursor();
 
-			if(preg_match_all("/`?((?:\S+)`?\s*=\s*(?:'(?:.*?)'|\S+))`?\s*(?:,|\Z)/is", $matches[3], $sets)) {
+			if(preg_match_all("/`?((?:\S+)`?\s*=\s*(?:'(?:.*?)'|\S+))`?\s*(?:,|\Z)/is", $matches[4], $sets)) {
 				foreach($sets[1] as $set) {
 					$s = preg_split("/`?\s*=\s*`?/", $set);
 					$SET[] = $s;
@@ -1431,129 +1457,115 @@ class fSQLEnvironment
 				unset($s);
 			}
 			else
-				$SET[0] =  preg_split("/\s*=\s*/", $matches[3]);
+				$SET[0] = preg_split("/\s*=\s*/", $matches[4]);
 
-			if(preg_match("/\s+WHERE\s+((?:.+)(?:(?:(?:\s+(AND|OR)\s+)?(?:.+)?)*)?)/is", $query, $sets))
+			$where = null;
+			if(isset($matches[5]))
 			{
-				$where = $this->_load_where($sets[1], false);
+				$where = $this->_load_where($matches[5], false);
 				if(!$where) {
 					$this->_set_error('Invalid/Unsupported WHERE clause');
 					return null;
 				}
-				
-				$alter_columns = array();
-				foreach($columns as $column => $columnDef) {
-					if($columnDef['type'] == 'e')
-						$alter_columns[] = $column;
+			}
+
+			$alter_columns = array();
+			foreach($columns as $column => $columnDef) {
+				if($columnDef['type'] == 'e')
+					$alter_columns[] = $column;
+			}
+
+			$newentry = array();
+			$affected = 0;
+			$skip = false;
+			for($e = 0; !$cursor->isDone(); $e++, $cursor->next()) {
+
+				unset($entry);
+				$entry = $cursor->getRow();
+				foreach($alter_columns as $column) {
+					if($columns[$column]['type'] == 'e') {
+						$i = $entry[$column];
+						$entry[$column] = ($i == 0) ? "''" : $columns[$column]['restraint'][$i - 1];
+					}
 				}
 
-				$newentry = array();
-				for($e = 0; !$cursor->isDone(); $e++, $cursor->next()) {
-					
-					unset($entry);
-					$entry = $cursor->getRow();
-					foreach($alter_columns as $column) {
-						if($columns[$column]['type'] == 'e') {
-							$i = $entry[$column];
-							$entry[$column] = ($i == 0) ? "''" : $columns[$column]['restraint'][$i - 1];
-						}
-					}
-					
+				if($where != null) {
 					$proceed = "";
 					for($i = 0; $i < count($where); $i++) {
 						if($i > 0 && $where[$i - 1]["next"] == "AND")
 							$proceed .= " && ".$this->_where_functions($where[$i], $entry, $table_name);
 						else if($i > 0 && $where[$i - 1]["next"] == "OR")
 							$proceed .= " || ".$this->_where_functions($where[$i], $entry, $table_name);
-						else 
+						else
 							$proceed .= intval($this->_where_functions($where[$i], $entry, $table_name) == 1);
 					}
 					eval("\$cont = $proceed;");
-					if(!$cont) 
+					if(!$cont)
 						continue;
+				}
 
-					foreach($SET as $set) {
-						list($column, $value) = $set;
-						
-						$columnDef = $columns[$column];
-						
-						if(!$columnDef['null'] && $value == "NULL")
-							$value = $columnDef['default'];
-						else if(preg_match("/\A([A-Z][A-Z0-9\_]*)/i", $value))
-							$value = $entry[$value];
-						else if($columnDef['type'] == 'i')
-							if(preg_match("/\A'(.*?(?<!\\\\))'\Z/is", $value, $sets))
-								$value = intval($sets[1]);
-							else
-								$value = intval($value);
-						else if($columnDef['type'] == 'f')
-							if(preg_match("/\A'(.*?(?<!\\\\))'\Z/is", $value, $sets))
-								$value = floatval($sets[1]);
-							else
-								$value = floatval($value);
-						else if($columnDef['type'] == 'e')
-							if(in_array($value, $columnDef['restraint'])) {
-								$value = array_search($value, $columnDef['restraint']) + 1;
-							} else if(is_numeric($value))  {
-								$value = intval($value);
-								if($value < 0 || $value > count($columnDef['restraint'])) {
-									$this->_set_error("Numeric ENUM value out of bounds");
-									return NULL;
-								}
-							} else {
-								$value = $columnDef['default'];
+				foreach($SET as $set) {
+					list($column, $value) = $set;
+
+					$columnDef = $columns[$column];
+
+					if(!$columnDef['null'] && $value == "NULL")
+						$value = $columnDef['default'];
+					else if(preg_match("/\A([A-Z][A-Z0-9\_]*)/i", $value))
+						$value = $entry[$value];
+					else if($columnDef['type'] == 'i')
+						if(preg_match("/\A'(.*?(?<!\\\\))'\Z/is", $value, $sets))
+							$value = (int) $sets[1];
+						else
+							$value = (int) $value;
+					else if($columnDef['type'] == 'f')
+						if(preg_match("/\A'(.*?(?<!\\\\))'\Z/is", $value, $sets))
+							$value = (float) $sets[1];
+						else
+							$value = (float) $value;
+					else if($columnDef['type'] == 'e')
+						if(in_array($value, $columnDef['restraint'])) {
+							$value = array_search($value, $columnDef['restraint']) + 1;
+						} else if(is_numeric($value))  {
+							$value = (int) $value;
+							if($value < 0 || $value > count($columnDef['restraint'])) {
+								$this->_set_error("Numeric ENUM value out of bounds");
+								return NULL;
 							}
-						
-						$newentry[$column] = $value;
-					}
-					
-					$table->updateRow($e, $newentry);
-					$this->affected++;
-				}
-			} else {
-				$newentry = array();
-				for($e = 0; !$cursor->isDone(); $e++, $cursor->next()) {
-					unset($entry);
-					$entry = $cursor->getRow();				
-					foreach($SET as $set) {
-						list($column, $value) = $set;
-						
-						$columnDef = $columns[$column];
-						
-						if(!$columnDef['null'] && $value == "NULL")
+						} else {
 							$value = $columnDef['default'];
-						else if(preg_match("/\A([A-Z][A-Z0-9\_]*)/i", $value))
-							$value = $entry[$value];
-						else if($columnDef['type'] == 'i')
-							if(preg_match("/\A'(.*?(?<!\\\\))'\Z/is", $value, $sets))
-								$value = intval($sets[1]);
-							else
-								$value = intval($value);
-						else if($columnDef['type'] == 'f')
-							if(preg_match("/\A'(.*?(?<!\\\\))'\Z/is", $value, $sets))
-								$value = floatval($sets[1]);
-							else
-								$value = floatval($value);
-						else if($columnDef['type'] == 'e')
-							if(in_array($value, $columnDef['restraint'])) {
-								$value = array_search($value, $columnDef['restraint']) + 1;
-							} else if(is_numeric($value))  {
-								$value = intval($value);
-								if($value < 0 || $value > count($columnDef['restraint'])) {
-									$this->_set_error("Numeric ENUM value out of bounds");
+						}
+
+					$newentry[$column] = $value;
+
+					////See if it is a PRIMARY KEY or UNIQUE
+					if($columnDef['key'] == 'p' || $columnDef['key'] == 'u') {
+						$keyCursor->first();
+						$c = 0;
+						while(!$keyCursor->isDone()) {
+							$row = $keyCursor->getRow();
+							if($row[$column] == $newentry[$column] && $e != $c) {
+								if(!$ignore) {
+									$this->_set_error("Duplicate value for unique column '{$column}'");
 									return NULL;
+								} else {
+									$skip = true;
+									break;
 								}
-							} else {
-								$value = $columnDef['default'];
 							}
-						
-						$newentry[$column] = $value;
+							$keyCursor->next();
+							$c++;
+						}
 					}
-					
-					$table->updateRow($e, $newentry);
 				}
-				$this->affected = $e;
+
+				if(!$skip) {
+					$table->updateRow($e, $newentry);
+					$affected++;
+				}
 			}
+
+			$this->affected = $affected;
 
 			if($this->affected)
 			{
@@ -1562,14 +1574,14 @@ class fSQLEnvironment
 				else if(!in_array($table, $this->updatedTables))
 					$this->updatedTables[] =& $table;
 			}
-			
+
 			return TRUE;
 		} else {
 			$this->_set_error('Invalid UPDATE query');
 			return NULL;
 		}
 	}
-	
+
 	/*
 		MERGE INTO 
 		  table_dest d
