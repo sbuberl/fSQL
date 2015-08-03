@@ -14,6 +14,14 @@ define('FSQL_TYPE_INTEGER','i',true);
 define('FSQL_TYPE_STRING','s',true);
 define('FSQL_TYPE_TIME','t',true);
 
+define('FSQL_WHERE_NORMAL',2,true);
+define('FSQL_WHERE_ON',4,true);
+
+define('FSQL_TRUE', 3, true);
+define('FSQL_FALSE', 0,true);
+define('FSQL_NULL', 1,true);
+define('FSQL_UNKNOWN', 1,true);
+
 // This function is in PHP5 but nowhere else so we're making it in case we're on PHP4
 if (!function_exists('array_combine')) {
 	function array_combine($keys, $values) {
@@ -805,6 +813,7 @@ class fSQLEnvironment
 	var $query_count = 0;
 	var $cursors = array();
 	var $data = array();
+	var $join_lambdas = array();
 	var $affected = 0;
 	var $insert_id = 0;
 	var $auto = 1;
@@ -861,13 +870,13 @@ class fSQLEnvironment
 			return false;
 		}
 	}
-	
+
 	function close()
 	{
 		foreach (array_keys($this->databases) as $db_name ) {
 			$this->databases[$db_name]->close();
 		}
-		unset($this->Columns, $this->cursors, $this->data, $this->currentDB, $this->databases, $this->error_msg);
+		unset($this->Columns, $this->cursors, $this->data, $this->currentDB, $this->databases, $this->error_msg, $this->join_lambdas);
 	}
 
 	function error()
@@ -1675,515 +1684,604 @@ class fSQLEnvironment
 			return NULL;
 		}
 	}
- 
+
 	////Select data from the DB
 	function _query_select($query)
 	{
 		$randval = rand();
-		$selects = preg_split("/\s+UNION\s+/is", $query);
 		$e = 0;
-		foreach($selects as $select) {
-			unset($matches, $where, $tables, $Columns);
-			
-			$simple = 1;
-			$distinct = 0;
-			
 
-			if(preg_match("/\A(.+?)\s+(?:WHERE|(LEFT|RIGHT|INNER)\s+JOIN|ORDER\s+BY|LIMIT)\s+(.+)\s*;\s*\Z/is",$select)) {
-				$simple = 0;
-				preg_match("/\ASELECT(?:\s+(ALL|DISTINCT(?:ROW)?))?(\s+RANDOM(?:\((?:\d+)\)?)?\s+|\s+)(.*?) FROM\s+((?:\w+(?:\s+)(?:AS\s+)?(?:\w+)?)(?:(?:\s)?(?:,)(?:\s)?(?:\w+\s+(?:AS\s+)?(?:\w+)?)(?:\s+WHERE|\s+(?:LEFT|RIGHT|INNER)\s+JOIN|\s+ORDER\s+BY|\s+LIMIT)?)*)/is", $select, $matches);
-				$matches[4] = preg_replace("/(.+?)\s+(?:WHERE|(LEFT|RIGHT|INNER)\s+JOIN|ORDER\s+BY|LIMIT)\s+(.+)/is", "\\1", $matches[4]);
-			}
-			else if(preg_match("/SELECT(?:\s+(ALL|DISTINCT(?:ROW)?))?(\s+RANDOM(?:\((?:\d+)\)?)?\s+|\s+)(.*?)\s+FROM\s+(.+)/is", $select, $matches)) { /* I got the matches, do nothing else */ }
-			else if(preg_match("/SELECT(?:\s+(ALL|DISTINCT(?:ROW)?))?(\s+RANDOM(?:\((?:\d+)\)?)?\s+|\s+)(.*)/is", $select, $matches)) {
-				$matches[4] = "FSQL";
-			}
-			else {
-				$this->_set_error("Invalid SELECT query");
-				return NULL;
+		if(!preg_match('/SELECT(?:\s+(ALL|DISTINCT(?:ROW)?))?(\s+RANDOM(?:\((?:\d+)\)?)?\s+|\s+)(.*)\s*[;]?\s*\Z/is', $query, $matches)) {
+			return $this->_set_error('Invalid SELECT query');
+		}
+
+		$distinct = !strncasecmp($matches[1], "DISTINCT", 8);
+		$has_random = !empty(trim($matches[2]));
+		$isTableless = true;
+
+		$Columns = array();
+		$the_rest = $matches[3];
+		$stop = false;
+		while(!$stop && preg_match("/((?:\A|\s*)((?:(?:-?\d+(?:\.\d+)?)|'.*?(?<!\\\\)'|(?:[^\W\d]\w*\s*\(.*?\))|(?:(?:(?:[^\W\d]\w*)\.)?(?:(?:[^\W\d]\w*)|\*)))(?:\s+(?:AS\s+)?[^\W\d]\w*)?)\s*)(?:\Z|(from|where|order\s+by|limit)|,)/is", $the_rest, $ColumnPiece))
+		{
+			$Columns[] = $ColumnPiece[2];
+			$stop = !empty($ColumnPiece[3]);
+			$idx = !$stop ? 0 : 1;
+			$the_rest = substr($the_rest, strlen($ColumnPiece[$idx]));
+		}
+
+		$data = array();
+		$joins = array();
+		$joined_info = array( 'tables' => array(), 'offsets' => array(), 'columns' =>array() );
+		if(preg_match('/\Afrom\s+(.+?)(\s+(?:where|order?\s+by|limit)\s+(?:.+))?\s*\Z/is', $the_rest, $from_matches))
+		{
+			$isTableless = false;
+			$tables = array();
+
+			if(isset($from_matches[2])) {
+				$the_rest = $from_matches[2];
 			}
 
-			$distinct = !strncasecmp($matches[1], "DISTINCT", 8);
-			$has_random = $matches[2] != " ";
-			
-			if($simple == 0) {
-				if(preg_match("/(LEFT|RIGHT|INNER)\s+JOIN/is",$select)) {
-					@preg_match_all("/\s+(LEFT|RIGHT|INNER)?\s+JOIN\s+(.+?)\s+(USING|ON)\s*(?:(?:\((.*?)\))|(?:(?:\()?((?:\S+)\s*=\s*(?:\S+)(?:\))?)))/is", $select, $join);
-					
-					$join_name = trim($join[1][0]);
-					if(!strcasecmp($join_name, "LEFT")) {
-						$join_type = 1;
-					} else if(!strcasecmp($join_name, "RIGHT")) {
-						$join_type = 2;
-					} else if(!strcasecmp($join_name, "INNER")) {
-						$join_type = 3;
-					} else {
-						$join_type = 4;
-					}
-					
-					for($i = 0; $i < count($join[0]); $i++) {
-						$join_tables .= ", {$join[2][$i]}";
-						if(!strcasecmp($join[3][$i], "ON")) {
-							$list = preg_split("/\s+AND\s+/i", isset($list[4][$i]) ? $join[4][$i] : $join[5][$i]);
-						//	echo "<pre>";
-						//	print_r($list);
-						//	print_r($join);
-						//	echo "</pre>";
-							for($n = 0; $n < count($list); $n++) {
-								if($join_type == 1) {   $join_where .= " AND {$list[$n]}";  }
-								else if($join_type == 2) {
-									preg_match("/(\S+)\s*=\s*(\S+)/", $list[$n], $right);
-									$join_where .= " AND {$right[2]}={$right[1]}";
-								}
-								else if($join_type == 3) {	$join_where .= " AND ".str_replace("="," ~=~ ",$list[$n]);	}
-							}
-						}
-						else if(!strcasecmp($join[3][$i], "USING")) { 
-							$list = explode(",", $join[4][$i]);
-							for($n = 0; $n < count($list); $n++) {
-								if($join_type == 1) { $join_where .= " AND <<using>>.{$list[$n]}={$join[2][$i]}.{$list[$n]}"; }
-								else if($join_type == 2) { $join_where .= " AND {$join[2][$i]}.{$list[$n]}=<<using>>.{$list[$n]}"; }
-								else if($join_type == 3)	{ $join_where .= " AND <<using>>.{$list[$n]} ~=~ {$join[2][$i]}.{$list[$n]}"; }
-							}
-						}
-					}
-					$matches[4] .= $join_tables;
-				}
-			}
-	
-			//expands the tables and loads their data
-			$tbls = explode(",", $matches[4]);
-			foreach($tbls as $table_name) {
-				if(preg_match("/(?:`?([A-Z][A-Z0-9\_]*)`?\.)?`?([A-Z][A-Z0-9\_]*)`?\s+(?:AS\s+)?`?([A-Z][A-Z0-9\_]*)`?/is", $table_name, $tbl_data)) {
-					list(, $db_name, $table_name, $saveas) = $tbl_data;
+			$tbls = explode(',', $from_matches[1]);
+			foreach($tbls as $tbl) {
+				if(preg_match('/\A\s*(`?(?:[^\W\d]\w*)`?\.)?`?([^\W\d]\w*)`?(?:\s+(?:AS\s+)?`?([^\W\d]\w*)`?)?\s*(.*)/is', $tbl, $table_matches)) {
+					list(, $db_name, $table_name, $saveas, $table_unparsed) = $table_matches;
 					if(empty($db_name)) {
 						$db_name = $this->currentDB->name;
 					}
-				} else if(preg_match("/(?:`?([A-Z][A-Z0-9\_]*)`?\.)?`?([A-Z][A-Z0-9\_]*)`?/is", $table_name, $tbl_data)) {
-					list(, $db_name, $table_name) = $tbl_data;
-					if(empty($db_name)) {
-						$db_name = $this->currentDB->name;
+					if(empty($saveas)) {
 						$saveas = $table_name;
+					}
+
+					$db =& $this->databases[$db_name];
+
+					if(!($table =& $db->getTable($table_name))) {
+						return NULL;
+					}
+
+					if(!isset($tables[$saveas])) {
+						$tables[$saveas] =& $table;
 					} else {
-						$saveas = $db_name.'.'.$table_name;
+						return $this->_set_error("Table named '$saveas' already specified");
 					}
-				} else {
-					$this->_set_error("Invalid table list");
-					return NULL;
-				}
-				
-				$db =& $this->databases[$db_name];
-				
-				if(isset($join_where) && isset($last)) {
-					$join_where = preg_replace("/<<using>>\.(\S+)(?:\s+)?(=| ~=~ )(?:\s+)?$saveas.(\\1)/is", "$last.\\1\\2$saveas.\\1", $join_where);
-					$join_where = preg_replace("/$saveas\.(\S+)(?:\s+)?(=| ~=~ )(?:\s+)?<<using>>.(\\1)/is", "$saveas.\\1\\2$last.\\1", $join_where);
-				}
-				
-				if(!($table = $this->_load_table($db, $table_name))) {
-					return NULL;
-				}
-			
-				$tables[$saveas] = $table;
-				$last = $saveas;
-			}
-			
-			if($simple == 0) {
-				if(isset($join_where) && preg_match("/\s+WHERE\s+((?:.+)(?:(?:(\s+(?:AND|OR)\s+)?(?:.+)?)*)?)(?:\s+ORDER\s+BY|\s+LIMIT)?/is", $select, $first_where)) {
-					$change = true;
-					$first_where[1] .= $join_where;
-				}
-				else if(isset($join_where)) {
-					$first_where[1] = "WHERE ".substr($join_where, 5);
-					$change = true;
-				}
-				else if(preg_match("/\s+WHERE\s+((?:.+)(?:(?:(\s+(?:AND|OR)\s+)?(?:.+)?)*)?)(?:\s+ORDER\s+BY|\s+LIMIT)?/is", $select, $first_where)) {
-					$change = false;
-				}
-	
-				if($first_where[1]) {
-					$where = $this->_load_where($first_where[1], $change);
-					if(!$where) {
-						$this->_set_error("Invalid/Unsupported WHERE clause");
-						return null;
-					}
-				}
-			}
 
-			if(preg_match_all("/(?:\A|\s*,\s*)((?:(?:[A-Z][A-Z0-9\_]*\s*\(.*?\))|(?:(?:(?:[A-Z][A-Z0-9\_]*)\.)?(?:(?:[A-Z][A-Z0-9\_]*)|\*)))(?:\s+(?:AS\s+)?[A-Z][A-Z0-9\_]*)?)/is", trim($matches[3]), $columns)) {
-				$Columns = $columns[1];
-			}
-			else { $Columns = explode(",", $matches[3]); }
-			if(!$Columns) { return NULL; }
+					$joins[$saveas] = array('fullName' => array($db_name, $table_name), 'joined' => array());
+					$table_columns = $table->getColumns();
+					$join_columns_size = count($table_columns);
+					$joined_info['tables'][$saveas] = $table_columns;
+					$joined_info['offsets'][$saveas] = count($joined_info['columns']);
+					$joined_info['columns'] = array_merge($joined_info['columns'], array_keys($table_columns));
 
-			$ColumnList = array();
-			foreach($Columns as $column) {
-				$column = trim($column);
-				if($column == "") { continue; }
-		
-				if(preg_match("/[A-Z][A-Z0-9\_]*\s*\(.+?\)(\s+(?:AS\s+)?[A-Z][A-Z0-9\_]*)?/is", $column, $colmatches)) {
-					$ColumnList[] = $colmatches[0];
-				}
-				else if(preg_match("/(?:([A-Z][A-Z0-9\_]*)\.)?((?:[A-Z][A-Z0-9\_]*)|\*)(?:\s+(?:AS\s+)?([A-Z][A-Z0-9\_]*))?/is",$column, $colmatches)) {
-					list(, $name, $column) = $colmatches;
-					if(isset($colmatches[3])) {
-						$ColumnList[] = $colmatches[0];
-					} else if(!empty($name) && $column == "*") {
-						$ColumnList = array_merge($ColumnList, array_keys($tables[$name]['columns']));
-					} else if($column == "*") {
-						foreach($tables as $table => $tabledata) {
-							$ColumnList = array_merge($ColumnList, array_keys($tabledata['columns']));
-						}
-					} else {
-						$ColumnList[] = $column;
-					}
-				}
-				else {
-					$ColumnList[] = $column;
-				}
-			}
-			$this->Columns[$randval] = $ColumnList;
+					$join_data = $table->getEntries();
 
-			$this_random = array();
-			$this->tosort = array();
-			
-			if($matches[4] != "FSQL") {
-				if(preg_match("/\s+LIMIT\s+(?:(?:(\d+)\s*,\s*(\-1|\d+))|(\d+))/is", $select, $additional)) {
-					list(, $limit_start, $limit_stop) = $additional;
-					if($additional[3]) { $limit_stop = $additional[3]; $limit_start = 0; }
-					else if($additional[2] != -1) { $limit_stop += $limit_start; }
-				}
-				else { $limit_start = 0; $limit_stop = -1; }
+					if(!empty($table_unparsed)) {
+						preg_match_all("/\s*(?:((?:LEFT|RIGHT|FULL)(?:\s+OUTER)?|INNER)\s+)?JOIN\s+(`?(?:[^\W\d]\w*)`?\.)?`?([^\W\d]\w*)`?(?:\s+(?:AS\s+)?`?([^\W\d]\w*)`?)?\s+(USING|ON)\s*(?:(?:\((.*?)\))|(?:(?:\()?((?:\S+)\s*=\s*(?:\S+)(?:\))?)))/is", $table_unparsed, $join);
+						$numJoins = count($join[0]);
+						for($i = 0; $i < $numJoins; ++$i) {
+							$join_name = trim($join[1][$i]);
+							$join_db_name = $join[2][$i];
+							if(empty($join_db_name)) {
+								$join_db_name = $this->currentDB->name;
+							}
+							$join_table_name = $join[3][$i];
+							$join_table_saveas = $join[4][$i];
+							if(empty($join_table_saveas)) {
+								$join_table_saveas = $join_table_name;
+							}
 
-				if(preg_match("/\s+ORDER\s+BY\s+(?:(.*)\s+LIMIT|(.*))?/is", $select, $additional)) {
-					if($additional[1] != "") { $ORDERBY = explode(", ", $additional[1]); }
-					else { $ORDERBY = explode(", ", $additional[2]); }
-					for($i = 0; $i < count($ORDERBY); $i++) {
-						if(preg_match("/(\w+)(?:(?:\s+)(\w+))?/is", $ORDERBY[$i], $additional)) {
-							if(!$additional[2]) { $additonal[2] = "ASC"; }
-							$this->tosort[] = array("key" => $additional[1], "sortby" => strtoupper($additional[2]));
+							$join_db =& $this->databases[$join_db_name];
+
+							if(!($join_table =& $join_db->getTable($join_table_name))) {
+								return NULL;
+							}
+
+							if(!isset($tables[$join_table_saveas])) {
+								$tables[$join_table_saveas] =& $join_table;
+							} else {
+								return $this->_set_error("Table named '$join_table_saveas' already specified");
+							}
+
+							$clause = $join[5][$i];
+							if(!strcasecmp($clause, "ON")) {
+								$conditions = isset($list[6][$i]) ? $join[6][$i] : $join[7][$i];
+							}
+							else if(!strcasecmp($clause, "USING")) {
+								$shared_columns = preg_split('/\s*,\s*/', trim($join[6][$i]));
+
+								$conditional = '';
+								foreach($shared_columns as $shared_column) {
+									$conditional .= " AND {{left}}.$shared_column=$join_table_alias.$shared_column";
+								}
+								$conditions = substr($conditional, 5);
+							}
+
+							$join_table_columns = $join_table->getColumns();
+							$join_table_column_names = array_keys($join_table_columns);
+							$joining_columns_size = count($join_table_column_names);
+
+							$joined_info['tables'][$join_table_saveas] = $join_table_columns;
+							$new_offset = count($joined_info['columns']);
+							$joined_info['columns'] = array_merge($joined_info['columns'], $join_table_column_names);
+
+							$conditional = $this->_build_where($conditions, $joined_info, FSQL_WHERE_ON);
+							if(!$conditional) {
+								return $this->_set_error('Invalid/Unsupported WHERE clause');
+							}
+
+							if(!isset($this->join_lambdas[$conditional])) {
+								$join_function = create_function('$left_entry,$right_entry', "return $conditional;");
+								$this->join_lambdas[$conditional] = $join_function;
+							} else {
+								$join_function = $this->join_lambdas[$conditional];
+							}
+
+							$joined_info['offsets'][$join_table_saveas] = $new_offset;
+							$joins[$saveas]['joined'][] = array('alias' => $join_table_saveas, 'fullName' => array($join_db_name, $join_table_name), 'type' => $join_name, 'clause' => $clause, 'comparator' => $join_function);
+
+							$joining_entries = $join_table->getEntries();
+							if(!strncasecmp($join_name, "LEFT", 4)) {
+								$join_data = $this->_left_join($join_data, $joining_entries, $join_function, $joining_columns_size);
+							} else if(!strncasecmp($join_name, "RIGHT", 5)) {
+								$join_data = $this->_right_join($join_data, $joining_entries, $join_function, $join_columns_size);
+							} else if(!strncasecmp($join_name, "FULL", 4)) {
+								$join_data = $this->_full_join($join_data, $joining_entries, $join_function, $join_columns_size, $joining_columns_size);
+							} else {
+								$join_data = $this->_inner_join($join_data, $joining_entries, $join_function);
+							}
+
+							$join_columns_size += $joining_columns_size;
 						}
 					}
-				}
 
-				$data = array();
-
-				$table_names = array_keys($tables);
-				$alter_columns = array();
-				foreach($table_names as $tname) {
-					$table =& $tables[$tname];
-					if(!$table['entries']) { continue; }
-					if(!empty($this->tosort)) { usort($table['entries'], array($this, "_orderBy")); }
-					foreach($table['columns'] as $column => $columnDef) {
-						if($columnDef['type'] == 'e') {
-							$alter_columns[] = $column;
-						}
-					}
-				}
-				unset($table);
-
-				if(isset($where)) {
-					$done = array();
-					$reset = 0;
-					foreach($tables as $tname => $table) {
-						if($reset == 1) { $e = 0; $reset = 0; }
-						if(!$table['entries']) { continue; }
-						foreach($table['entries'] as $entry) {
-
-							$tableColumns =& $table['columns'];
-							foreach($alter_columns as $column) {
-								if($tableColumns[$column]['type'] == 'e') {
-									$i = $entry[$column];
-									$entry[$column] = ($i == 0) ? "''" : $tableColumns[$column]['restraint'][$i - 1];
+					// implicit CROSS JOINs
+					if(!empty($join_data)) {
+						if(!empty($data)) {
+							$new_data = array();
+							foreach($data as $left_entry)
+							{
+								foreach($join_data as $right_entry) {
+									$new_data[] = array_merge($left_entry, $right_entry);
 								}
 							}
-							
-							$proceed = "";
-							foreach($where as $i => $line) {
-								if(!$line || !is_array($line)) { continue; }
-								$temp = $where[$i]; 
-								$temp_table = $temp['table']; 
-								$var = $temp['var'];
-								if(!preg_match("/'(.+?)'/is", $temp['value']) && 
-									  preg_match("/(\S+)\.(\S+)/", $temp['value'], $value) && 
-									  ( $temp_table == $tname || $tname == $value[1] ) && 
-									  ($temp['operator'] == "=" || $temp['operator'] == " ~=~ ")) {
-									  
-								  list(, $value_tbl, $value_col) = $value;
-								  if($temp_table == $tname) {
-									  list(, $value_tbl, $value_col) = $value;
-									  $var_table= $temp_table;	
-									  $var = $temp['var'];
-									}
-									else {
-										list(, $var_table, $var) = $value;
-									  $value_tbl = $temp_table;	
-									  $value_col = $temp['var'];
-									}
-									//echo "$tname -> $value_tbl = Sorting with this other table:\n";
-									//print_r($tables[$value_tbl]['entries']);
-									if(!empty($tables[$value_tbl]['entries'])) {
-										foreach($tables[$value_tbl]['entries'] as $other_entry) {
-											//echo "\nif(".strval(trim($entry[$var], "'"))." == ".strval($other_entry[$value_col]).")\n";
-											if(strval(trim($entry[$var], "'")) == strval(trim($other_entry[$value_col],"'"))) {
-												$entry = array_merge($entry, $other_entry);
-												if($temp['operator'] == " ~=~ ") { $proceed .= "1"; }
-											}
-											if($temp['operator'] == "=") { $proceed .= "1"; }
-											$reset = 1;
-										}
-									} else {
-										$proceed .= "0";
-									}
-									$done[] = $i;
-								}
-								else {	$proceed .= ($this->_where_functions($where[$i], $entry, $tname)) ? "1" : "0";	}
-								
-								if(isset($where[$i + 1]) && is_array($where[$i + 1])) {
-									if($where[$i]["next"] == "AND") {
-										$proceed .= " && ";
-									} else if($where[$i]["next"] == "OR") {
-										$proceed .= " || ";
-									}
-								}
-							}
-							eval("if(!($proceed)) { \$go = true; } else { \$go = false; }");
-							if($go == true) { continue; }
-	
-							if($distinct && in_array($entry, $data)) { continue; }
-							if($has_random) { $this_random[] = $e; }
-							if($e >= $limit_start) {
-								if($limit_stop == -1 || $e < $limit_stop) { $data[$e] = $entry; }
-								else if($limit_stop != -1 && $e >= $limit_stop) { break; }
-							}
-							$e++;
-						}
-						
-						if(count($done) > 0 ) {
-							foreach($done as $index) { unset($where[$index]); }
-							unset($done);
+							$data = $new_data;
+						} else {
+							$data = $join_data;
 						}
 					}
 				} else {
-					foreach($tables as $tname => $table) {
-						if(!$table['entries']) { continue; }
-						foreach($table['entries'] as $entry) {
-							$tableColumns =& $table['columns'];
-							foreach($alter_columns as $column) {
-								if($tableColumns[$column]['type'] == 'e') {
-									$i = $entry[$column];
-									$entry[$column] = ($i == 0) ? "''" : $tableColumns[$column]['restraint'][$i - 1];
-								}
-							}
-							
-							if($distinct && in_array($entry, $data)) { continue; }
-							if($has_random) { $this_random[] = $e; }
-							if($e >= $limit_start) {
-								if($limit_stop == -1 || $e < $limit_stop) { $data[$e] = $entry; }
-								else if($limit_stop != -1 && $e >= $limit_stop) { break; }
-							}
-							$e++;
-						}
-					}
+					return $this->_set_error('Invalid table list');
 				}
-			}
-			else { $data[$e++] = $entry; }
-
-			if(!empty($data) && $has_random && preg_match("/\s+RANDOM(?:\((\d+)\)?)?\s+/is", $select, $additional)) {
-				if(!$additional[1]) { $additional[1] = 1; }
-				if($additional[1] >= count($this_random)) { $results = $data; }
-				else {
-					$random = array_rand($this_random, $additional[1]);
-					if(is_array($random)) {	for($i = 0; $i < count($random); $i++) { $results[] = $data[$random[$i]]; }	}
-					else { $results[] = $data[$random]; }
-				}
-				unset($data);
-				$data = $results;
 			}
 		}
 
-		$this->cursors[$randval] = array(0, 0);
-		$this->data[$randval] = $data;
-		return $randval;
+		$this->tosort = array();
+		$where = null;
+		$limit = null;
+
+		if(preg_match('/\s+WHERE\s+((?:.+?)(?:(?:(?:(?:\s+)(?:AND|OR)(?:\s+))?(?:.+?)?)*?)?)(\s+(?:HAVING|(?:GROUP|ORDER)\s+BY|LIMIT|FETCH).*)?\Z/is', $the_rest, $additional)) {
+			$the_rest = isset($additional[2]) ? $additional[2] : '';
+			$where = $this->_build_where($additional[1], $joined_info);
+			if(!$where)
+				return $this->_set_error('Invalid/Unsupported WHERE clause');
+		}
+		if(preg_match('/\s+ORDER\s+BY\s+(.*?)(\s+(?:LIMIT).*)?\Z/is', $the_rest, $additional)) {
+			$the_rest = isset($additional[2]) ? $additional[2] : '';
+			$ORDERBY = explode(',', $additional[1]);
+			foreach($ORDERBY as $order_item) {
+				if(preg_match('/(?:`?([^\W\d]\w*)`?\.)?`?([^\W\d]\w*)`?(?:\s+(ASC|DESC))?/is', $order_item, $additional)) {
+					list( , $table_alias, $column) = $additional;
+					if(!empty($table_alias)) {
+						if(!isset($tables[$table_alias])) {
+							return $this->_set_error("Unknown table name/alias in ORDER BY: $table_alias");
+						}
+
+						$index = array_search($column,  array_keys($joined_info['tables'][$table_alias])) + $joined_info['offsets'][$table_alias];
+						if($index === false || $index === null) {
+							return $this->_set_error("Unknown column in ORDER BY: $column");
+						}
+					} else {
+						$index = $this->_find_exactly_one($joined_info, $column, "ORDER BY clause");
+						if($index === NULL) {
+							return NULL;
+						}
+					}
+
+					$ascend = !empty($additional[3]) ? !strcasecmp('ASC', $additional[3]) : true;
+					$this->tosort[] = array('key' => $index, 'ascend' => $ascend);
+				}
+			}
+		}
+
+		if(preg_match('/\s+LIMIT\s+(?:(?:(\d+)\s*,\s*(\-1|\d+))|(?:(\d+)\s+OFFSET\s+(\d+))|(\d+))/is', $the_rest, $additional)) {
+			// LIMIT length
+			if(isset($additional[5])) {
+				$limit_stop = $additional[5]; $limit_start = 0;
+			}
+			// LIMIT length OFFSET offset (mySQL, Postgres, SQLite)
+			else if(isset($additional[3]))
+				list(, $limit_stop, $limit_start) = $additional;
+			// LIMIT offset, length (mySQL, SQLite)
+			else
+				list(, $limit_start, $limit_stop) = $additional;
+
+			$limit = array((int) $limit_start, (int) $limit_stop);
+		}
+
+		$selected_columns = array();
+		$select_line = '';
+		foreach($Columns as $column) {
+			// function call
+			if(preg_match('/\A(`?([^\W\d]\w*)`?\s*\((?:.*?)?\))(?:\s+(?:AS\s+)?`?([^\W\d]\w*)`?)?\Z/is', $column, $colmatches)) {
+				$function_call = str_replace($colmatches[1], "`", "");
+				$function_name = strtolower($colmatches[2]);
+				$alias = !empty($colmatches[3]) ? $colmatches[3] : $function_call;
+				$expr = $this->_build_expression($select_value, $joined_info, false);
+				if($expr !== null)
+				{
+					$select_line .= $expr.', ';
+					$selected_columns[] = $alias;
+				}
+				else
+					return false; // error should already be set by parser
+			}
+			// identifier/keyword/column/*
+			else if(preg_match('/\A(?:`?([^\W\d]\w*)`?\.)?(`?(?:[^\W\d]\w*)|\*)`?(?:\s+(?:AS\s+)?`?([^\W\d]\w*)`?)?\Z/is',$column, $colmatches)) {
+				list(, $table_name, $column) = $colmatches;
+				if($column === '*') {
+					if(isset($colmatches[3]))
+						return $this->_set_error('Unexpected alias after "*"');
+
+					$star_tables = !empty($table_name) ? array($table_name) : array_keys($tables);
+					foreach($star_tables as $tname) {
+						$start_index = $joined_info['offsets'][$tname];
+						$table_columns = $joined_info['tables'][$tname];
+						$column_names = array_keys($table_columns);
+						foreach($column_names as $index => $column_name) {
+							$select_value = $start_index + $index;
+							$select_line .= "\$entry[$select_value], ";
+							$selected_columns[] = $column_name;
+						}
+					}
+				} else {
+					$alias = !empty($colmatches[3]) ? $colmatches[3] : $column;
+
+					if($table_name) {
+						$table_columns = $joined_info['tables'][$table_name];
+						$column_names = array_keys($table_columns);
+						$index = array_search($column, $column_names) + $joined_info['offsets'][$table_name];
+					} else if(strcasecmp($column, 'null')){
+						$index = $this->_find_exactly_one($joined_info, $column, "SELECT columns");
+						if($index === NULL) {
+							return NULL;
+						}
+						$index = $keys[0];
+					} else {  // "null" keyword
+						$select_line .= 'NULL, ';
+						$selected_columns[] = $column;
+						continue;
+					}
+
+					$select_line .= "\$entry[$index], ";
+					$selected_columns[] = $alias;
+				}
+			}
+			// numeric constant
+			else if(preg_match('/\A(-?\d+(?:\.\d+)?)(?:\s+(?:AS\s+)?`?([^\W\d]\w*)`?)?\Z/is', $column, $colmatches)) {
+				$value = $colmatches[1];
+				$alias = !empty($colmatches[2]) ? $colmatches[2] : $value;
+				$select_line .= "$value, ";
+				$selected_columns[] = $alias;
+			}
+			// string constant
+			else if(preg_match("/\A('(.*?(?<!\\\\))')(?:\s+(?:AS\s+)?`?([^\W\d]\w*)`?)?\Z/is", $column, $colmatches)) {
+				$value = $colmatches[1];
+				$alias = !empty($colmatches[3]) ? $colmatches[3] : $value;
+				$select_line .= "$value, ";
+				$selected_columns[] = $alias;
+			}
+			else {
+				return $this->_set_error("Parse Error: Unknown value in SELECT clause: $column");
+			}
+		}
+
+		$line = '$final_set[] = array('. substr($select_line, 0, -2) . ');';
+		if(!empty($joins))
+		{
+			if($where !== null)
+				$line = "if({$where}) {\r\n\t\t\t\t\t$line\r\n\t\t\t\t}";
+
+			$code = <<<EOT
+			foreach(\$data as \$entry) {
+				$line
+			}
+EOT;
+
+		}
+		else // Tableless SELECT
+		{
+			$entry = array(true);  // hack so it passes count and !empty expressions
+			$code = $line;
+		}
+
+		$final_set = array();
+		eval($code);
+
+		if(!empty($this->tosort)) {
+			usort($final_set, array($this, "_orderBy"));
+		}
+
+		if($limit !== null) {
+			$final_set = array_slice($final_set, $limit[0], $limit[1]);
+		}
+
+		if(!empty($final_set) && $has_random && preg_match("/\s+RANDOM(?:\((\d+)\)?)?\s+/is", $select, $additional)) {
+			$results = array();
+			if(!$additional[1]) { $additional[1] = 1; }
+			if($additional[1] <= count($this_random)) {
+				$random = array_rand($final_set, $additional[1]);
+				if(is_array($random)) {	foreach($random as $key) { $results[] = $final_set[$key]; }	}
+				else { $results[] = $final_set[$random]; }
+			}
+			unset($final_set);
+			$final_set = $results;
+		}
+
+		$rs_id = !empty($this->data) ? max(array_keys($this->data)) + 1 : 1;
+		$this->Columns[$rs_id] = $selected_columns;
+		$this->cursors[$rs_id] = array(0, 0);
+		$this->data[$rs_id] = $final_set;
+		return $rs_id;
 	}
-	
-	function _load_functions($result_id, $section, $entry, $newentry) {
-		if(preg_match("/([A-Z][A-Z0-9\_]*)\s*\((.+?)?\)(?:\s+(?:AS\s+)?([A-Z][A-Z0-9\_]*))?/is",$section,$functions)) {
-			$in_a_class = 0;
-			$is_grouping = 0;
-			$function = strtolower($functions[1]);
 
-			$alias = (!empty($functions[3])) ? $functions[3] : $functions[0];
+	function _build_expression($exprStr, $join_info, $where_type = FSQL_WHERE_NORMAL)
+	{
+		$expr = null;
 
+		// function call
+		if(preg_match('/\A([^\W\d]\w*)\s*\((.*?)\)/is', $exprStr, $matches)) {
+			$function = strtolower($matches[1]);
+			$params = $matches[2];
+			$final_param_list = '';
+			$paramExprs = array();
+			$isCustom = false;
 			if(isset($this->renamed_func[$function])) {
 				$function = $this->renamed_func[$function];
-			} else if(in_array($function, $this->custom_func)) {
-				if(in_array($function, array("sum", "max", "min", "count")))
-					$is_grouping = 1;
-				$in_a_class = 1;
+			}
+
+			if(in_array($function, $this->custom_func)) {
+				$isCustom = true;
 				$function = "_fsql_functions_".$function;
 			} else if(!in_array($function, $this->allow_func)) {
 				$this->_set_error("Call to unknown SQL function");
 				continue;
 			}
-			
-			if($functions[2] != "") {
-				$parameter = explode(",", $functions[2]);
+
+			if(strlen($params) !== 0) {
+				$parameter = explode(',', $params);
 				foreach($parameter as $param) {
-					if(!preg_match("/'(.+?)'/is", $param) && !is_numeric($param) && $is_grouping == 0) {
-						if(preg_match("/(?:\S+)\.(?:\S+)/", $param)) { list($name, $var) = explode(".", $param); }
-						else { $var = $param; }
-						$parameters[] = $entry[$var];
-					}
-					else { $parameters[] = $param; }
+					$param = trim($param);
+
+					$paramExpr = $this->_build_expression($param, $join_info, $where_type | 1);
+					if($paramExpr === null) // parse error
+						return null;
+
+					$paramExprs[] = $paramExpr;
 				}
-				if($is_grouping) {
-					$parameters[] = $result_id;
-				}
-				if($in_a_class == 0) { $newentry[$alias] = call_user_func_array($function, $parameters); }
-				else { $newentry[$alias] = call_user_func_array(array($this,$function), $parameters); }
 			}
-			else {
-				if($in_a_class == 0) { $newentry[$alias] = call_user_func($function); }
-				else { $newentry[$alias] = call_user_func(array($this,$function)); }
-			}
-			return $newentry;
+
+			$final_param_list = implode(',', $paramExprs);
+
+			if($isCustom)
+				$expr = "\$this->$function($final_param_list)";
+			else
+				$expr = "$function($final_param_list)";
 		}
-		return NULL;
-	}
-	
-	function _load_where($statement, $change)
-	{
-		if($statement) {
-			preg_match_all("/(\S+?)\s*(~=~|!=|<>|>=|<=|>|<|=|(?:NOT\s+)?IN|(?:NOT\s+)?R?LIKE|(?:NOT\s+)?REGEXP)\s*('.*?'|\S+)(?:\s+(AND|OR)\s+)?/is", $statement, $WHERE);
-			
-			$where_count = count($WHERE[0]);
-			if($where_count == 0)
-				return null;
-
-			for($i = 0; $i < $where_count; $i++) {
-				$next = "";
-				
-				$var = $WHERE[1][$i];
-				$operator = $WHERE[2][$i];
-				$value = $WHERE[3][$i];
-
-				if(isset($WHERE[4][$i])) {
-					$next = $WHERE[4][$i];
-				}
-				
-				if($operator == "<>") { $operator = "!="; }
-				else if($change && $operator == "=") { $operator = " ~=~ "; }
-
-				if(!$next || (strtoupper($next) != "AND" && strtoupper($next) != "OR")) { $next = ""; }
-
-				if(!preg_match("/'(.+?)'/is", $var) && !is_numeric($var)) {
-					$isFunction = preg_match("/(.+?)\((.+?)?\)/is",$var);
-					if(preg_match("/`?([A-Z][A-Z0-9\_]*)`?\.`?([A-Z][A-Z0-9\_]*)`?/is", $var, $var_pieces) && !$isFunction) {
-						list(, $from_tbl, $new_var) = $var_pieces;
-					}
-					else if(preg_match("/`?([A-Z][A-Z0-9\_]*)`?/is", $var, $var_pieces) && !$isFunction) {
-						$from_tbl = NULL;
-						$new_var = $var_pieces[1];
-					}
-					else { $from_tbl = NULL; $new_var = $var; }
-				} else { $from_tbl = NULL; $new_var = $var; }
-				$where[] = array('table' => $from_tbl, 'var' => $new_var, 'value' => $value, 'operator' => strtoupper($operator), 'next' => strtoupper($next));
-			}
-			return $where;
-		}
-		return NULL;
-	 }
- 
-	function _where_functions($statement, $entry = NULL, $tname = NULL)
-	{
-		$operator = $statement['operator'];	
-		foreach($statement as $name => $section) {
-			if($name == "table" && $section && $section != $tname) { return NULL; }
-			else if($name == "table" || $name == "next" || $name == "operator") { continue; }
-
-			if(preg_match("/(.+?)\((.+?)?\)/is",$section,$functions)) {
-				$in_a_class = 0;
-				$function = strtolower($functions[1]);
-				
-				if(isset($this->renamed_func[$function])) {
-					$function = $this->renamed_func[$function];
-				} else if(in_array($function, $this->custom_func)) {
-					$in_a_class = 1;
-					$function = "_fsql_functions_".$function;
-				} else if(!in_array($function, $this->allow_func)) {
-					$this->_set_error("Call to unknown SQL function");
-					continue;
-				}
-				
-				if($functions[2] != "") {
-					$parameter = explode(",", $functions[2]);
-					foreach($parameter as $param) {
-						$param = trim($param);
-						if(!preg_match("/'(.+)'/is", $param) && !is_numeric($param)) {
-							if(preg_match("/(?:\S+)\.(?:\S+)/", $param)) { list( , $new_var) = explode(".", $param); }
-							else { $new_var = $param; }
-							$parameters[] = $entry[$new_var];
+		// column/alias/keyword
+		else if(preg_match('/\A(?:`?([^\W\d]\w*|\{\{left\}\})`?\.)?`?([^\W\d]\w*)`?\Z/is', $exprStr, $matches)) {
+			list( , $table_name, $column) =  $matches;
+			// table.column
+			if($table_name) {
+				if(isset($join_info['tables'][$table_name])) {
+					$table_columns = $join_info['tables'][$table_name];
+					if(isset($table_columns[ $column ])) {
+						$columnData = $table_columns[ $column ];
+						if( isset($join_info['offsets'][$table_name]) ) {
+							$colIndex = array_search($column,  array_keys($table_columns)) + $join_info['offsets'][$table_name];
+							$expr = ($where_type & FSQL_WHERE_ON) ? "\$left_entry[$colIndex]" : "\$entry[$colIndex]";
 						} else {
-							$parameters[] = $param;
+							$colIndex = array_search($column, array_keys($table_columns));
+							$expr = "\$right_entry[$colIndex]";
 						}
 					}
-					if($in_a_class == 0) { $$name = call_user_func_array($function, $parameters); }
-					else { $$name = call_user_func_array(array($this,$function), $parameters); }
-				} else { 
-					if($in_a_class == 0) { $$name = call_user_func_array($function, $parameters); }
-					else { $$name = call_user_func_array(array($this,$function), $parameters); }
+				}
+				else if($where_type & FSQL_WHERE_ON && $table_name === '{{left}}')
+				{
+					$colIndex = $this->_find_exactly_one($joined_info, $column, "expression");
+					if($colIndex === NULL) {
+						return NULL;
+					}
+					$expr = "\$left_entry[$colIndex]";
 				}
 			}
-			else if($name == "var") {
-				if(preg_match("/'(.*?)(?<!\\\\)'/is", $section, $matches))
-					$var = $matches[1];
-				else
-					$var = $entry[$section];
-			} else if($name == "value") { $value = $section; }
+			// null
+			else if(!strcasecmp($exprStr, 'NULL')) {
+				$expr = 'NULL';
+			}
+			// unknown
+			else if(!strcasecmp($exprStr, 'UNKNOWN')) {
+				$expr = 'NULL';
+			}
+			// true/false
+			else if(!strcasecmp($exprStr, 'TRUE') || !strcasecmp($exprStr, 'FALSE')) {
+				$expr = strtoupper($exprStr);
+			}
+			else {  // column/alias
+				$colIndex = $this->_find_exactly_one($join_info, $column, "expression");
+				if($colIndex === NULL) {
+					return NULL;
+				}
+				$expr = ($where_type & FSQL_WHERE_ON) ? "\$left_entry[$colIndex]" : "\$entry[$colIndex]";
+			}
 		}
-		if(preg_match("/'(.*?)(?<!\\\\)'/is", $var, $matches)) { $var = $matches[1]; }
-		if(preg_match("/'(.*?)(?<!\\\\)'/is", $value, $matches)) { $value = $matches[1]; }
-		if($operator == "=" || $operator == " ~=~ ") { $operator = "=="; }
-		
-		$ops = preg_split("/\s+/", $operator);
-		if($ops[0] == "NOT") {
-			$operator = $ops[1];
-			$not = 1;
-		} else {
-			$not = 0;
+		// number
+		else if(preg_match('/\A(?:[\+\-]\s*)?\d+(?:\.\d+)?\Z/is', $exprStr)) {
+			$expr = $exprStr;
 		}
-		
-		if($operator == "LIKE") {
-			$value = preg_quote($value);
-			$value = preg_replace("/(?<!\\\\)_/", ".", $value);
-			$value = preg_replace("/(?<!\\\\)%/", ".*", $value);
-			$value = str_replace("\\\\_", "_", $value);
-			$value = str_replace("\\\\%", "%", $value);
-			$return = (preg_match("/\A{$value}\Z/is", $var)) ? 1 : 0;
-			$return ^= $not;
-		} else if($operator == "REGEXP" || $operator == "RLIKE") {
-			$return = (preg_match("/".$value."/i", $var)) ? 1 : 0;
-			$return ^= $not;
+		// string
+		else if(preg_match("/\A'.*?(?<!\\\\)'\Z/is", $exprStr)) {
+			$expr = $exprStr;
 		}
-		/*else if($operator == "IN") {
-			eval("\$return = (in_array(\$var, array$value)) ? 1 : 0;");
-			$return ^= $not;
-		} */
-		else
-			eval("\$return = (\$var $operator \$value) ? 1 : 0;");
+		else if(($where_type & FSQL_WHERE_ON) && preg_match('/\A{{left}}\.`?([^\W\d]\w*)`?/is', $exprStr, $matches)) {
+			$colIndex = $this->_find_exactly_one($join_info, $column, "expression");
+			if($colIndex === NULL) {
+				return NULL;
+			}
 
-		return $return;
+			$expr = "\$left_entry[$colIndex]";
+		}
+		else
+			return null;
+
+		return $expr;
 	}
- 
+
+	function _find_exactly_one($join_info, $column, $location) {
+		$keys = array_keys($join_info['columns'], $column);
+		$keyCount = count($keys);
+		if($keyCount == 0) {
+			return $this->_set_error("Unknown column/alias in $location: $column");
+		} else if($keyCount > 1) {
+			return $this->_set_error("Ambiguous column/alias in $location: $column");
+		}
+		return $keys[0];
+	}
+
+	function _build_where($statement, $join_info, $where_type = FSQL_WHERE_NORMAL)
+	{
+		if($statement) {
+			preg_match_all("/(\A\s*|\s+(?:AND|OR)\s+)(NOT\s+)?(\S+?)(\s*(?:!=|<>|>=|<=>?|>|<|=)\s*|\s+(?:IS(?:\s+NOT)?|(?:NOT\s+)?IN|(?:NOT\s+)?R?LIKE|(?:NOT\s+)?REGEXP)\s+)(\((.*?)\)|'.*?'|\S+)/is", $statement, $WHERE, PREG_SET_ORDER);
+
+			if(empty($WHERE))
+				return null;
+
+			$condition = '';
+			foreach($WHERE as $where)
+			{
+				$local_condition = '';
+				$logicalOp = trim($where[1]);
+				$not = !empty($where[2]);
+				$leftStr = $where[3];
+				$operator = preg_replace('/\s+/', ' ', trim(strtoupper($where[4])));
+				$rightStr = $where[5];
+
+				$leftExpr = $this->_build_expression($leftStr, $join_info, $where_type);
+				if($leftExpr === null)
+					return null;
+
+				if($operator !== 'IN' && $operator !== 'NOT IN')
+				{
+					$rightExpr = $this->_build_expression($rightStr, $join_info, $where_type);
+					if($rightExpr === null)
+						return null;
+
+					switch($operator) {
+						case '=':
+							$local_condition = "(($leftExpr == $rightExpr) ? FSQL_TRUE : FSQL_FALSE)";
+							break;
+						case '!=':
+						case '<>':
+							$local_condition = "(($leftExpr != $rightExpr) ? FSQL_TRUE : FSQL_FALSE)";
+							break;
+						case '>':
+							if($nullcheck)
+							$local_condition = "(($leftExpr > $rightExpr) ? FSQL_TRUE : FSQL_FALSE)";
+							break;
+						case '>=':
+							if($nullcheck)
+							$local_condition = "(($leftExpr >= $rightExpr) ? FSQL_TRUE : FSQL_FALSE)";
+							break;
+						case '<':
+							$local_condition = "(($leftExpr < $rightExpr) ? FSQL_TRUE : FSQL_FALSE)";
+							break;
+						case '<=':
+							$local_condition = "(($leftExpr <= $rightExpr) ? FSQL_TRUE : FSQL_FALSE)";
+							break;
+						case '<=>':
+							$local_condition = "(($leftExpr == $rightExpr) ? FSQL_TRUE : FSQL_FALSE)";
+							break;
+						case 'IS NOT':
+							$not = !$not;
+						case 'IS':
+							if($rightExpr === 'NULL')
+								$local_condition = "($leftExpr === null ? FSQL_TRUE : FSQL_FALSE)";
+							else if($rightExpr === 'TRUE')
+								$local_condition = "\$this->_fsql_isTrue($leftExpr) ? FSQL_TRUE : FSQL_FALSE)";
+							else if($rightExpr === 'FALSE')
+								$local_condition = "\$this->_fsql_isFalse($leftExpr) ? FSQL_TRUE : FSQL_FALSE)";
+							else
+								return null;
+							break;
+						case 'NOT LIKE':
+							$not = !$not;
+						case 'LIKE':
+							$local_condition = "\$this->_fsql_like($leftExpr, $rightExpr)";
+							break;
+						case 'NOT RLIKE':
+						case 'NOT REGEXP':
+							$not = !$not;
+						case 'RLIKE':
+						case 'REGEXP':
+							$local_condition = "\$this->_fsql_regexp($leftExpr, $rightExpr)";
+							break;
+						default:
+							$local_condition = "$leftExpr $operator $rightExpr";
+							break;
+					}
+				}
+				else
+				{
+					if(!empty($where[6])) {
+						$array_values = explode(',', $where[6]);
+						$valuesExpressions = array();
+						foreach($array_values as $value)
+						{
+							$valueExpr = $this->_build_expression(trim($value), $join_info, $where_type);
+							$valuesExpressions[] = $valueExpr['expression'];
+						}
+						$valuesString = implode(',', $valuesExpressions);
+						$local_condition = "\$this->_fsql_in($leftExpr, array($valuesString))";
+
+						if($operator === 'NOT IN')
+							$not = !$not;
+					}
+					else
+						return null;
+				}
+
+				if(!strcasecmp($logicalOp, 'AND'))
+					$condition .= ' & ';
+				else if(!strcasecmp($logicalOp, 'OR'))
+					$condition .= ' | ';
+
+				if($not)
+					$condition .= '\$this->_fsql_not('.$local_condition.')';
+				else
+					$condition .= $local_condition;
+			}
+			return "($condition) === ".FSQL_TRUE;
+		}
+		return null;
+	}
+
 	function _orderBy($a, $b)
 	{
 		foreach($this->tosort as $tosort) {
 			extract($tosort);
 			$a[$key] = preg_replace("/^'(.+?)'$/", "\\1", $a[$key]);
 			$b[$key] = preg_replace("/^'(.+?)'$/", "\\1", $b[$key]);
-			if (($a[$key] > $b[$key] && $sortby == "ASC") || ($a[$key] < $b[$key] && $sortby == "DESC")) {
+			if (($a[$key] > $b[$key] && $ascend) || ($a[$key] < $b[$key] && !$ascend)) {
 				return 1;
-			} else if (($a[$key] < $b[$key] && $sortby == "ASC") || ($a[$key] > $b[$key] && $sortby == "DESC")) {
+			} else if (($a[$key] < $b[$key] && $ascend) || ($a[$key] > $b[$key] && !$ascend)) {
 				return -1;
 			}
 		}
@@ -2790,6 +2888,100 @@ class fSQLEnvironment
 		}
 	}
 
+	function _inner_join($left_data, $right_data, $join_comparator)
+	{
+		if(empty($left_data) || empty($right_data))
+			return array();
+
+		$new_join_data = array();
+
+		foreach($left_data as $left_entry)
+		{
+			foreach($right_data as $right_entry) {
+				if($join_comparator($left_entry, $right_entry)) {
+					$new_join_data[] = array_merge($left_entry, $right_entry);
+				}
+			}
+		}
+
+		return $new_join_data;
+	}
+
+	function _left_join($left_data, $right_data, $join_comparator, $pad_length)
+	{
+		$new_join_data = array();
+		$right_padding = array_fill(0, $pad_length, null);
+
+		foreach($left_data as $left_entry)
+		{
+			$match_found = false;
+			foreach($right_data as $right_entry) {
+				if($join_comparator($left_entry, $right_entry)) {
+					$match_found = true;
+					$new_join_data[] = array_merge($left_entry, $right_entry);
+				}
+			}
+
+			if(!$match_found)
+				$new_join_data[] = array_merge($left_entry, $right_padding);
+		}
+
+		return $new_join_data;
+	}
+
+	function _right_join($left_data, $right_data, $join_comparator, $pad_length)
+	{
+		$new_join_data = array();
+		$left_padding = array_fill(0, $pad_length, null);
+
+		foreach($right_data as $right_entry)
+		{
+			$match_found = false;
+			foreach($left_data as $left_entry) {
+				if($join_comparator($left_entry, $right_entry)) {
+					$match_found = true;
+					$new_join_data[] = array_merge($left_entry, $right_entry);
+				}
+			}
+
+			if(!$match_found)
+				$new_join_data[] = array_merge($left_padding, $right_entry);
+		}
+
+		return $new_join_data;
+	}
+
+	function _full_join($left_data, $right_data, $join_comparator, $left_pad_length, $right_pad_length)
+	{
+		$new_join_data = array();
+		$matched_rids = array();
+		$left_padding = array_fill(0, $left_pad_length, null);
+		$right_padding = array_fill(0, $right_pad_length, null);
+
+		foreach($left_data as $left_entry)
+		{
+			$match_found = false;
+			foreach($right_data as $rid => $right_entry) {
+				if($join_comparator($left_entry, $right_entry)) {
+					$match_found = true;
+					$new_join_data[] = array_merge($left_entry, $right_entry);
+					if(!in_array($rid, $matched_rids))
+						$matched_rids[] = $rid;
+				}
+			}
+
+			if(!$match_found)
+				$new_join_data[] = array_merge($left_entry, $right_padding);
+		}
+
+		$unmatched_rids = array_diff(array_keys($right_data), $matched_rids);
+		foreach($unmatched_rids as $rid) {
+			$new_join_data[] = array_merge($left_padding, $right_data[$rid]);
+		}
+
+		return $new_join_data;
+	}
+
 	function fetch_array($id, $type = 1)
 	{
 		if(!$id || !isset($this->cursors[$id]) || !isset($this->data[$id][$this->cursors[$id][0]]))
@@ -2799,42 +2991,13 @@ class fSQLEnvironment
 		if(!$entry)
 			return NULL;
 
-		foreach($this->Columns[$id] as $column) {
-			$column = trim($column);
-			if($column == "")
-				continue;
-
-			if(preg_match("/\A(?:([A-Z][A-Z0-9\_]*)\.)?([A-Z][A-Z0-9\_]*)(?:\s+(?:AS\s+)?([A-Z][A-Z0-9\_]*))?\Z/is",$column,$matches)) {
-				list(, $name, $column, $as) = $matches;
-				if(empty($as))
-					$as = $column;
-				$load = $entry[$column];
-				$load = strtr($load, array("\\\"" => "\"", "\\\\\"" => "\\\""));
-				if($load) {
-					//echo "\$newentry[\$as] = $load;<br/>";
-					//echo "\$newentry[$as] = $load;<br/>";
-					eval("\$newentry[\$as] = $load;");
-				}
-			}
-			else if(preg_match("/(.+?)\((.+?)?\)(?:\s+(?:AS\s+)?([A-Z][A-Z0-9\_]*))?/is",$column,$functions)) {
-				$newentry = $this->_load_functions($id, $column, $entry, $newentry);
-			}
-			else {
-				$load = $entry[$column];
-				$load = strtr($load, array("\\\"" => "\"", "\\\\\"" => "\\\""));
-				if($load) {
-					//echo "\$newentry[\$as] = $load;<br/>";
-					//echo "\$newentry[$as] = $load;<br/>";
-					eval("\$newentry[\$column] = $load;");
-				}
-			}
-		}
+		$columnNames = $this->Columns[$id];
 
 		$this->cursors[$id][0]++;
 
-		if($type == 1) {  return $newentry; }
-		else if($type == 2) { return array_values($newentry); }
-		else{ return array_merge($newentry, array_values($newentry)); }
+		if($type === FSQL_ASSOC) {  return array_combine($columnNames, $entry); }
+		else if($type === FSQL_NUM) { return $entry; }
+		else{ return array_merge($entry, array_combine($columnNames, $entry)); }
 	}
 
 	function fetch_assoc($results) { return $this->fetch_array($results, FSQL_ASSOC); }
@@ -2924,6 +3087,53 @@ class fSQLEnvironment
 	function _fsql_strip_stringtags($string)
 	{
 		return preg_replace("/^'(.+)'$/s", "\\1", $string);
+	}
+
+	// operators
+
+	function _fsql_not($x)
+	{
+		$c = ~$x & 3;
+		return (($c << 1) ^ ($c >> 1)) & 3;
+	}
+
+	function _fsql_isTrue($expr)
+	{
+		return !in_array($expr, array(0, 0.0, '', null), true);
+	}
+
+	function _fsql_isFalse($expr)
+	{
+		return in_array($expr, array(0, 0.0, ''), true);
+	}
+
+	function _fsql_like($left, $right)
+	{
+		if($left !== null && $right !== null)
+		{
+			$right = strtr(preg_quote($right, "/"), array('_' => '.', '%' => '.*', '\_' => '_', '\%' => '%'));
+			return (preg_match("/\A{$right}\Z/is", $left)) ? FSQL_TRUE : FSQL_FALSE;
+		}
+		else
+			return FSQL_UNKNOWN;
+	}
+
+	function _fsql_in($needle, $haystack)
+	{
+		if($needle !== null)
+		{
+			return (in_array($needle, $haystack)) ? FSQL_TRUE : FSQL_FALSE;
+		}
+		else
+			return FSQL_UNKNOWN;
+	}
+
+	function _fsql_regexp($left, $right)
+	{
+		if($left !== null && $right !== null)
+			return (preg_match('/'.$right.'/i', $left)) ? FSQL_TRUE : FSQL_FALSE;
+		else
+			return FSQL_UNKNOWN;
 	}
 
 	//////Misc Functions
