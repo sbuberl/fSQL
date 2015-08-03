@@ -225,6 +225,11 @@ class fSQLTable
 		$this->columns = $columns;
 	}
 
+	function getEntries()
+	{
+		return $this->entries;
+	}
+
 	function &getCursor()
 	{
 		if($this->cursor == NULL)
@@ -400,8 +405,11 @@ class fSQLCachedTable
 					$this->columns[$matches[1]] = array(
 						'type' => $type, 'auto' => $matches[4], 'default' => $default, 'key' => $matches[6], 'null' => $matches[7]
 					);
-					preg_match_all("/'.*?(?<!\\\\)'/", $matches[3], $this->columns[$matches[1]]['restraint']);
-					$this->columns[$matches[1]]['restraint'] = $this->columns[$matches[1]]['restraint'][0];
+					if(preg_match_all("/'(.*?(?<!\\\\))'/", $matches[3], $restraint) !== false) {
+						$this->columns[$matches[1]]['restraint'] = $restraint[1];
+					} else {
+						$this->columns[$matches[1]]['restraint'] = array();
+					}
 				} else {
 					return NULL;
 				}
@@ -413,6 +421,12 @@ class fSQLCachedTable
 		$this->columnsLockFile->releaseRead();
 
 		return $this->columns;
+	}
+
+	function getEntries()
+	{
+		$this->_loadEntries();
+		return $this->entries;
 	}
 
 	function &getCursor()
@@ -467,7 +481,6 @@ class fSQLCachedTable
 
 			if($num_entries != 0)
 			{
-				$columns = array_keys($this->getColumns());
 				$skip = false;
 				$entries = array();
 
@@ -494,12 +507,21 @@ class fSQLCachedTable
 						$skip = false;
 					}
 
-					preg_match_all("#(-?\d+(?:\.\d+)?|'.*?(?<!\\\\)'|NULL);#s", $data, $matches);
+					preg_match_all("#((-?\d+(?:\.\d+)?)|'.*?(?<!\\\\)'|NULL);#s", $data, $matches);
 					for($m = 0; $m < count($matches[0]); $m++) {
-						if($matches[1][$m] == 'NULL')
-							$entries[$row][$columns[$m]] = NULL;
-						else
-							$entries[$row][$columns[$m]] = $matches[1][$m];
+						if($matches[1][$m] === 'NULL') {
+							$entries[$row][$m] = NULL;
+						} else if(!empty($matches[2][$m])) {
+							$number = $matches[2][$m];
+							if($strpos($number, '.') !== false) {
+								$number = (float) $number;
+							} else {
+								$number = (int) $number;
+							}
+							$entries[$row][$m] = $number;
+						} else {
+							$entries[$row][$m] = $matches[1][$m];
+						}
 					}
 				}
 			}
@@ -574,7 +596,8 @@ class fSQLCachedTable
 				foreach($entry as $key => $value) {
 					if($value === NULL)
 						$value = 'NULL';
-
+					else if(is_string($value))
+						$value = "'$value'";;
 					$toprint .= $value.';';
 				}
 				$toprint .= "\r\n";
@@ -861,6 +884,7 @@ class fSQLEnvironment
 	function _set_error($error)
 	{
 		$this->error_msg = $error."\r\n";
+		return NULL;
 	}
 
 	function _error_table_not_exists($db_name, $table_name)
@@ -1329,6 +1353,7 @@ class fSQLEnvironment
 		$newentry = array();
 
 		////Load Columns & Data for the Table
+		$colIndex = 0;
 		foreach($tableColumns as $col_name => $columnDef)  {
 
 			unset($delete);
@@ -1341,34 +1366,41 @@ class fSQLEnvironment
 				$tableCursor->last();
 				$lastRow = $tableCursor->getRow();
 				if($lastRow !== NULL)
-					$this->insert_id = $lastRow[$col_name] + 1;
+					$this->insert_id = $lastRow[$colIndex] + 1;
 				else
 					$this->insert_id = 1;
-				$newentry[$col_name] = $this->insert_id;
+				$newentry[$colIndex] = $this->insert_id;
 			}
 			///Check for NULL Values
 			else if((!strcasecmp($data, "NULL") && !$columnDef['null']) || empty($data) || !strcasecmp($data, "DEFAULT")) {
-				$newentry[$col_name] = $columnDef['default'];
-			}
-			else if($columnDef['type'] == 'i' && preg_match("/\A'(.*?(?<!\\\\))'\Z/is", $data, $matches)) {
-				$newentry[$col_name] = intval($matches[1]);
-			} else if($columnDef['type'] == 'f' && preg_match("/\A'(.*?(?<!\\\\))'\Z/is", $data, $matches)) {
-				$newentry[$col_name] = floatval($matches[1]);
-			} else if($columnDef['type'] == 'e') {
-				if(in_array($data, $columnDef['restraint'])) {
-					$newentry[$col_name]= array_search($data, $columnDef['restraint']) + 1;
-				} else if(is_numeric($data))  {
-					$val = intval($data);
-					if($val >= 0 && $val <= count($columnDef['restraint']))
-						$newentry[$col_name]= $val;
-					else {
-						$this->_set_error("Numeric ENUM value out of bounds");
-						return NULL;
+				$newentry[$colIndex] = $columnDef['default'];
+			} else {
+				if(preg_match("/\A'(.*?(?<!\\\\))'\Z/is", $data, $matches)) {
+					$data = $matches[1];
+				}
+
+				if($columnDef['type'] == 'i') {
+					$newentry[$colIndex] = (int) $data;
+				} else if($columnDef['type'] == 'f') {
+					$newentry[$colIndex] = (float) $data;
+				} else if($columnDef['type'] == 'e') {
+					if(in_array($data, $columnDef['restraint'])) {
+						$newentry[$colIndex]= array_search($data, $columnDef['restraint']) + 1;
+					} else if(is_numeric($data))  {
+						$val = intval($data);
+						if($val >= 0 && $val <= count($columnDef['restraint']))
+							$newentry[$colIndex]= $val;
+						else {
+							$this->_set_error("Numeric ENUM value out of bounds");
+							return NULL;
+						}
+					} else {
+						$newentry[$colIndex] = $columnDef['default'];
 					}
 				} else {
-					$newentry[$col_name] = $columnDef['default'];
+					$newentry[$colIndex] = $data;
 				}
-			} else { $newentry[$col_name] = $data; }
+			}
 
 			////See if it is a PRIMARY KEY or UNIQUE
 			if($columnDef['key'] == 'p' || $columnDef['key'] == 'u') {
@@ -1378,7 +1410,7 @@ class fSQLEnvironment
 					$n = 0;
 					while(!$tableCursor->isDone()) {
 						$row = $tableCursor->getRow();
-						if($row[$col_name] == $newentry[$col_name]) { $delete[] = $n; }
+						if($row[$colIndex] == $newentry[$colIndex]) { $delete[] = $n; }
 						$tableCursor->next();
 						$n++;
 					}
@@ -1392,7 +1424,7 @@ class fSQLEnvironment
 					$tableCursor->first();
 					while(!$tableCursor->isDone()) {
 						$row = $tableCursor->getRow();
-						if($row[$col_name] == $newentry[$col_name]) {
+						if($row[$colIndex] == $newentry[$colIndex]) {
 							if(empty($ignore)) {
 								$this->_set_error("Duplicate value for unique column '{$col_name}'");
 								return NULL;
@@ -1404,6 +1436,8 @@ class fSQLEnvironment
 					}
 				}
 			}
+
+			$colIndex++;
 		}
 
 		$table->insertRow($newentry);
