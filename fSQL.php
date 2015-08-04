@@ -492,6 +492,7 @@ class fSQLCachedTable
 				$skip = false;
 				$entries = array();
 
+				$columnDefs = array_values($this->getColumns());
 				for($i = 0;  $i < $num_entries; $i++) {
 					$line = rtrim(fgets($dataHandle, 4096));
 
@@ -527,6 +528,9 @@ class fSQLCachedTable
 								$number = (int) $number;
 							}
 							$entries[$row][$m] = $number;
+						} else if($columnDefs['type'] === FSQL_TYPE_ENUM) {
+							$index = (int) $matches[2][$m];
+							$entries[$row][$m] = $index > 0 ? $columnDefs[$m]['restraint'][$index] : "";
 						} else {
 							$entries[$row][$m] = $matches[1][$m];
 						}
@@ -598,14 +602,18 @@ class fSQLCachedTable
 
 		if($this->data_load === NULL || strcmp($this->data_load, $modified) >= 0)
 		{
+			$columnDefs = array_values($this->getColumns());
 			$toprint = count($this->entries)."\r\n";
 			foreach($this->entries as $number => $entry) {
 				$toprint .= $number.': ';
 				foreach($entry as $key => $value) {
-					if($value === NULL)
+					if($value === NULL) {
 						$value = 'NULL';
-					else if(is_string($value))
-						$value = "'$value'";;
+					} else if($columnDefs[$key]['type'] === FSQL_TYPE_ENUM) {
+						$value = (int) array_search($value, $columnDefs[$key]['restraint']);;
+					} else if(is_string($value)) {
+						$value = "'$value'";
+					}
 					$toprint .= $value.';';
 				}
 				$toprint .= "\r\n";
@@ -1384,31 +1392,10 @@ class fSQLEnvironment
 			else if((!strcasecmp($data, "NULL") && !$columnDef['null']) || empty($data) || !strcasecmp($data, "DEFAULT")) {
 				$newentry[$colIndex] = $columnDef['default'];
 			} else {
-				if(preg_match("/\A'(.*?(?<!\\\\))'\Z/is", $data, $matches)) {
-					$data = $matches[1];
-				}
-
-				if($columnDef['type'] == 'i') {
-					$newentry[$colIndex] = (int) $data;
-				} else if($columnDef['type'] == 'f') {
-					$newentry[$colIndex] = (float) $data;
-				} else if($columnDef['type'] == 'e') {
-					if(in_array($data, $columnDef['restraint'])) {
-						$newentry[$colIndex]= array_search($data, $columnDef['restraint']) + 1;
-					} else if(is_numeric($data))  {
-						$val = intval($data);
-						if($val >= 0 && $val <= count($columnDef['restraint']))
-							$newentry[$colIndex]= $val;
-						else {
-							$this->_set_error("Numeric ENUM value out of bounds");
-							return NULL;
-						}
-					} else {
-						$newentry[$colIndex] = $columnDef['default'];
-					}
-				} else {
-					$newentry[$colIndex] = $data;
-				}
+				$data = $this->_parse_value($columnDef, $data);
+				if($data === false)
+					return null;
+				$newentry[$colIndex] = $data;
 			}
 
 			////See if it is a PRIMARY KEY or UNIQUE
@@ -2887,6 +2874,79 @@ EOT;
 			return NULL;
 		}
 	}
+
+	function _parse_value($columnDef, $value)
+	{
+		// Blank, NULL, or DEFAULT values
+		if(!strcasecmp($value, 'NULL') || strlen($value) === 0 || !strcasecmp($value, 'DEFAULT')) {
+			return !$columnDef['null'] ? $columnDef['default'] : null;
+		}
+
+		switch($columnDef['type']) {
+			case FSQL_TYPE_INTEGER:
+				if(preg_match("/\A'\s*((?:[\+\-]\s*)?\d+(?:\.\d+)?)\s*'\Z/is", $value, $matches)) {
+					return (int) $matches[1];
+				}
+				else if(preg_match("/\A(?:[\+\-]\s*)?\d+(?:\.\d+)?\Z/is", $value)) {
+					return (int) $value;
+				}
+				else {
+					$this->_set_error('Invalid integer value for insert');
+					return false;
+				}
+			case FSQL_TYPE_FLOAT:
+				if(preg_match("/\A'\s*((?:[\+\-]\s*)?\d+(?:\.\d+)?)\s*'\Z/is", $value, $matches)) {
+					return (float) $matches[1];
+				}
+				else if(preg_match("/\A(?:[\+\-]\s*)?\d+(?:\.\d+)?\Z/is", $value)) {
+					return (float) $value;
+				}
+				else {
+					$this->_set_error('Invalid float value for insert');
+					return false;
+				}
+			case FSQL_TYPE_ENUM:
+				if(preg_match("/\A'(.*?(?<!\\\\))'\Z/is", $value, $matches)) {
+					$value = $matches[1];
+				}
+
+				if(in_array($value, $columnDef['restraint']) || strlen($value) === 0) {
+					return $value;
+				} else if(is_numeric($value)) {
+					$index = (int) $value;
+					if($index >= 1 && $index <= count($columnDef['restraint'])) {
+						return $columnDef['restraint'][$index - 1];
+					} else if($index === 0) {
+						return "";
+					} else {
+						$this->_set_error('Numeric ENUM value out of bounds');
+						return false;
+					}
+				} else {
+					return $columnDef['default'];
+				}
+			case FSQL_TYPE_DATE:
+				list($year, $month, $day) = array('0000', '00', '00');
+				if(preg_match("/\A'((?:[1-9]\d)?\d{2})-(0[1-9]|1[0-2])-([0-2]\d|3[0-1])(?: (?:[0-1]\d|2[0-3]):(?:[0-5]\d):(?:[0-5]\d))?'\Z/is", $value, $matches)
+				|| preg_match("/\A'((?:[1-9]\d)?\d{2})(0[1-9]|1[0-2])([0-2]\d|3[0-1])(?:(?:[0-1]\d|2[0-3])(?:[0-5]\d)(?:[0-5]\d))?'\Z/is", $value, $matches)) {
+					list(, $year, $month, $day) = $matches;
+				} else {
+					list($year, $month, $day) = array('0000', '00', '00');
+				}
+				if(strlen($year) === 2)
+					$year = ($year <= 69) ? 2000 + $year : 1900 + $year;
+				return $year.'-'.$month.'-'.$day;
+			default:
+				if(preg_match("/\A'(.*?(?<!\\\\))'\Z/is", $value, $matches)) {
+					return (string) $matches[1];
+				} else {
+					return $value;
+				}
+		}
+
+		return false;
+	}
+
 
 	function _inner_join($left_data, $right_data, $join_comparator)
 	{
