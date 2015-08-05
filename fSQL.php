@@ -164,6 +164,12 @@ class fSQLTableCursor
 	function first()
 	{
 		$this->pos = 0;
+		return $this->pos;
+	}
+
+	function getPosition()
+	{
+		return $this->pos;
 	}
 
 	function getRow()
@@ -186,12 +192,13 @@ class fSQLTableCursor
 
 	function previous()
 	{
-		$this->pos++;
+		$this->pos--;
 	}
 
 	function next()
 	{
 		$this->pos++;
+		return $this->pos;
 	}
 
 	function seek($pos)
@@ -1451,7 +1458,7 @@ class fSQLEnvironment
 	////Update data in the DB
 	function _query_update($query) {
 		$this->affected = 0;
-		if(preg_match("/\AUPDATE(?:\s+(IGNORE))?\s+(?:`?([^\W\d]\w*)`?\.)?`?([^\W\d]\w*)`?\s+SET\s+(.+?)(?:\s+WHERE\s+(.+?))?\s*\Z/is", $query, $matches)) {
+		if(preg_match("/\AUPDATE(?:\s+(IGNORE))?\s+(?:`?([^\W\d]\w*)`?\.)?`?([^\W\d]\w*)`?\s+SET\s+(.+?)(?:\s+WHERE\s+(.+))?\s*[;]?\Z/is", $query, $matches)) {
 			$matches[4] = preg_replace("/(.+?)(\s+WHERE)(.*)/is", "\\1", $matches[4]);
 			$ignore = !empty($matches[1]);
 			$table_name = $matches[3];
@@ -1472,8 +1479,9 @@ class fSQLEnvironment
 			}
 
 			$columns = $table->getColumns();
+			$columnNames = array_keys($columns);
 			$cursor =& $table->getCursor();
-			$keyCursor = $table->newCursor();
+			$col_indicies = array_flip($columnNames);
 
 			if(preg_match_all("/`?((?:\S+)`?\s*=\s*(?:'(?:.*?)'|\S+))`?\s*(?:,|\Z)/is", $matches[4], $sets)) {
 				foreach($sets[1] as $set) {
@@ -1492,111 +1500,89 @@ class fSQLEnvironment
 			$where = null;
 			if(isset($matches[5]))
 			{
-				$where = $this->_load_where($matches[5], false);
+				$where = $this->_build_where($matches[5], array('tables' => array($table_name => $columns), 'offsets' => array($table_name => 0), 'columns' => $columnNames));
 				if(!$where) {
-					$this->_set_error('Invalid/Unsupported WHERE clause');
+					return $this->_set_error('Invalid/Unsupported WHERE clause');
+				}
+			}
+
+			$updates = array();
+			foreach($SET as $set) {
+				list($column, $value) = $set;
+				$new_value = $this->_parse_value($columns[$column], $value);
+				if($new_value === false)
 					return null;
-				}
+				$col_index = $col_indicies[$column];
+				$updates[$col_index] = "$col_index => $new_value";
 			}
 
-			$alter_columns = array();
+			$unique_key_columns = array();
 			foreach($columns as $column => $columnDef) {
-				if($columnDef['type'] == 'e')
-					$alter_columns[] = $column;
+				if($columnDef['key'] == 'p' || $columnDef['key'] == 'u') {
+					$unique_key_columns[] = $col_indicies[$column];
+				}
 			}
 
-			$newentry = array();
 			$affected = 0;
-			$skip = false;
-			for($e = 0; !$cursor->isDone(); $e++, $cursor->next()) {
-
-				unset($entry);
-				$entry = $cursor->getRow();
-				foreach($alter_columns as $column) {
-					if($columns[$column]['type'] == 'e') {
-						$i = $entry[$column];
-						$entry[$column] = ($i == 0) ? "''" : $columns[$column]['restraint'][$i - 1];
-					}
-				}
-
-				if($where != null) {
-					$proceed = "";
-					for($i = 0; $i < count($where); $i++) {
-						if($i > 0 && $where[$i - 1]["next"] == "AND")
-							$proceed .= " && ".$this->_where_functions($where[$i], $entry, $table_name);
-						else if($i > 0 && $where[$i - 1]["next"] == "OR")
-							$proceed .= " || ".$this->_where_functions($where[$i], $entry, $table_name);
-						else
-							$proceed .= intval($this->_where_functions($where[$i], $entry, $table_name) == 1);
-					}
-					eval("\$cont = $proceed;");
-					if(!$cont)
-						continue;
-				}
-
-				foreach($SET as $set) {
-					list($column, $value) = $set;
-
-					$columnDef = $columns[$column];
-
-					if(!$columnDef['null'] && $value == "NULL")
-						$value = $columnDef['default'];
-					else if(preg_match("/\A([A-Z][A-Z0-9\_]*)/i", $value))
-						$value = $entry[$value];
-					else if($columnDef['type'] == 'i')
-						if(preg_match("/\A'(.*?(?<!\\\\))'\Z/is", $value, $sets))
-							$value = (int) $sets[1];
-						else
-							$value = (int) $value;
-					else if($columnDef['type'] == 'f')
-						if(preg_match("/\A'(.*?(?<!\\\\))'\Z/is", $value, $sets))
-							$value = (float) $sets[1];
-						else
-							$value = (float) $value;
-					else if($columnDef['type'] == 'e')
-						if(in_array($value, $columnDef['restraint'])) {
-							$value = array_search($value, $columnDef['restraint']) + 1;
-						} else if(is_numeric($value))  {
-							$value = (int) $value;
-							if($value < 0 || $value > count($columnDef['restraint'])) {
-								$this->_set_error("Numeric ENUM value out of bounds");
-								return NULL;
-							}
-						} else {
-							$value = $columnDef['default'];
+			$updated_key_columns = array_intersect(array_keys($updates), $unique_key_columns);
+			$key_lookup = array();
+			if(!empty($updated_key_columns)) {
+				for( $rowId = $cursor->first(); !$cursor->isDone(); $rowId = $cursor->next())
+				{
+					$entry = $cursor->getRow();
+					foreach($updated_key_columns as $unique) {
+						if(!isset($key_lookup[$unique])) {
+							$key_lookup[$unique] = array();
 						}
 
-					$newentry[$column] = $value;
-
-					////See if it is a PRIMARY KEY or UNIQUE
-					if($columnDef['key'] == 'p' || $columnDef['key'] == 'u') {
-						$keyCursor->first();
-						$c = 0;
-						while(!$keyCursor->isDone()) {
-							$row = $keyCursor->getRow();
-							if($row[$column] == $newentry[$column] && $e != $c) {
-								if(!$ignore) {
-									$this->_set_error("Duplicate value for unique column '{$column}'");
-									return NULL;
-								} else {
-									$skip = true;
-									break;
-								}
-							}
-							$keyCursor->next();
-							$c++;
-						}
+						$key_lookup[$unique][$entry[$unique]] = $rowId;
 					}
 				}
+			}
 
-				if(!$skip) {
-					$table->updateRow($e, $newentry);
-					$affected++;
-				}
+			$updates = "array(".implode(',', $updates).")";
+			$line = "\t\t\$table->updateRow(\$rowId, \$updates);\r\n";
+			$line .= "\t\t\$affected++;\r\n";
+
+			// find all updated columns that are part of a unique key
+			// if there are any, call checkUnique to validate still unique.
+			$code = '';
+			if(!empty($updated_key_columns)) {
+				$code = <<<EOV
+	\$violation = \$this->_where_key_check(\$rowId, \$entry, \$key_lookup, \$updated_key_columns);
+	if(\$violation) {
+		if(!\$ignore) {
+			return \$this->_set_error("Duplicate value for unique column '{\$column}'");
+		} else {
+			continue;
+		}
+	}
+
+	$line
+EOV;
+			} else {
+				$code = $line;
+			}
+
+			if($where)
+				$code = "\tif({$where}) {\r\n$code\r\n\t}";
+
+			$updateCode  = <<<EOC
+for( \$rowId = \$cursor->first(); !\$cursor->isDone(); \$rowId = \$cursor->next())
+{
+	\$updates = $updates;
+	\$entry = \$updates + \$cursor->getRow();
+$code
+}
+return true;
+EOC;
+
+			$success = eval($updateCode);
+			if(!$success) {
+				return $success;
 			}
 
 			$this->affected = $affected;
-
 			if($this->affected)
 			{
 				if($this->auto)
@@ -1605,11 +1591,28 @@ class fSQLEnvironment
 					$this->updatedTables[] =& $table;
 			}
 
-			return TRUE;
+			return true;
 		} else {
 			$this->_set_error('Invalid UPDATE query');
 			return NULL;
 		}
+	}
+
+	function _where_key_check($rowId, $entry, &$key_lookup, $unique_columns)
+	{
+		foreach($unique_columns as $unique) {
+			$current_lookup =& $key_lookup[$unique];
+			$current_val = $entry[$unique];
+			if(isset($current_lookup[$current_val])) {
+				if($current_lookup[$current_val] != $rowId) {
+					return true;
+				}
+			} else {
+				$current_lookup[$current_val] = $rowId;
+			}
+		}
+
+		return false;
 	}
 
 	/*
