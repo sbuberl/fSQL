@@ -2183,11 +2183,9 @@ EOT;
 							$local_condition = "(($leftExpr != $rightExpr) ? FSQL_TRUE : FSQL_FALSE)";
 							break;
 						case '>':
-							if($nullcheck)
 							$local_condition = "(($leftExpr > $rightExpr) ? FSQL_TRUE : FSQL_FALSE)";
 							break;
 						case '>=':
-							if($nullcheck)
 							$local_condition = "(($leftExpr >= $rightExpr) ? FSQL_TRUE : FSQL_FALSE)";
 							break;
 						case '<':
@@ -2281,7 +2279,7 @@ EOT;
 	function _query_delete($query)
 	{
 		$this->affected  = 0;
-		if(preg_match("/\ADELETE\s+FROM\s+(?:([A-Z][A-Z0-9\_]*)\.)?([A-Z][A-Z0-9\_]*)(?:\s+(WHERE\s+.+))?\s*[;]?\Z/is", $query, $matches)) {
+		if(preg_match('/\ADELETE\s+FROM\s+(?:`?([^\W\d]\w*)`?\.)?`?([^\W\d]\w*)`?(?:\s+WHERE\s+(.+?))?\s*[;]?\Z/is', $query, $matches)) {
 			list(, $db_name, $table_name) = $matches;
 
 			if(!$db_name)
@@ -2300,59 +2298,38 @@ EOT;
 			}
 
 			$columns = $table->getColumns();
+			$columnNames = array_keys($columns);
 			$cursor =& $table->getCursor();
 
 			if($cursor->isDone())
 				return true;
 
-			if(isset($matches[3]) && preg_match("/^WHERE ((?:.+)(?:(?:(?:\s+(AND|OR)\s+)?(?:.+)?)*)?)/is", $matches[3], $first_where))
-			{
-				$where = $this->_load_where($first_where[1], false);
+
+			if(isset($matches[3])) {
+				$where = $this->_build_where($matches[3], array('tables' => array($table_name => $columns), 'offsets' => array($table_name => 0), 'columns' => $columnNames));
 				if(!$where) {
-					$this->_set_error("Invalid/Unsupported WHERE clause");
-					return null;
+					return $this->_set_error('Invalid/Unsupported WHERE clause');
 				}
 
-				$alter_columns = array();
-				foreach($columns as $column => $columnDef) {
-					if($columnDef['type'] == 'e')
-						$alter_columns[] = $column;
+				$code = <<<EOC
+			for(\$k = \$cursor->first(); !\$cursor->isDone(); \$k = \$cursor->next()) {
+				\$entry = \$cursor->getRow();
+				if({$where})
+				{
+					\$table->deleteRow(\$k);
+					\$this->affected++;
 				}
+			}
+EOC;
 
-				for($k = 0; !$cursor->isDone(); $k++, $cursor->next()) {
-
-					$entry = $cursor->getRow();
-					foreach($alter_columns as $column) {
-						if($columns[$column]['type'] == 'e') {
-							$i = $entry[$column];
-							$entry[$column] = ($i == 0) ? "''" : $columns[$column]['restraint'][$i - 1];
-						}
-					}
-
-					$proceed = "";
-					for($i = 0; $i < count($where); $i++) {
-						if($i > 0 && $where[$i - 1]["next"] == "AND") {
-							$proceed .= " && ".$this->_where_functions($where[$i], $entry, $table_name);
-						}
-						else if($i > 0 && $where[$i - 1]["next"] == "OR") {
-							$proceed .= " || ".$this->_where_functions($where[$i], $entry, $table_name);
-						}
-						else {
-							$proceed .=  intval($this->_where_functions($where[$i], $entry, $table_name) == 1);
-						}
-					}
-					eval("\$cond = $proceed;");
-					if(!($cond))
-						continue;
-
-					$table->deleteRow($k);
-
-					$this->affected++;
-				}
+				eval($code);
 			} else {
-				for($k = 0; !$cursor->isDone(); $k++, $cursor->next())
+				$c = 0;
+				for($k = $cursor->first(); !$cursor->isDone(); $k = $cursor->next()) {
 					$table->deleteRow($k);
-				$this->affected = $k;
+					++$c;
+				}
+				$this->affected = $c;
 			}
 
 			if($this->affected)
@@ -2363,7 +2340,7 @@ EOT;
 					$this->updatedTables[] =& $table;
 			}
 
-			return TRUE;
+			return true;
 		} else {
 			$this->_set_error("Invalid DELETE query");
 			return null;
