@@ -2016,11 +2016,7 @@ EOT;
 			$final_set = $results;
 		}
 
-		$rs_id = !empty($this->data) ? max(array_keys($this->data)) + 1 : 1;
-		$this->Columns[$rs_id] = $selected_columns;
-		$this->cursors[$rs_id] = array(0, 0);
-		$this->data[$rs_id] = $final_set;
-		return $rs_id;
+		return $this->_create_result_set($selected_columns, $final_set);
 	}
 
 	function _build_expression($exprStr, $join_info, $where_type = FSQL_WHERE_NORMAL)
@@ -2688,11 +2684,10 @@ EOC;
 
 	function _query_show($query)
 	{
-		if(preg_match("/\ASHOW\s+(FULL\s+)?TABLES(?:\s+FROM\s+`?([A-Z][A-Z0-9\_]*)`?)?\s*[;]?\s*\Z/is", $query, $matches)) {
-			$randval = rand();
+		if(preg_match("/\ASHOW\s+(FULL\s+)?TABLES(?:\s+FROM\s+`?([A-Z][A-Z0-9\_]*)`?)?\s*[;]?\Z/is", $query, $matches)) {
 			$full = !empty($matches[1]);
 
-			if(!$matches[2])
+			if(empty($matches[2]))
 				$db =& $this->currentDB;
 			else
 				$db =& $this->databases[$matches[2]];
@@ -2701,11 +2696,10 @@ EOC;
 			$data = array();
 
 			foreach($tables as $table_name) {
-				$table_name = '\''.$table_name.'\'';
 				if($full) {
-					$data[] = array("Name" => $table_name, 'Table_type' => 'BASE TABLE');
+					$data[] = array($table_name, 'BASE TABLE');
 				} else {
-					$data[] = array("Name" => $table_name);
+					$data[] = array($table_name);
 				}
 			}
 
@@ -2714,27 +2708,17 @@ EOC;
 				$columns[] = 'Table_type';
 			}
 
-			$this->Columns[$randval] = $columns;
-			$this->cursors[$randval] = array(0, 0);
-			$this->data[$randval] = $data;
-
-			return $randval;
+			return $this->_create_result_set($columns, $data);
 		} else if(preg_match("/\ASHOW\s+DATABASES\s*[;]?\s*\Z/is", $query, $matches)) {
-			$randval = rand();
-
 			$dbs = array_keys($this->databases);
 			foreach($dbs as $db) {
-				$db = '\''.$db.'\'';
-				$data[] = array("name" => $db);
+				$data[] = array($db);
 			}
 
-			$this->Columns[$randval] = array("name");
-			$this->cursors[$randval] = array(0, 0);
-			$this->data[$randval] = $data;
-
-			return $randval;
+			return $this->_create_result_set($columns, $data);
 		} else if(preg_match('/\ASHOW\s+(FULL\s+)?COLUMNS\s+(?:FROM|IN)\s+`?([^\W\d]\w*)`?(?:\s+(?:FROM|IN)\s+`?([^\W\d]\w*)`?)?\s*[;]?\s*\Z/is', $query, $matches)) {
-			return $this->_show_columns($matches[3], $matches[2], !empty($matches[1]));
+			$db_name = !empty($matches[3]) ? $matches[3] : '';
+			return $this->_show_columns($db_name, $matches[2], !empty($matches[1]));
 		 } else {
 			$this->_set_error("Invalid SHOW query");
 			return NULL;
@@ -2743,8 +2727,6 @@ EOC;
 
 	function _show_columns($db_name, $table_name, $full)
 	{
-		$randval = rand();
-
 		if(!$db_name)
 			$db =& $this->currentDB;
 		else
@@ -2755,38 +2737,41 @@ EOC;
 			$this->_error_table_not_exists($db->name, $matches[2]);
 			return NULL;
 		}
-		$columns =  $tableObj->getColumns();
+		$tableColumns =  $tableObj->getColumns();
 
 		$data = array();
 
-		foreach($columns as $name => $column) {
-			$name = '\''.$name.'\'';
+		foreach($tableColumns as $name => $column) {
 			$type = $this->_typecode_to_name($column['type']);
-			$null = ($column['null']) ? "'YES'" : "''";
-			$extra = ($column['auto']) ? "'auto_increment'" : "''";
+			$null = ($column['null']) ? 'YES' : '';
+			$extra = ($column['auto']) ? 'auto_increment' : '';
+			$default = $column['default'];
+
+			if(preg_match("/\A'(.*?(?<!\\\\))'\Z/is", $default, $matches)) {
+				$default = $matches[1];
+			}
 
 			if($column['key'] == 'p')
-				$key = "'PRI'";
+				$key = 'PRI';
 			else if($column['key'] == 'u')
-				$key = "'UNI'";
+				$key = 'UNI';
 			else
-				$key = "''";
+				$key = '';
 
-			if(!$full) {
-				$row = array("Field" => $name, "Type" => "'$type'", "Null" => $null, "Default" => $column['default'], "Key" => $key, "Extra" => $extra);
-			} else {
-				$row = array("Field" => $name, "Type" => "'$type'", 'Collation' => "NULL", "Null" => $null, "Default" => $column['default'], "Key" => $key,
-					"Extra" => $extra, "Privileges" => "'select,insert,update,references'", "Comment" => "''");
+			$row = array($name, $type, $null, $column['default'], $key, $extra);
+			if ($full) {
+				array_push($row, 'select,insert,update,references', '');
 			}
 
 			$data[] = $row;
 		}
 
-		$this->Columns[$randval] = array_keys($data[0]);
-		$this->cursors[$randval] = array(0, 0);
-		$this->data[$randval] = $data;
+		$columns = array("Field", "Type", "Null", "Default", "Key", "Extra");
+		if($full) {
+			array_push($columns, "Privileges", "Comment");
+		}
 
-		return $randval;
+		return $this->_create_result_set($columns, $data);
 	}
 
 	function _query_describe($query)
@@ -2853,6 +2838,15 @@ EOC;
 			$this->_set_error('Invalid UNLOCK query');
 			return NULL;
 		}
+	}
+
+	function _create_result_set($columns, $data)
+	{
+		$rs_id = !empty($this->data) ? max(array_keys($this->data)) + 1 : 1;
+		$this->Columns[$rs_id] = $columns;
+		$this->cursors[$rs_id] = array(0, 0);
+		$this->data[$rs_id] = $data;
+		return $rs_id;
 	}
 
 	function _parse_value($columnDef, $value)
