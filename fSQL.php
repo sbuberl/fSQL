@@ -177,7 +177,7 @@ class fSQLTableCursor
 		if($this->pos >= 0 && $this->pos < $this->num_rows)
 			return $this->entries[$this->pos];
 		else
-			return null;
+			return false;
 	}
 
 	function isDone()
@@ -403,7 +403,7 @@ class fSQLCachedTable
 			{
 				$this->columnsFile->releaseRead();
 				$this->columnsLockFile->releaseRead();
-				return NULL;
+				return false;
 			}
 
 			$num_columns = $matches[1];
@@ -426,7 +426,7 @@ class fSQLCachedTable
 						$this->columns[$matches[1]]['restraint'] = array();
 					}
 				} else {
-					return NULL;
+					return false;
 				}
 			}
 
@@ -489,7 +489,7 @@ class fSQLCachedTable
 			{
 				$this->dataFile->releaseRead();
 				$this->dataLockFile->releaseRead();
-				return NULL;
+				return false;
 			}
 
 			$num_entries = rtrim($matches[1]);
@@ -762,7 +762,7 @@ class fSQLDatabase
 	{
 		$table =& $this->getTable($table_name);
 		if(!$table->exists())
-			return NULL;
+			return false;
 
 		$table->_loadEntries();
 
@@ -847,7 +847,7 @@ class fSQLEnvironment
 	function define_db($name, $path)
 	{
 		$path = realpath($path);
-		if($path === FALSE || !is_dir($path)) {
+		if($path === false || !is_dir($path)) {
 			if(@mkdir($path, 0777))
 				$path = realpath($path);
 		} else if(!is_readable($path) || !is_writeable($path)) {
@@ -868,8 +868,7 @@ class fSQLEnvironment
 			unset($db);
 			return true;
 		} else {
-			$this->_set_error("Path to directory for {$name} database is not valid.  Please correct the path or create the directory and chmod it to 777.");
-			return false;
+			return $this->_set_error("Path to directory for {$name} database is not valid.  Please correct the path or create the directory and chmod it to 777.");
 		}
 	}
 
@@ -881,8 +880,7 @@ class fSQLEnvironment
 			unset($name);
 			return true;
 		} else {
-			$this->_set_error("No database called {$name} found");
-			return false;
+			return $this->_set_error("No database called {$name} found");
 		}
 	}
 
@@ -902,23 +900,23 @@ class fSQLEnvironment
 	function register_function($sqlName, $phpName)
 	{
 		$this->renamed_func[$sqlName] = $phpName;
-		return TRUE;
+		return true;
 	}
 
 	function _set_error($error)
 	{
 		$this->error_msg = $error."\r\n";
-		return NULL;
+		return false;
 	}
 
 	function _error_table_not_exists($db_name, $table_name)
 	{
-		$this->error_msg = "Table {$db_name}.{$table_name} does not exist";
+		return $this->_set_error("Table {$db_name}.{$table_name} does not exist");
 	}
 
 	function _error_table_read_lock($db_name, $table_name)
 	{
-		$this->error_msg = "Table {$db_name}.{$table_name} is locked for reading only";
+		return $this->_set_error("Table {$db_name}.{$table_name} is locked for reading only");
 	}
 
 	function &_load_table(&$db, $table_name)
@@ -1023,7 +1021,7 @@ class fSQLEnvironment
 			case 'UNLOCK':		return $this->_query_unlock($query);
 			//case 'MERGE':		return $this->_query_merge($query);
 			//case 'IF':			return $this->_query_ifelse($query);
-			default:			$this->_set_error('Invalid Query');  return NULL;
+			default:			$this->_set_error('Invalid Query');  return false;
 		}
 	}
 
@@ -1033,8 +1031,7 @@ class fSQLEnvironment
 			$this->_begin();
 			return true;
 		} else {
-			$this->_set_error('Invalid Query');
-			return NULL;
+			return $this->_set_error('Invalid BEGIN query');
 		}
 	}
 
@@ -1044,8 +1041,7 @@ class fSQLEnvironment
 			$this->_begin();
 			return true;
 		} else {
-			$this->_set_error('Invalid Query');
-			return NULL;
+			return $this->_set_error('Invalid START query');
 		}
 	}
 
@@ -1055,8 +1051,7 @@ class fSQLEnvironment
 			$this->_commit();
 			return true;
 		} else {
-			$this->_set_error('Invalid Query');
-			return NULL;
+			return $this->_set_error('Invalid COMMIT query');
 		}
 	}
 
@@ -1066,8 +1061,7 @@ class fSQLEnvironment
 			$this->_rollback();
 			return true;
 		} else {
-			$this->_set_error('Invalid Query');
-			return NULL;
+			return $this->_set_error('Invalid ROLLBACK query');
 		}
 	}
 
@@ -1078,8 +1072,7 @@ class fSQLEnvironment
 			list(, $temporary, $ifnotexists, $db_name, $table_name, $column_list) = $matches;
 
 			if(!$table_name) {
-				$this->_set_error("No table name specified");
-				return NULL;
+				return $this->_set_error("No table name specified");
 			}
 
 			if(!$db_name)
@@ -1090,8 +1083,7 @@ class fSQLEnvironment
 			$table =& $db->getTable($table_name);
 			if($table->exists()) {
 				if(empty($ifnotexists)) {
-					$this->_set_error("Table {$db->name}.{$table_name} already exists");
-					return NULL;
+					return $this->_set_error("Table {$db->name}.{$table_name} already exists");
 				} else {
 					return true;
 				}
@@ -1104,8 +1096,7 @@ class fSQLEnvironment
 				preg_match_all("/(?:(?:CONSTRAINT\s+(?:`?[A-Z][A-Z0-9\_]*`?\s+)?)?(KEY|INDEX|PRIMARY\s+KEY|UNIQUE)(?:\s+`?([A-Z][A-Z0-9\_]*)`?)?\s*\(`?(.+?)`?\))|(?:`?([A-Z][A-Z0-9\_]*?)`?(?:\s+((?:TINY|MEDIUM|LONG)?(?:TEXT|BLOB)|(?:VAR)?(?:CHAR|BINARY)|INTEGER|(?:TINY|SMALL|MEDIUM|BIG)?INT|FLOAT|REAL|DOUBLE(?: PRECISION)?|BIT|BOOLEAN|DEC(?:IMAL)?|NUMERIC|DATE(?:TIME)?|TIME(?:STAMP)?|YEAR|ENUM|SET)(?:\((.+?)\))?)\s*(UNSIGNED\s+)?(.*?)?(?:,|\)|$))/is", trim($column_list), $Columns);
 
 				if(!$Columns) {
-					$this->_set_error("Parsing error in CREATE TABLE query");
-					return NULL;
+					return $this->_set_error("Parsing error in CREATE TABLE query");
 				}
 
 				$new_columns = array();
@@ -1115,8 +1106,7 @@ class fSQLEnvironment
 					if($Columns[1][$c])
 					{
 						if(!$Columns[3][$c]) {
-							$this->_set_error("Parse Error: Excepted column name in \"{$Columns[1][$c]}\"");
-							return null;
+							return $this->_set_error("Parse Error: Excepted column name in \"{$Columns[1][$c]}\"");
 						}
 						
 						$keytype = strtolower($Columns[1][$c]);
@@ -1133,12 +1123,11 @@ class fSQLEnvironment
 						$name = $Columns[4][$c];
 						$type = $Columns[5][$c];
 						$options =  $Columns[8][$c];
-						
+
 						if(isset($new_columns[$name])) {
-							$this->_set_error("Column '{$name}' redefined");
-							return NULL;
+							return $this->_set_error("Column '{$name}' redefined");
 						}
-						
+
 						$type = strtoupper($type);
 						if(in_array($type, array('CHAR', 'VARCHAR', 'BINARY', 'VARBINARY', 'TEXT', 'TINYTEXT', 'MEDIUMTEXT', 'LONGTEXT', 'SET', 'BLOB', 'TINYBLOB', 'MEDIUMBLOB', 'LONGBLOB'))) {
 							$type = FSQL_TYPE_STRING;
@@ -1205,8 +1194,7 @@ class fSQLEnvironment
 									else if($type == 'e') {
 										$default = intval($default);
 										if($default < 0 || $default > count($restraint)) {
-											$this->_set_error("Numeric ENUM value out of bounds");
-											return NULL;
+											return $this->_set_error("Numeric ENUM value out of bounds");
 										}
 									}
 								}
@@ -1242,8 +1230,7 @@ class fSQLEnvironment
 				if($src_table->exists()) {
 					$new_columns = $src_table->getColumns();
 				} else {
-					$this->_set_error("Table {$src_db->name}.{$src_table_name} doesn't exist");
-					return null;
+					return $this->_set_error("Table {$src_db->name}.{$src_table_name} doesn't exist");
 				}
 			}
 
@@ -1251,8 +1238,7 @@ class fSQLEnvironment
 
 			return true;
 		} else {
-			$this->_set_error('Invalid CREATE query');
-			return false;
+			return $this->_set_error('Invalid CREATE query');
 		}
 	}
 
@@ -1264,8 +1250,7 @@ class fSQLEnvironment
 		if(preg_match("/\A((INSERT|REPLACE)(?:\s+(IGNORE))?\s+INTO\s+`?(?:([A-Z][A-Z0-9\_]*)`?\.`?)?([A-Z][A-Z0-9\_]*)`?)\s+(.+?)\s*[;]?\Z/is", $query, $matches)) {
 			list(, $beginning, $command, $ignore, $db_name, $table_name, $the_rest) = $matches;
 		} else {
-			$this->_set_error('Invalid Query');
-			return NULL;
+			return $this->_set_error('Invalid Query');
 		}
 
 		// INSERT...SELECT
@@ -1277,7 +1262,7 @@ class fSQLEnvironment
 			}
 			fsql_free_result($id);
 			unset ($id, $values);
-			return TRUE;
+			return true;
 		}
 
 		if(!$db_name)
@@ -1287,12 +1272,10 @@ class fSQLEnvironment
 
 		$table =& $db->getTable($table_name);
 		if(!$table->exists()) {
-			$this->_error_table_not_exists($db->name, $table_name);
-			return NULL;
+			return $this->_error_table_not_exists($db->name, $table_name);
 		}
 		elseif($table->isReadLocked()) {
-			$this->_error_table_read_lock($db->name, $table_name);
-			return null;
+			return $this->_error_table_read_lock($db->name, $table_name);
 		}
 
 		$tableColumns = $table->getColumns();
@@ -1326,8 +1309,7 @@ class fSQLEnvironment
 
 			$get_data_from = implode(",", $data_values);
 		} else {
-			$this->_set_error('Invalid Query');
-			return NULL;
+			return $this->_set_error('Invalid Query');
 		}
 
 		preg_match_all("/\s*(DEFAULT|AUTO|NULL|'.*?(?<!\\\\)'|(?:[\+\-]\s*)?\d+(?:\.\d+)?|[^$])\s*(?:$|,)/is", $get_data_from, $newData);
@@ -1338,14 +1320,12 @@ class fSQLEnvironment
 			$TableColumns = $table->getColumnNames();
 
 			if(count($dataValues) != count($Columns)) {
-				$this->_set_error("Number of inserted values and columns not equal");
-				return null;
+				return $this->_set_error("Number of inserted values and columns not equal");
 			}
 
 			foreach($Columns as $col_name) {
 				if(!in_array($col_name, $TableColumns)) {
-					$this->_set_error("Invalid column name '{$col_name}' found");
-					return NULL;
+					return $this->_set_error("Invalid column name '{$col_name}' found");
 				} else {
 					$Data[$col_name] = $dataValues[$i++];
 				}
@@ -1367,8 +1347,7 @@ class fSQLEnvironment
 			if($countData < $countColumns) {
 				$Data = array_combine($Columns, array_pad($dataValues, $countColumns, "NULL"));
 			} else if($countData > $countColumns) {
-				$this->_set_error("Trying to insert too many values");
-				return NULL;
+				return $this->_set_error("Trying to insert too many values");
 			} else {
 				$Data = array_combine($Columns, $dataValues);
 			}
@@ -1389,7 +1368,7 @@ class fSQLEnvironment
 			if((empty($data) || !strcasecmp($data, "AUTO") || !strcasecmp($data, "NULL")) && $columnDef['auto'] == 1) {
 				$tableCursor->last();
 				$lastRow = $tableCursor->getRow();
-				if($lastRow !== NULL)
+				if($lastRow !== false)
 					$this->insert_id = $lastRow[$colIndex] + 1;
 				else
 					$this->insert_id = 1;
@@ -1401,7 +1380,7 @@ class fSQLEnvironment
 			} else {
 				$data = $this->_parse_value($columnDef, $data);
 				if($data === false)
-					return null;
+					return false;
 				$newentry[$colIndex] = $data;
 			}
 
@@ -1429,10 +1408,9 @@ class fSQLEnvironment
 						$row = $tableCursor->getRow();
 						if($row[$colIndex] == $newentry[$colIndex]) {
 							if(empty($ignore)) {
-								$this->_set_error("Duplicate value for unique column '{$col_name}'");
-								return NULL;
+								return $this->_set_error("Duplicate value for unique column '{$col_name}'");
 							} else {
-								return TRUE;
+								return true;
 							}
 						}
 						$tableCursor->next();
@@ -1452,7 +1430,7 @@ class fSQLEnvironment
 
 		$this->affected++;
 
-		return TRUE;
+		return true;
 	}
 
 	////Update data in the DB
@@ -1470,12 +1448,10 @@ class fSQLEnvironment
 
 			$table =& $db->getTable($table_name);
 			if(!$table->exists()) {
-				$this->_error_table_not_exists($db->name, $table_name);
-				return NULL;
+				return $this->_error_table_not_exists($db->name, $table_name);
 			}
 			elseif($table->isReadLocked()) {
-				$this->_error_table_read_lock($db->name, $table_name);
-				return null;
+				return $this->_error_table_read_lock($db->name, $table_name);
 			}
 
 			$columns = $table->getColumns();
@@ -1488,8 +1464,7 @@ class fSQLEnvironment
 					$s = preg_split("/`?\s*=\s*`?/", $set);
 					$SET[] = $s;
 					if(!isset($columns[$s[0]])) {
-						$this->_set_error("Invalid column name '{$s[0]}' found");
-						return null;
+						return $this->_set_error("Invalid column name '{$s[0]}' found");
 					}
 				}
 				unset($s);
@@ -1511,7 +1486,7 @@ class fSQLEnvironment
 				list($column, $value) = $set;
 				$new_value = $this->_parse_value($columns[$column], $value);
 				if($new_value === false)
-					return null;
+					return false;
 				$col_index = $col_indicies[$column];
 				$updates[$col_index] = "$col_index => $new_value";
 			}
@@ -1593,8 +1568,7 @@ EOC;
 
 			return true;
 		} else {
-			$this->_set_error('Invalid UPDATE query');
-			return NULL;
+			return $this->_set_error('Invalid UPDATE query');
 		}
 	}
 
@@ -1642,45 +1616,40 @@ EOC;
 				$src_db =& $this->databases[$src_db_name];
 
 			if(!($dest = $this->_load_table($dest_db, $dest_table))) {
-				return NULL;
+				return false;
 			}
 
 			if(!($src = $this->_load_table($src_db, $src_table))) {
-				return NULL;
+				return false;
 			}
 
 			if(preg_match("/(?:\()?(\S+)\s*=\s*(\S+)(?:\))?/", $on_clause, $on_pieces)) {
 
 			} else {
-				$this->_set_error('Invalid ON clause');
-				return NULL;
+				return $this->_set_error('Invalid ON clause');
 			}
 
 			$TABLES = explode(",", $matches[1]);
 			foreach($TABLES as $table_name) {
 				$table_name = trim($table_name);
-				if(!$this->table_exists($table_name)) { $this->error_msg = "Table $table_name does not exist";  return NULL; }
+				if(!$this->table_exists($table_name)) { $this->error_msg = "Table $table_name does not exist";  return false; }
 				$table = $this->load_table($table_name);
 				$tables[] = $table;
 			}
 			foreach($tables as $table) {
-				if($table['columns'] != $tables[1]['columns']) { $this->error_msg = "Columns in the tables to be merged don't match"; return NULL; }
+				if($table['columns'] != $tables[1]['columns']) { $this->error_msg = "Columns in the tables to be merged don't match"; return false; }
 				foreach($table['entries'] as $tbl_entry) { $entries[] = $tbl_entry; }
 			}
 			$this->print_tbl($matches[2], $tables[1]['columns'], $entries);
-			return TRUE;
+			return true;
 		} else {
-			$this->_set_error("Invalid MERGE query");
-			return NULL;
+			return $this->_set_error("Invalid MERGE query");
 		}
 	}
 
 	////Select data from the DB
 	function _query_select($query)
 	{
-		$randval = rand();
-		$e = 0;
-
 		if(!preg_match('/SELECT(?:\s+(ALL|DISTINCT(?:ROW)?))?(\s+RANDOM(?:\((?:\d+)\)?)?\s+|\s+)(.*)\s*[;]?\s*\Z/is', $query, $matches)) {
 			return $this->_set_error('Invalid SELECT query');
 		}
@@ -1726,7 +1695,7 @@ EOC;
 					$db =& $this->databases[$db_name];
 
 					if(!($table =& $db->getTable($table_name))) {
-						return NULL;
+						return false;
 					}
 
 					if(!isset($tables[$saveas])) {
@@ -1762,7 +1731,7 @@ EOC;
 							$join_db =& $this->databases[$join_db_name];
 
 							if(!($join_table =& $join_db->getTable($join_table_name))) {
-								return NULL;
+								return false;
 							}
 
 							if(!isset($tables[$join_table_saveas])) {
@@ -1854,6 +1823,7 @@ EOC;
 			if(!$where)
 				return $this->_set_error('Invalid/Unsupported WHERE clause');
 		}
+
 		if(preg_match('/\s+ORDER\s+BY\s+(.*?)(\s+(?:LIMIT).*)?\Z/is', $the_rest, $additional)) {
 			$the_rest = isset($additional[2]) ? $additional[2] : '';
 			$ORDERBY = explode(',', $additional[1]);
@@ -1871,8 +1841,8 @@ EOC;
 						}
 					} else {
 						$index = $this->_find_exactly_one($joined_info, $column, "ORDER BY clause");
-						if($index === NULL) {
-							return NULL;
+						if($index === false) {
+							return false;
 						}
 					}
 
@@ -1906,7 +1876,7 @@ EOC;
 				$function_name = strtolower($colmatches[2]);
 				$alias = !empty($colmatches[3]) ? $colmatches[3] : $function_call;
 				$expr = $this->_build_expression($select_value, $joined_info, false);
-				if($expr !== null)
+				if($expr !== false)
 				{
 					$select_line .= $expr.', ';
 					$selected_columns[] = $alias;
@@ -1941,8 +1911,8 @@ EOC;
 						$index = array_search($column, $column_names) + $joined_info['offsets'][$table_name];
 					} else if(strcasecmp($column, 'null')){
 						$index = $this->_find_exactly_one($joined_info, $column, "SELECT columns");
-						if($index === NULL) {
-							return NULL;
+						if($index === false) {
+							return false;
 						}
 						$index = $keys[0];
 					} else {  // "null" keyword
@@ -2021,7 +1991,7 @@ EOT;
 
 	function _build_expression($exprStr, $join_info, $where_type = FSQL_WHERE_NORMAL)
 	{
-		$expr = null;
+		$expr = false;
 
 		// function call
 		if(preg_match('/\A([^\W\d]\w*)\s*\((.*?)\)/is', $exprStr, $matches)) {
@@ -2048,8 +2018,8 @@ EOT;
 					$param = trim($param);
 
 					$paramExpr = $this->_build_expression($param, $join_info, $where_type | 1);
-					if($paramExpr === null) // parse error
-						return null;
+					if($paramExpr === false) // parse error
+						return false;
 
 					$paramExprs[] = $paramExpr;
 				}
@@ -2083,8 +2053,8 @@ EOT;
 				else if($where_type & FSQL_WHERE_ON && $table_name === '{{left}}')
 				{
 					$colIndex = $this->_find_exactly_one($joined_info, $column, "expression");
-					if($colIndex === NULL) {
-						return NULL;
+					if($colIndex === false) {
+						return false;
 					}
 					$expr = "\$left_entry[$colIndex]";
 				}
@@ -2103,8 +2073,8 @@ EOT;
 			}
 			else {  // column/alias
 				$colIndex = $this->_find_exactly_one($join_info, $column, "expression");
-				if($colIndex === NULL) {
-					return NULL;
+				if($colIndex === false) {
+					return false;
 				}
 				$expr = ($where_type & FSQL_WHERE_ON) ? "\$left_entry[$colIndex]" : "\$entry[$colIndex]";
 			}
@@ -2119,14 +2089,14 @@ EOT;
 		}
 		else if(($where_type & FSQL_WHERE_ON) && preg_match('/\A{{left}}\.`?([^\W\d]\w*)`?/is', $exprStr, $matches)) {
 			$colIndex = $this->_find_exactly_one($join_info, $column, "expression");
-			if($colIndex === NULL) {
-				return NULL;
+			if($colIndex === false) {
+				return false;
 			}
 
 			$expr = "\$left_entry[$colIndex]";
 		}
 		else
-			return null;
+			return false;
 
 		return $expr;
 	}
@@ -2148,7 +2118,7 @@ EOT;
 			preg_match_all("/(\A\s*|\s+(?:AND|OR)\s+)(NOT\s+)?(\S+?)(\s*(?:!=|<>|>=|<=>?|>|<|=)\s*|\s+(?:IS(?:\s+NOT)?|(?:NOT\s+)?IN|(?:NOT\s+)?R?LIKE|(?:NOT\s+)?REGEXP)\s+)(\((.*?)\)|'.*?'|\S+)/is", $statement, $WHERE, PREG_SET_ORDER);
 
 			if(empty($WHERE))
-				return null;
+				return false;
 
 			$condition = '';
 			foreach($WHERE as $where)
@@ -2161,14 +2131,14 @@ EOT;
 				$rightStr = $where[5];
 
 				$leftExpr = $this->_build_expression($leftStr, $join_info, $where_type);
-				if($leftExpr === null)
-					return null;
+				if($leftExpr === false)
+					return false;
 
 				if($operator !== 'IN' && $operator !== 'NOT IN')
 				{
 					$rightExpr = $this->_build_expression($rightStr, $join_info, $where_type);
-					if($rightExpr === null)
-						return null;
+					if($rightExpr === false)
+						return false;
 
 					switch($operator) {
 						case '=':
@@ -2203,7 +2173,7 @@ EOT;
 							else if($rightExpr === 'FALSE')
 								$local_condition = "\$this->_fsql_isFalse($leftExpr) ? FSQL_TRUE : FSQL_FALSE)";
 							else
-								return null;
+								return false;
 							break;
 						case 'NOT LIKE':
 							$not = !$not;
@@ -2239,7 +2209,7 @@ EOT;
 							$not = !$not;
 					}
 					else
-						return null;
+						return false;
 				}
 
 				if(!strcasecmp($logicalOp, 'AND'))
@@ -2254,7 +2224,7 @@ EOT;
 			}
 			return "($condition) === ".FSQL_TRUE;
 		}
-		return null;
+		return false;
 	}
 
 	function _orderBy($a, $b)
@@ -2285,12 +2255,10 @@ EOT;
 
 			$table =& $db->getTable($table_name);
 			if(!$table->exists()) {
-				$this->_error_table_not_exists($db->name, $table_name);
-				return NULL;
+				return $this->_error_table_not_exists($db->name, $table_name);
 			}
 			elseif($table->isReadLocked()) {
-				$this->_error_table_read_lock($db->name, $table_name);
-				return null;
+				return $this->_error_table_read_lock($db->name, $table_name);
 			}
 
 			$columns = $table->getColumns();
@@ -2338,8 +2306,7 @@ EOC;
 
 			return true;
 		} else {
-			$this->_set_error("Invalid DELETE query");
-			return null;
+			return $this->_set_error("Invalid DELETE query");
 		}
 	}
 
@@ -2355,12 +2322,10 @@ EOC;
 
 			$tableObj =& $db->getTable($table_name);
 			if(!$tableObj->exists()) {
-				$this->_error_table_not_exists($db->name, $table_name);
-				return NULL;
+				return $this->_error_table_not_exists($db->name, $table_name);
 			}
 			elseif($tableObj->isReadLocked()) {
-				$this->_error_table_read_lock($db->name, $table_name);
-				return null;
+				return $this->_error_table_read_lock($db->name, $table_name);
 			}
 			$columns =  $tableObj->getColumns();
 
@@ -2373,8 +2338,7 @@ EOC;
 
 					foreach($columns as $name => $column) {
 						if($column['key'] == 'p') {
-							$this->_set_error("Primary key already exists");
-							return NULL;
+							return $this->_set_error("Primary key already exists");
 						}
 					}
 
@@ -2409,8 +2373,7 @@ EOC;
 							else if($columnDef['type'] == 'e') {
 								$default = intval($default);
 								if($default < 0 || $default > count($columnDef['restraint'])) {
-									$this->_set_error("Numeric ENUM value out of bounds");
-									return NULL;
+									return $this->_set_error("Numeric ENUM value out of bounds");
 								}
 							}
 						}
@@ -2440,8 +2403,7 @@ EOC;
 						$tableObj->setColumns($columns);
 						return true;
 					} else {
-						$this->_set_error("No primary key found");
-						return NULL;
+						return $this->_set_error("No primary key found");
 					}
 				}
 				else if(preg_match("/\ARENAME\s+(?:TO\s+)?`?(?:([A-Z][A-Z0-9\_]*)`?\.`?)?([A-Z][A-Z0-9\_]*)`?/is", $specs[0][$i], $matches)) {
@@ -2454,20 +2416,17 @@ EOC;
 
 					$new_table =& $new_db->getTable($new_table_name);
 					if($new_table->exists()) {
-						$this->_set_error("Destination table {$new_db_name}.{$new_table_name} already exists");
-						return NULL;
+						return $this->_set_error("Destination table {$new_db_name}.{$new_table_name} already exists");
 					}
 
 					return $db->renameTable($old_table_name, $new_table_name, $new_db);
 				}
 				else {
-					$this->_set_error("Invalid ALTER query");
-					return null;
+					return $this->_set_error("Invalid ALTER query");
 				}
 			}
 		} else {
-			$this->_set_error("Invalid ALTER query");
-			return null;
+			return $this->_set_error("Invalid ALTER query");
 		}
 	}
 
@@ -2486,8 +2445,7 @@ EOC;
 					else
 						$old_db =& $this->databases[$old_db_name];
 				} else {
-					$this->_set_error("Parse error in table listing");
-					return NULL;
+					return $this->_set_error("Parse error in table listing");
 				}
 
 				if(preg_match("/(?:([A-Z][A-Z0-9\_]*)\.)?([A-Z][A-Z0-9\_]*)/is", $new, $table_parts)) {
@@ -2498,32 +2456,27 @@ EOC;
 					else
 						$new_db =& $this->databases[$new_db_name];
 				} else {
-					$this->_set_error("Parse error in table listing");
-					return NULL;
+					return $this->_set_error("Parse error in table listing");
 				}
 
 				$old_table =& $old_db->getTable($old_table_name);
 				if(!$old_table->exists()) {
-					$this->_error_table_not_exists($old_db_name, $old_table_name);
-					return NULL;
+					return $this->_error_table_not_exists($old_db_name, $old_table_name);
 				}
 				elseif($old_table->isReadLocked()) {
-					$this->_error_table_read_lock($old_db_name, $old_table_name);
-					return null;
+					return $this->_error_table_read_lock($old_db_name, $old_table_name);
 				}
 
 				$new_table =& $new_db->getTable($new_table_name);
 				if($new_table->exists()) {
-					$this->_set_error("Destination table {$new_db_name}.{$new_table_name} already exists");
-					return NULL;
+					return $this->_set_error("Destination table {$new_db_name}.{$new_table_name} already exists");
 				}
 
 				return $old_db->renameTable($old_table_name, $new_table_name, $new_db);
 			}
-			return TRUE;
+			return true;
 		} else {
-			$this->_set_error("Invalid RENAME query");
-			return null;
+			return $this->_set_error("Invalid RENAME query");
 		}
 	}
 
@@ -2545,28 +2498,24 @@ EOC;
 
 					$table =& $db->getTable($table_name);
 					if($table->isReadLocked()) {
-						$this->_error_table_read_lock($db->name, $table_name);
-						return null;
+						return $this->_error_table_read_lock($db->name, $table_name);
 					}
 
 					$existed = $db->dropTable($table_name);
 					if(!$ifexists && !$existed) {
-						$this->_error_table_not_exists($db->name, $table_name);
-						return null;
+						return $this->_error_table_not_exists($db->name, $table_name);
 					}
 				} else {
-					$this->_set_error("Parse error in table listing");
-					return NULL;
+					return $this->_set_error("Parse error in table listing");
 				}
 			}
-			return TRUE;
+			return true;
 		} else if(preg_match("/\ADROP\s+DATABASE(?:\s+(IF EXISTS))?\s+`?([A-Z][A-Z0-9\_]*)`?s*[;]?\Z/is", $query, $matches)) {
 			$ifexists = !empty($matches[1]);
 			$db_name = $matches[2];
 
 			if(!$ifexists && !isset($this->databases[$db_name])) {
-				$this->_set_error("Database '{$db_name}' does not exist");
-				return null;
+				return $this->_set_error("Database '{$db_name}' does not exist");
 			} else if(!isset($this->databases[$db_name])) {
 				return true;
 			}
@@ -2581,10 +2530,9 @@ EOC;
 
 			unset($this->databases[$db_name]);
 
-			return TRUE;
+			return true;
 		} else {
-			$this->_set_error("Invalid DROP query");
-			return null;
+			return $this->_set_error("Invalid DROP query");
 		}
 	}
 
@@ -2604,23 +2552,20 @@ EOC;
 					$table =& $db->getTable($table_name);
 					if($table->exists()) {
 						if($table->isReadLocked()) {
-							$this->_error_table_read_lock($db->name, $table_name);
-							return null;
+							return $this->_error_table_read_lock($db->name, $table_name);
 						}
 						$columns = $table->getColumns();
 						$db->dropTable($table_name);
 						$db->createTable($table_name, $columns);
 					} else {
-						return NULL;
+						return false;
 					}
 				} else {
-					$this->_set_error("Parse error in table listing");
-					return NULL;
+					return $this->_set_error("Parse error in table listing");
 				}
 			}
 		} else {
-			$this->_set_error("Invalid TRUNCATE query");
-			return NULL;
+			return $this->_set_error("Invalid TRUNCATE query");
 		}
 
 		return true;
@@ -2644,13 +2589,11 @@ EOC;
 
 					$db->copyTable($table_name, $db->path_to_db, $matches[2]);
 				} else {
-					$this->_set_error("Parse error in table listing");
-					return NULL;
+					return $this->_set_error("Parse error in table listing");
 				}
 			}
 		} else {
-			$this->_set_error("Invalid Query");
-			return NULL;
+			return $this->_set_error("Invalid BACKUP query");
 		}
 	}
 
@@ -2672,13 +2615,11 @@ EOC;
 
 					$db->copyTable($table_name, $matches[2], $db->path_to_db);
 				} else {
-					$this->_set_error("Parse error in table listing");
-					return NULL;
+					return $this->_set_error("Parse error in table listing");
 				}
 			}
 		} else {
-			$this->_set_error("Invalid Query");
-			return NULL;
+			return $this->_set_error("Invalid Query");
 		}
 	}
 
@@ -2720,8 +2661,7 @@ EOC;
 			$db_name = !empty($matches[3]) ? $matches[3] : '';
 			return $this->_show_columns($db_name, $matches[2], !empty($matches[1]));
 		 } else {
-			$this->_set_error("Invalid SHOW query");
-			return NULL;
+			return $this->_set_error("Invalid SHOW query");
 		}
 	}
 
@@ -2734,8 +2674,7 @@ EOC;
 
 		$tableObj =& $db->getTable($table_name);
 		if(!$tableObj->exists()) {
-			$this->_error_table_not_exists($db->name, $matches[2]);
-			return NULL;
+			return $this->_error_table_not_exists($db->name, $matches[2]);
 		}
 		$tableColumns =  $tableObj->getColumns();
 
@@ -2779,8 +2718,7 @@ EOC;
 		if(preg_match("/\ADESC(?:RIBE)?\s+`?(?:([A-Z][A-Z0-9\_]*)`?\.`?)?([A-Z][A-Z0-9\_]*)`?\s*[;]?\s*\Z/is", $query, $matches)) {
 			return $this->_show_columns($matches[1], $matches[2], false);
 		} else {
-			$this->_set_error('Invalid DESCRIBE query');
-			return NULL;
+			return $this->_set_error('Invalid DESCRIBE query');
 		}
 	}
 
@@ -2788,10 +2726,9 @@ EOC;
 	{
 		if(preg_match("/\AUSE\s+`?([A-Z][A-Z0-9\_]*)`?\s*[;]?\s*\Z/is", $query, $matches)) {
 			$this->select_db($matches[1]);
-			return TRUE;
+			return true;
 		} else {
-			$this->_set_error('Invalid USE query');
-			return NULL;
+			return $this->_set_error('Invalid USE query');
 		}
 	}
 
@@ -2809,8 +2746,7 @@ EOC;
 				$table_name = $rules[2][$r];
 				$table =& $db->getTable($table_name);
 				if(!$table->exists()) {
-					$this->_error_table_not_exists($db->name, $table_name);
-					return NULL;
+					return $this->_error_table_not_exists($db->name, $table_name);
 				}
 
 				if(!strcasecmp(substr($rules[3][$r], 0, 4), "READ")) {
@@ -2822,10 +2758,9 @@ EOC;
 
 				$lockedTables[] =& $table;
 			}
-			return TRUE;
+			return true;
 		} else {
-			$this->_set_error('Invalid LOCK query');
-			return NULL;
+			return $this->_set_error('Invalid LOCK query');
 		}
 	}
 
@@ -2833,10 +2768,9 @@ EOC;
 	{
 		if(preg_match("/\AUNLOCK\s+TABLES\s*[;]?\s*\Z/is", $query)) {
 			$this->_unlock_tables();
-			return TRUE;
+			return true;
 		} else {
-			$this->_set_error('Invalid UNLOCK query');
-			return NULL;
+			return $this->_set_error('Invalid UNLOCK query');
 		}
 	}
 
@@ -2865,8 +2799,7 @@ EOC;
 					return (int) $value;
 				}
 				else {
-					$this->_set_error('Invalid integer value for insert');
-					return false;
+					return $this->_set_error('Invalid integer value for insert');
 				}
 			case FSQL_TYPE_FLOAT:
 				if(preg_match("/\A'\s*((?:[\+\-]\s*)?\d+(?:\.\d+)?)\s*'\Z/is", $value, $matches)) {
@@ -2876,8 +2809,7 @@ EOC;
 					return (float) $value;
 				}
 				else {
-					$this->_set_error('Invalid float value for insert');
-					return false;
+					return $this->_set_error('Invalid float value for insert');
 				}
 			case FSQL_TYPE_ENUM:
 				if(preg_match("/\A'(.*?(?<!\\\\))'\Z/is", $value, $matches)) {
@@ -2893,8 +2825,7 @@ EOC;
 					} else if($index === 0) {
 						return "";
 					} else {
-						$this->_set_error('Numeric ENUM value out of bounds');
-						return false;
+						return $this->_set_error('Numeric ENUM value out of bounds');
 					}
 				} else {
 					return $columnDef['default'];
@@ -3019,11 +2950,11 @@ EOC;
 	function fetch_array($id, $type = 1)
 	{
 		if(!$id || !isset($this->cursors[$id]) || !isset($this->data[$id][$this->cursors[$id][0]]))
-			return NULL;
+			return false;
 
 		$entry = $this->data[$id][$this->cursors[$id][0]];
 		if(!$entry)
-			return NULL;
+			return false;
 
 		$columnNames = $this->Columns[$id];
 
@@ -3041,15 +2972,15 @@ EOC;
 	function fetch_single($results, $column = 0) {
 		$type = is_numeric($column) ? FSQL_NUM : FSQL_ASSOC;
 		$row = $this->fetch_array($results, $type);
-		return $row != NULL ? $row[$column] : false;
+		return $row !== false ? $row[$column] : false;
 	}
 
 	function fetch_object($results)
 	{
 		$row = $this->fetch_array($results, FSQL_ASSOC);
 
-		if($row == NULL)
-			return NULL;
+		if($row === false)
+			return false;
 
 		$obj =& new stdClass();
 
@@ -3062,8 +2993,7 @@ EOC;
 	function data_seek($id, $i)
 	{
 		if(!$id || !isset($this->cursors[$id][0])) {
-			$this->_set_error("Bad results id passed in");
-			return false;
+			return $this->_set_error("Bad results id passed in");
 		} else {
 			$this->cursors[$id][0] = $i;
 			return true;
@@ -3073,8 +3003,7 @@ EOC;
 	function num_fields($id)
 	{
 		if(!$id || !isset($this->Columns[$id])) {
-			$this->_set_error("Bad results id passed in");
-			return false;
+			return $this->_set_error("Bad results id passed in");
 		} else {
 			return count($this->Columns[$id]);
 		}
@@ -3083,14 +3012,13 @@ EOC;
 	function fetch_field($id, $i = NULL)
 	{
 		if(!$id || !isset($this->Columns[$id]) || !isset($this->cursors[$id][1])) {
-			$this->_set_error("Bad results id passed in");
-			return false;
+			return $this->_set_error("Bad results id passed in");
 		} else {
 			if($i == NULL)
 				$i = 0;
 
 			if(!isset($this->Columns[$id][$i]))
-				return null;
+				return false;
 
 			$field = new stdClass();
 			$field->name = $this->Columns[$id][$i];
