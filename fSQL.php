@@ -1,10 +1,10 @@
 <?php
 
-define("FSQL_ASSOC",1,TRUE);
-define("FSQL_NUM",  2,TRUE);
-define("FSQL_BOTH", 3,TRUE);
+define("FSQL_ASSOC",1,true);
+define("FSQL_NUM",  2,true);
+define("FSQL_BOTH", 3,true);
 
-define("FSQL_EXTENSION", ".cgi",TRUE);
+define("FSQL_EXTENSION", ".cgi",true);
 
 define('FSQL_TYPE_DATE','d',true);
 define('FSQL_TYPE_DATETIME','dt',true);
@@ -161,6 +161,10 @@ class fSQLTableCursor
 	var $num_rows;
 	var $pos;
 
+	function close() {
+		unset($this->entries, $this->num_rows, $this->pos);
+	}
+
 	function first()
 	{
 		$this->pos = 0;
@@ -210,9 +214,9 @@ class fSQLTableCursor
 
 class fSQLTable
 {
-	var $cursor = NULL;
-	var $columns = NULL;
-	var $entries = NULL;
+	var $cursor = null;
+	var $columns = null;
+	var $entries = null;
 	var $data_load =0;
 	var $uncommited = false;
 
@@ -224,8 +228,16 @@ class fSQLTable
 		return $table;
 	}
 
+	function close()
+	{
+		if($this->cursor !== null) {
+			$this->cursor->close();
+		}
+		unset($this->cursor, $this->columns, $this->entries, $this->data_load, $this->uncommited);
+	}
+
 	function exists() {
-		return TRUE;
+		return true;
 	}
 
 	function getColumnNames() {
@@ -247,7 +259,7 @@ class fSQLTable
 
 	function &getCursor()
 	{
-		if($this->cursor == NULL)
+		if($this->cursor === null)
 			$this->cursor =& new fSQLTableCursor;
 
 		$this->cursor->entries =& $this->entries;
@@ -302,19 +314,19 @@ class fSQLTable
 
 class fSQLCachedTable
 {
-	var $cursor = NULL;
-	var $columns = NULL;
-	var $entries = NULL;
-	var $columns_path = NULL;
-	var $data_path = NULL;
-	var $columns_load = NULL;
-	var $data_load = NULL;
+	var $cursor = null;
+	var $columns = null;
+	var $entries = null;
+	var $columns_path;
+	var $data_path;
+	var $columns_load = null;
+	var $data_load = null;
 	var $uncommited = false;
-	var $columnsLockFile = NULL;
-	var $columnsFile = NULL;
-	var $dataLockFile = NULL;
-	var $dataFile = NULL;
-	var $lock = NULL;
+	var $columnsLockFile;
+	var $columnsFile;
+	var $dataLockFile;
+	var $dataFile;
+	var $lock = null;
 
 	function fSQLCachedTable($path_to_db, $table_name)
 	{
@@ -325,6 +337,13 @@ class fSQLCachedTable
 		$this->dataLockFile = new fSQLFileLock($this->data_path.'.lock.cgi');
 		$this->dataFile = new fSQLFileLock($this->data_path.'.cgi');
 		$this->temporary = false;
+	}
+
+	function close()
+	{
+		unset($this->cursor, $this->columns, $this->entries, $this->columns_path, $this->data_path,
+			$this->columns_load, $this->data_load, $this->uncommited, $this->columnsLockFile, $this->dataLockFile,
+			$this->dataFile, $this->lock);
 	}
 
 	function &create($path_to_db, $table_name, $columnDefs)
@@ -391,7 +410,7 @@ class fSQLCachedTable
 		$lock = $this->columnsLockFile->getHandle();
 
 		$modified = fread($lock, 20);
-		if($this->columns_load === NULL || strcmp($this->columns_load, $modified) < 0)
+		if($this->columns_load === null || strcmp($this->columns_load, $modified) < 0)
 		{
 			$this->columns_load = $modified;
 
@@ -448,7 +467,7 @@ class fSQLCachedTable
 	{
 		$this->_loadEntries();
 
-		if($this->cursor == NULL)
+		if($this->cursor === null)
 			$this->cursor = new fSQLTableCursor;
 
 		$this->cursor->entries =& $this->entries;
@@ -476,9 +495,9 @@ class fSQLCachedTable
 		$lock = $this->dataLockFile->getHandle();
 
 		$modified = fread($lock, 20);
-		if($this->data_load === NULL || strcmp($this->data_load, $modified) < 0)
+		if($this->data_load === null || strcmp($this->data_load, $modified) < 0)
 		{
-			$entries = NULL;
+			$entries = null;
 			$this->data_load = $modified;
 
 			$this->dataFile->acquireRead();
@@ -526,7 +545,7 @@ class fSQLCachedTable
 					preg_match_all("#((-?\d+(?:\.\d+)?)|'.*?(?<!\\\\)'|NULL);#s", $data, $matches);
 					for($m = 0; $m < count($matches[0]); $m++) {
 						if($matches[1][$m] === 'NULL') {
-							$entries[$row][$m] = NULL;
+							$entries[$row][$m] = null;
 						} else if(!empty($matches[2][$m])) {
 							$number = $matches[2][$m];
 							if($strpos($number, '.') !== false) {
@@ -607,7 +626,7 @@ class fSQLCachedTable
 		$lock = $this->dataLockFile->getHandle();
 		$modified = fread($lock, 20);
 
-		if($this->data_load === NULL || strcmp($this->data_load, $modified) >= 0)
+		if($this->data_load === null || strcmp($this->data_load, $modified) >= 0)
 		{
 			$columnDefs = array_values($this->getColumns());
 			$toprint = count($this->entries)."\r\n";
@@ -706,18 +725,22 @@ class fSQLCachedTable
 
 class fSQLDatabase
 {
-	var $name = NULL;
-	var $path_to_db = NULL;
+	var $name = null;
+	var $path_to_db = null;
 	var $loadedTables = array();
 
 	function close()
 	{
+		foreach(array_keys($this->loadedTables) as $table_name) {
+			$this->loadedTables[$table_name]->close();
+		}
+
 		unset($this->name, $this->path_to_db, $this->loadedTables);
 	}
 
 	function createTable($table_name, $columns, $temporary = false)
 	{
-		$table = NULL;
+		$table = null;
 
 		if(!$temporary) {
 			$table = fSQLCachedTable::create($this->path_to_db, $table_name, $columns);
@@ -801,7 +824,7 @@ class fSQLDatabase
 				unlink($table->data_path.'.lock.cgi');
 			}
 
-			$table = NULL;
+			$table = null;
 			unset($this->loadedTables[$table_name]);
 			unset($table);
 
@@ -823,8 +846,8 @@ class fSQLEnvironment
 	var $updatedTables = array();
 	var $lockedTables = array();
 	var $databases = array();
-	var $currentDB = NULL;
-	var $error_msg = NULL;
+	var $currentDB = null;
+	var $error_msg = null;
 	var $query_count = 0;
 	var $cursors = array();
 	var $data = array();
@@ -889,7 +912,9 @@ class fSQLEnvironment
 		foreach (array_keys($this->databases) as $db_name ) {
 			$this->databases[$db_name]->close();
 		}
-		unset($this->Columns, $this->cursors, $this->data, $this->currentDB, $this->databases, $this->error_msg, $this->join_lambdas);
+		unset($this->Columns, $this->cursors, $this->data, $this->currentDB, $this->databases,
+			$this->error_msg, $this->join_lambdas, $this->updatedTables, $this->lockedTables,
+			$this->allow_func, $this->custom_func, $this->renamed_func);
 	}
 
 	function error()
@@ -1016,7 +1041,7 @@ class fSQLEnvironment
 		$query = trim($query);
 		list($function, ) = explode(" ", $query);
 		$this->query_count++;
-		$this->error_msg = NULL;
+		$this->error_msg = null;
 		switch(strtoupper($function)) {
 			case 'CREATE':		return $this->_query_create($query);
 			case 'SELECT':		return $this->_query_select($query);
@@ -1130,7 +1155,7 @@ class fSQLEnvironment
 						if(!$Columns[3][$c]) {
 							return $this->_set_error("Parse Error: Excepted column name in \"{$Columns[1][$c]}\"");
 						}
-						
+
 						$keytype = strtolower($Columns[1][$c]);
 						if($keytype === "index")
 							$keytype = "key";
@@ -1191,7 +1216,7 @@ class fSQLEnvironment
 							preg_match_all("/'.*?(?<!\\\\)'/", $Columns[6][$c], $values);
 							$restraint = $values[0];
 						} else {
-							$restraint = NULL;
+							$restraint = null;
 						}
 
 						if(preg_match("/DEFAULT\s+((?:[\+\-]\s*)?\d+(?:\.\d+)?|NULL|(\"|').*?(?<!\\\\)(?:\\2))/is", $options, $matches)) {
@@ -3032,12 +3057,12 @@ EOC;
 		}
 	}
 
-	function fetch_field($id, $i = NULL)
+	function fetch_field($id, $i = null)
 	{
 		if(!$id || !isset($this->Columns[$id]) || !isset($this->cursors[$id][1])) {
 			return $this->_set_error("Bad results id passed in");
 		} else {
-			if($i == NULL)
+			if($i === null)
 				$i = 0;
 
 			if(!isset($this->Columns[$id][$i]))
@@ -3138,12 +3163,12 @@ EOC;
 	}
 
 	/////Math Functions
-	function _fsql_functions_log($arg1, $arg2 = NULL) {
+	function _fsql_functions_log($arg1, $arg2 = null) {
 		$arg1 = $this->_fsql_strip_stringtags($arg1);
 		if($arg2) {
 			$arg2 = $this->_fsql_strip_stringtags($arg2);
 		}
-		if(($arg1 < 0 || $arg1 == 1) && !$arg2) { return NULL; }
+		if(($arg1 < 0 || $arg1 == 1) && !$arg2) { return null; }
 		if(!$arg2) { return log($arg1); } else { return log($arg2) / log($arg1); }
 	}
 	function _fsql_functions_log2($arg)
@@ -3193,15 +3218,15 @@ EOC;
 			for($i = 1; $i < $numargs; $i++) { $return[] = func_get_arg($i);  }
 			return implode($string, $return);
 		}
-		else { return NULL; }
+		else { return null; }
 	}
 	function _fsql_functions_concat() { return call_user_func_array(array($this,'_fsql_functions_concat_ws'), array("",func_get_args())); }
 	function _fsql_functions_elt() {
 		$return = func_get_arg(0);
 		if(func_num_args() > 1 && $return >= 1 && $return <= func_num_args()) {	return func_get_arg($return);  }
-		else { return NULL; }
+		else { return null; }
 	}
-	function _fsql_functions_locate($string, $find, $start = NULL) {
+	function _fsql_functions_locate($string, $find, $start = null) {
 		if($start) { $string = substr($string, $start); }
 		$pos = strpos($string, $find);
 		if($pos === false) { return 0; } else { return $pos; }
@@ -3223,8 +3248,8 @@ EOC;
 	function _fsql_functions_dayofweek($date) 	{ return $this->_fsql_functions_from_unixtime($date, "%w"); }
 	function _fsql_functions_weekday($date)		{ return $this->_fsql_functions_from_unixtime($date, "%u"); }
 	function _fsql_functions_dayofyear($date)		{ return round($this->_fsql_functions_from_unixtime($date, "%j")); }
-	function _fsql_functions_unix_timestamp($date = NULL) {
-		if(!$date) { return NULL; } else { return strtotime(str_replace("-","/",$date)); }
+	function _fsql_functions_unix_timestamp($date = null) {
+		if(!$date) { return null; } else { return strtotime(str_replace("-","/",$date)); }
 	}
 	function _fsql_functions_from_unixtime($timestamp, $format = "%Y-%m-%d %H:%M:%S")
 	{
