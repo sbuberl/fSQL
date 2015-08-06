@@ -919,6 +919,28 @@ class fSQLEnvironment
 		return $this->_set_error("Table {$db_name}.{$table_name} is locked for reading only");
 	}
 
+	function &_get_database($db_name)
+	{
+		$db = false;
+
+		if(!$db_name) {
+			if($this->currentDB !== null) {
+				$db =& $this->currentDB;
+			} else {
+				$this->_set_error('No database specified');
+			}
+		} else {
+			// if database $db_name is not defined set error
+			if(isset($this->databases[$db_name])) {
+				$db =& $this->databases[$db_name];
+			} else {
+				$this->_set_error("Database $db_name not found");
+			}
+		}
+
+		return $db;
+	}
+
 	function &_load_table(&$db, $table_name)
 	{
 		$table =& $db->loadTable($table_name);
@@ -1075,10 +1097,10 @@ class fSQLEnvironment
 				return $this->_set_error("No table name specified");
 			}
 
-			if(!$db_name)
-				$db =& $this->currentDB;
-			else
-				$db =& $this->databases[$db_name];
+			$db =& $this->_get_database($db_name);
+			if($db === false) {
+				return false;
+			}
 
 			$table =& $db->getTable($table_name);
 			if($table->exists()) {
@@ -1221,10 +1243,10 @@ class fSQLEnvironment
 				$src_db_name = $matches[6];
 				$src_table_name = $matches[7];
 
-				if(!$src_db_name)
-					$src_db =& $this->currentDB;
-				else
-					$src_db =& $this->databases[$src_db_name];
+				$src_db =& $this->_get_database($src_db_name);
+				if($src_db === false) {
+					return false;
+				}
 
 				$src_table =& $src_db->getTable($src_table_name);
 				if($src_table->exists()) {
@@ -1265,10 +1287,10 @@ class fSQLEnvironment
 			return true;
 		}
 
-		if(!$db_name)
-			$db =& $this->currentDB;
-		else
-			$db =& $this->databases[$db_name];
+		$db =& $this->_get_database($db_name);
+		if($db === false) {
+			return false;
+		}
 
 		$table =& $db->getTable($table_name);
 		if(!$table->exists()) {
@@ -1441,10 +1463,10 @@ class fSQLEnvironment
 			$ignore = !empty($matches[1]);
 			$table_name = $matches[3];
 
-			if(!$matches[2])
-				$db =& $this->currentDB;
-			else
-				$db =& $this->databases[$matches[2]];
+			$db =& $this->_get_database($matches[2]);
+			if($db === false) {
+				return false;
+			}
 
 			$table =& $db->getTable($table_name);
 			if(!$table->exists()) {
@@ -1605,15 +1627,15 @@ EOC;
 		if(preg_match("/\AMERGE\s+INTO\s+`?(?:([A-Z][A-Z0-9\_]*)`?\.`?)?([A-Z][A-Z0-9\_]*)`?(?:\s+AS\s+`?([A-Z][A-Z0-9\_]*)`?)?\s+USING\s+(?:([A-Z][A-Z0-9\_]*)\.)?([A-Z][A-Z0-9\_]*)(?:\s+AS\s+([A-Z][A-Z0-9\_]*))?\s+ON\s+(.+?)(?:\s+WHEN\s+MATCHED\s+THEN\s+(UPDATE .+?))?(?:\s+WHEN\s+NOT\s+MATCHED\s+THEN\s+(INSERT .+?))?/is", $query, $matches)) {
 			list( , $dest_db_name, $dest_table, $dest_alias, $src_db_name, $src_table, $src_alias, $on_clause) = $matches;
 
-			if(!$dest_db_name)
-				$dest_db =& $this->currentDB;
-			else
-				$dest_db =& $this->databases[$dest_db_name];
+			$dest_db =& $this->_get_database($dest_db_name);
+			if($dest_db === false) {
+				return false;
+			}
 
-			if(!$src_db_name)
-				$src_db =& $this->currentDB;
-			else
-				$src_db =& $this->databases[$src_db_name];
+			$src_db =& $this->_get_database($src_db_name);
+			if($src_db === false) {
+				return false;
+			}
 
 			if(!($dest = $this->_load_table($dest_db, $dest_table))) {
 				return false;
@@ -1685,14 +1707,14 @@ EOC;
 			foreach($tbls as $tbl) {
 				if(preg_match('/\A\s*(`?(?:[^\W\d]\w*)`?\.)?`?([^\W\d]\w*)`?(?:\s+(?:AS\s+)?`?([^\W\d]\w*)`?)?\s*(.*)/is', $tbl, $table_matches)) {
 					list(, $db_name, $table_name, $saveas, $table_unparsed) = $table_matches;
-					if(empty($db_name)) {
-						$db_name = $this->currentDB->name;
-					}
 					if(empty($saveas)) {
 						$saveas = $table_name;
 					}
 
-					$db =& $this->databases[$db_name];
+					$db =& $this->_get_database($db_name);
+					if($db === false) {
+						return false;
+					}
 
 					if(!($table =& $db->getTable($table_name))) {
 						return false;
@@ -1719,16 +1741,16 @@ EOC;
 						for($i = 0; $i < $numJoins; ++$i) {
 							$join_name = trim($join[1][$i]);
 							$join_db_name = $join[2][$i];
-							if(empty($join_db_name)) {
-								$join_db_name = $this->currentDB->name;
-							}
 							$join_table_name = $join[3][$i];
 							$join_table_saveas = $join[4][$i];
 							if(empty($join_table_saveas)) {
 								$join_table_saveas = $join_table_name;
 							}
 
-							$join_db =& $this->databases[$join_db_name];
+							$join_db =& $this->_get_database($join_db_name);
+							if($join_db === false) {
+								return false;
+							}
 
 							if(!($join_table =& $join_db->getTable($join_table_name))) {
 								return false;
@@ -2248,10 +2270,10 @@ EOT;
 		if(preg_match('/\ADELETE\s+FROM\s+(?:`?([^\W\d]\w*)`?\.)?`?([^\W\d]\w*)`?(?:\s+WHERE\s+(.+?))?\s*[;]?\Z/is', $query, $matches)) {
 			list(, $db_name, $table_name) = $matches;
 
-			if(!$db_name)
-				$db =& $this->currentDB;
-			else
-				$db =& $this->databases[$db_name];
+			$db =& $this->_get_database($db_name);
+			if($db === false) {
+				return false;
+			}
 
 			$table =& $db->getTable($table_name);
 			if(!$table->exists()) {
@@ -2315,10 +2337,10 @@ EOC;
 		if(preg_match("/\AALTER\s+TABLE\s+`?(?:([A-Z][A-Z0-9\_]*)`?\.`?)?([A-Z][A-Z0-9\_]*)`?\s+(.*)/is", $query, $matches)) {
 			list(, $db_name, $table_name, $changes) = $matches;
 
-			if(!$db_name)
-				$db =& $this->currentDB;
-			else
-				$db =& $this->databases[$db_name];
+			$db =& $this->_get_database($db_name);
+			if($db === false) {
+				return false;
+			}
 
 			$tableObj =& $db->getTable($table_name);
 			if(!$tableObj->exists()) {
@@ -2409,10 +2431,10 @@ EOC;
 				else if(preg_match("/\ARENAME\s+(?:TO\s+)?`?(?:([A-Z][A-Z0-9\_]*)`?\.`?)?([A-Z][A-Z0-9\_]*)`?/is", $specs[0][$i], $matches)) {
 					list(, $new_db_name, $new_table_name) = $matches;
 
-					if(!$new_db_name)
-						$new_db =& $this->currentDB;
-					else
-						$new_db =& $this->databases[$new_db_name];
+					$new_db =& $this->_get_database($new_db_name);
+					if($new_db === false) {
+						return false;
+					}
 
 					$new_table =& $new_db->getTable($new_table_name);
 					if($new_table->exists()) {
@@ -2440,10 +2462,10 @@ EOC;
 				if(preg_match("/`?(?:([A-Z][A-Z0-9\_]*)`?\.`?)?([A-Z][A-Z0-9\_]*)`?/is", $old, $table_parts)) {
 					list(, $old_db_name, $old_table_name) = $table_parts;
 
-					if(!$old_db_name)
-						$old_db =& $this->currentDB;
-					else
-						$old_db =& $this->databases[$old_db_name];
+					$old_db =& $this->_get_database($old_db_name);
+					if($old_db === false) {
+						return false;
+					}
 				} else {
 					return $this->_set_error("Parse error in table listing");
 				}
@@ -2451,10 +2473,10 @@ EOC;
 				if(preg_match("/(?:([A-Z][A-Z0-9\_]*)\.)?([A-Z][A-Z0-9\_]*)/is", $new, $table_parts)) {
 					list(, $new_db_name, $new_table_name) = $table_parts;
 
-					if(!$new_db_name)
-						$new_db =& $this->currentDB;
-					else
-						$new_db =& $this->databases[$new_db_name];
+					$new_db =& $this->_get_database($new_db_name);
+					if($new_db === false) {
+						return false;
+					}
 				} else {
 					return $this->_set_error("Parse error in table listing");
 				}
@@ -2491,10 +2513,10 @@ EOC;
 				if(preg_match("/`?(?:([A-Z][A-Z0-9\_]*)`?\.`?)?([A-Z][A-Z0-9\_]*)`?/is", $table, $table_parts)) {
 					list(, $db_name, $table_name) = $table_parts;
 
-					if(!$db_name)
-						$db =& $this->currentDB;
-					else
-						$db =& $this->databases[$db_name];
+					$db =& $this->_get_database($db_name);
+					if($db === false) {
+						return false;
+					}
 
 					$table =& $db->getTable($table_name);
 					if($table->isReadLocked()) {
@@ -2544,10 +2566,10 @@ EOC;
 				if(preg_match("/`?(?:([A-Z][A-Z0-9\_]*)`?\.`?)?([A-Z][A-Z0-9\_]*)`?/is", $table, $matches)) {
 					list(, $db_name, $table_name) = $matches;
 
-					if(!$db_name)
-						$db =& $this->currentDB;
-					else
-						$db =& $this->databases[$db_name];
+					$db =& $this->_get_database($db_name);
+					if($db === false) {
+						return false;
+					}
 
 					$table =& $db->getTable($table_name);
 					if($table->exists()) {
@@ -2582,10 +2604,10 @@ EOC;
 				if(preg_match("/`?(?:([A-Z][A-Z0-9\_]*)`?\.`?)?([A-Z][A-Z0-9\_]*)`?/is", $table, $table_name_matches)) {
 					list(, $db_name, $table_name) = $table_name_matches;
 
-					if(!$db_name)
-						$db =& $this->currentDB;
-					else
-						$db =& $this->databases[$db_name];
+					$db =& $this->_get_database($db_name);
+					if($db === false) {
+						return false;
+					}
 
 					$db->copyTable($table_name, $db->path_to_db, $matches[2]);
 				} else {
@@ -2608,10 +2630,10 @@ EOC;
 				if(preg_match("/`?(?:([A-Z][A-Z0-9\_]*)`?\.`?)?([A-Z][A-Z0-9\_]*)`?/is", $table, $table_name_matches)) {
 					list(, $db_name, $table_name) = $table_name_matches;
 
-					if(!$db_name)
-						$db =& $this->currentDB;
-					else
-						$db =& $this->databases[$db_name];
+					$db =& $this->_get_database($db_name);
+					if($db === false) {
+						return false;
+					}
 
 					$db->copyTable($table_name, $matches[2], $db->path_to_db);
 				} else {
@@ -2627,11 +2649,12 @@ EOC;
 	{
 		if(preg_match("/\ASHOW\s+(FULL\s+)?TABLES(?:\s+FROM\s+`?([A-Z][A-Z0-9\_]*)`?)?\s*[;]?\Z/is", $query, $matches)) {
 			$full = !empty($matches[1]);
+			$db_name = !empty($matches[2]) ? $matches[2] : "";
 
-			if(empty($matches[2]))
-				$db =& $this->currentDB;
-			else
-				$db =& $this->databases[$matches[2]];
+			$db =& $this->_get_database($db_name);
+			if($db === false) {
+				return false;
+			}
 
 			$tables = $db->listTables();
 			$data = array();
@@ -2667,14 +2690,14 @@ EOC;
 
 	function _show_columns($db_name, $table_name, $full)
 	{
-		if(!$db_name)
-			$db =& $this->currentDB;
-		else
-			$db =& $this->databases[$db_name];
+		$db =& $this->_get_database($db_name);
+		if($db === false) {
+			return false;
+		}
 
 		$tableObj =& $db->getTable($table_name);
 		if(!$tableObj->exists()) {
-			return $this->_error_table_not_exists($db->name, $matches[2]);
+			return $this->_error_table_not_exists($db->name, $table_name);
 		}
 		$tableColumns =  $tableObj->getColumns();
 
@@ -2738,10 +2761,10 @@ EOC;
 			preg_match_all("/(?:([A-Z][A-Z0-9\_]*)`?\.`?)?`?([A-Z][A-Z0-9\_]*)`?\s+((?:READ(?:\s+LOCAL)?)|((?:LOW\s+PRIORITY\s+)?WRITE))/is", $matches[1], $rules);
 			$numRules = count($rules[0]);
 			for($r = 0; $r < $numRules; $r++) {
-				if(!$rules[1][$r])
-					$db =& $this->currentDB;
-				else
-					$db =& $this->databases[$rules[1][$r]];
+				$db =& $this->_get_database($rules[1][$r]);
+				if($db === false) {
+					return false;
+				}
 
 				$table_name = $rules[2][$r];
 				$table =& $db->getTable($table_name);
@@ -3208,7 +3231,6 @@ EOC;
 		if(!is_int($timestamp)) { $timestamp = $this->_fsql_functions_unix_timestamp($timestamp); }
 		return strftime($format, $timestamp);
 	}
-
 }
 
 ?>
