@@ -15,7 +15,10 @@ define('FSQL_TYPE_STRING','s',true);
 define('FSQL_TYPE_TIME','t',true);
 
 define('FSQL_WHERE_NORMAL',2,true);
+define('FSQL_WHERE_NORMAL_AGG',3,true);
 define('FSQL_WHERE_ON',4,true);
+define('FSQL_WHERE_HAVING',8,true);
+define('FSQL_WHERE_HAVING_AGG',9,true);
 
 define('FSQL_FUNC_REGISTERED', 0, true);
 define('FSQL_FUNC_NORMAL', 1, true);
@@ -1728,21 +1731,52 @@ EOC;
 		$has_random = !empty(trim($matches[2]));
 		$isTableless = true;
 
-		$Columns = array();
+		$oneAggregate = false;
+		$selectedInfo = array();
 		$the_rest = $matches[3];
 		$stop = false;
-		while(!$stop && preg_match("/((?:\A|\s*)((?:(?:-?\d+(?:\.\d+)?)|'.*?(?<!\\\\)'|(?:[^\W\d]\w*\s*\(.*?\))|(?:(?:(?:[^\W\d]\w*)\.)?(?:(?:[^\W\d]\w*)|\*)))(?:\s+(?:AS\s+)?[^\W\d]\w*)?)\s*)(?:\Z|(from|where|order\s+by|limit)|,)/is", $the_rest, $ColumnPiece))
+		while(!$stop && preg_match("/((?:\A|\s*)(?:(-?\d+(?:\.\d+)?)|('.*?(?<!\\\\)')|(?:(`?([^\W\d]\w*)`?\s*\(.*?\)))|(?:(?:(?:`?([^\W\d]\w*)`?\.)?(`?([^\W\d]\w*)`?|\*))))(?:(?:\s+(?:AS\s+)?`?([^\W\d]\w*)`?))?\s*)(?:\Z|(from|where|having|(?:group|order)?\s+by|limit)|,)/is", $the_rest, $colmatches))
 		{
-			$Columns[] = $ColumnPiece[2];
-			$stop = !empty($ColumnPiece[3]);
+			$stop = !empty($colmatches[10]);
 			$idx = !$stop ? 0 : 1;
-			$the_rest = substr($the_rest, strlen($ColumnPiece[$idx]));
+			$the_rest = substr($the_rest, strlen($colmatches[$idx]));
+			$alias = null;
+			if(!empty($colmatches[2])) {  // int/float constant
+				$value = $colmatches[2];
+				$type = 'number';
+				$alias = $value;
+			} else if(!empty($colmatches[3])) {  // string constant
+				$value = $colmatches[3];
+				$type = 'string';
+				$alias = $value;
+			} else if(!empty($colmatches[4])) {  // function call
+				$value = $colmatches[4];
+				$function_name = strtolower($colmatches[5]);
+				$type = 'function';
+				list($alias, $function_type) = $this->lookup_function($function_name);
+				if($function_type & FSQL_FUNC_AGGREGATE) {
+					$oneAggregate = true;
+				}
+			} else if(!empty($colmatches[7])) {  // column
+				$column = $colmatches[7] !== '*' ? $colmatches[8] : $colmatches[7];
+				$table_name = $colmatches[6];
+				$value = !empty($table_name) ? $table_name.'.'.$column : $column;
+				$alias = $column;
+				$type = 'column';
+			}
+			if(!empty($colmatches[9])) {
+				$alias = $colmatches[9];
+				if(substr($value, -1) == '*') {
+					return $this->_set_error("Can't not specify an alias for *");
+				}
+			}
+			$selectedInfo[] = array($type, $value, $alias);
 		}
 
 		$data = array();
 		$joins = array();
 		$joined_info = array( 'tables' => array(), 'offsets' => array(), 'columns' =>array() );
-		if(preg_match('/\Afrom\s+(.+?)(\s+(?:where|order?\s+by|limit)\s+(?:.+))?\s*\Z/is', $the_rest, $from_matches))
+		if(preg_match('/\Afrom\s+(.+?)(\s+(?:where|having|(:group|order)?\s+by|limit)\s+(?:.+))?\s*\Z/is', $the_rest, $from_matches))
 		{
 			$isTableless = false;
 			$tables = array();
@@ -1885,6 +1919,8 @@ EOC;
 
 		$this->tosort = array();
 		$where = null;
+		$group_list = null;
+		$having = null;
 		$limit = null;
 
 		if(preg_match('/\s+WHERE\s+((?:.+?)(?:(?:(?:(?:\s+)(?:AND|OR)(?:\s+))?(?:.+?)?)*?)?)(\s+(?:HAVING|(?:GROUP|ORDER)\s+BY|LIMIT|FETCH).*)?\Z/is', $the_rest, $additional)) {
@@ -1892,6 +1928,27 @@ EOC;
 			$where = $this->_build_where($additional[1], $joined_info);
 			if(!$where)
 				return $this->_set_error('Invalid/Unsupported WHERE clause');
+		}
+
+		if(preg_match('/\s+GROUP\s+BY\s+(.*?)(\s+(?:HAVING|ORDER\s+BY|LIMIT).*)?\Z/is', $the_rest, $additional)) {
+			$the_rest = isset($additional[2]) ? $additional[2] : '';
+			$GROUPBY = explode(',', $additional[1]);
+			foreach($GROUPBY as $group_item)
+			{
+				if(preg_match('/([^\W\d]\w*)(?:\s+(ASC|DESC))?/is', $group_item, $additional)) {
+					$index = array_search($additional[1], $joined_info['columns']);
+					$ascend = !empty($additional[2]) ? !strcasecmp('ASC', $additional[2]) : true;
+					$group_list[] = array('key' => $index, 'ascend' => $ascend);
+				}
+			}
+		}
+
+		if(preg_match('/\s+HAVING\s+((?:.+?)(?:(?:(?:(?:\s+)(?:AND|OR)(?:\s+))?(?:.+?)?)*?)?)(?:\s+(?:ORDER\s+BY|LIMIT).*)?\Z/is', $the_rest, $additional)) {
+			$the_rest = isset($additional[2]) ? $additional[2] : '';
+			$having = $this->_build_where($additional[1], $joined_info, FSQL_WHERE_HAVING);
+			if(!$having) {
+				return $this->environment->_set_error('Invalid/Unsupported HAVING clause');
+			}
 		}
 
 		if(preg_match('/\s+ORDER\s+BY\s+(.*?)(\s+(?:LIMIT).*)?\Z/is', $the_rest, $additional)) {
@@ -1937,86 +1994,193 @@ EOC;
 			$limit = array((int) $limit_start, (int) $limit_stop);
 		}
 
+		if($group_list === null && $oneAggregate)
+			$group_list = array();
+
+		$singleRow = false;
 		$selected_columns = array();
-		$select_line = '';
-		foreach($Columns as $column) {
-			// function call
-			if(preg_match('/\A(`?([^\W\d]\w*)`?\s*\((?:.*?)?\))(?:\s+(?:AS\s+)?`?([^\W\d]\w*)`?)?\Z/is', $column, $colmatches)) {
-				$function_call = str_replace($colmatches[1], "`", "");
-				$function_name = strtolower($colmatches[2]);
-				$alias = !empty($colmatches[3]) ? $colmatches[3] : $function_call;
-				$expr = $this->_build_expression($select_value, $joined_info, false);
-				if($expr !== false)
-				{
-					$select_line .= $expr.', ';
-					$selected_columns[] = $alias;
-				}
-				else
-					return false; // error should already be set by parser
+		$group_key = null;
+		$final_code = null;
+		if($group_list !== null)
+		{
+			$joined_info['group_columns'] = array();
+
+			$group_array = array();
+			$groupByCount = count($group_list);
+			if($groupByCount === 1)
+			{
+				$group_col = $group_list[0]['key'];
+				$group_key = '$entry[' . $group_col .']';
+				$group_array[] = $group_col;
+				$joined_info['group_columns'][] = $group_col;
 			}
-			// identifier/keyword/column/*
-			else if(preg_match('/\A(?:`?([^\W\d]\w*)`?\.)?(`?(?:[^\W\d]\w*)|\*)`?(?:\s+(?:AS\s+)?`?([^\W\d]\w*)`?)?\Z/is',$column, $colmatches)) {
-				list(, $table_name, $column) = $colmatches;
-				if($column === '*') {
-					if(isset($colmatches[3]))
-						return $this->_set_error('Unexpected alias after "*"');
+			else if($groupByCount > 1)
+			{
+				$all_ascend = 1;
+				$group_key_list = '';
+				foreach($group_list as $group_item)
+				{
+					$all_ascend &= (int) $group_item['ascend'];
+					$group_col = $group_item['key'];
+					$group_array[] = $group_col;
+					$group_key_list .= '$entry[' . $group_col .'], ';
+					$joined_info['group_columns'][] = $group_col;
+				}
+				$group_key = 'serialize(array('. substr($group_key_list, 0, -2) . '))';
+			}
+			else // empty array -> aggregate function call in expression list but no GROUP BY
+				$singleRow = true;
 
-					$star_tables = !empty($table_name) ? array($table_name) : array_keys($tables);
-					foreach($star_tables as $tname) {
-						$start_index = $joined_info['offsets'][$tname];
-						$table_columns = $joined_info['tables'][$tname];
-						$column_names = array_keys($table_columns);
-						foreach($column_names as $index => $column_name) {
-							$select_value = $start_index + $index;
-							$select_line .= "\$entry[$select_value], ";
-							$selected_columns[] = $column_name;
+			$select_line = '';
+			foreach($selectedInfo as $info) {
+				list($select_type, $select_value, $select_alias) = $info;
+				$column_info = null;
+				switch($select_type) {
+					case 'column':
+						if(strpos($select_value, '.') !== false) {
+							list($table_name, $column) = explode('.', $select_value);
+						} else {
+							$table_name = null;
+							$column = $select_value;
 						}
-					}
-				} else {
-					$alias = !empty($colmatches[3]) ? $colmatches[3] : $column;
 
-					if($table_name) {
-						$table_columns = $joined_info['tables'][$table_name];
-						$column_names = array_keys($table_columns);
-						$index = array_search($column, $column_names) + $joined_info['offsets'][$table_name];
-					} else if(strcasecmp($column, 'null')){
-						$index = $this->_find_exactly_one($joined_info, $column, "SELECT columns");
-						if($index === false) {
+						if($table_name) {
+							$table_columns = $joined_info['tables'][$table_name];
+							$column_names = array_keys($table_columns);
+							$index = array_search($column, $column_names) + $joined_info['offsets'][$table_name];
+						} else if(strcasecmp($column, 'null')){
+							$index = $this->_find_exactly_one($joined_info, $column, "SELECT columns");
+							if($index === false) {
+								return false;
+							}
+						} else {  // "null" keyword
+							$select_line .= 'NULL, ';
+							$selected_columns[] = $column;
+							continue;
+						}
+
+						if(!in_array($index, $group_array)) {
+							return $this->_set_error("Selected column '{$joined_info['columns'][$index]}' is not a grouped column");
+						}
+						$select_line .= "\$group[0][$index], ";
+						$selected_columns[] = $select_alias;
+						break;
+					case 'number':
+					case 'string':
+						$select_line .= $select_value.', ';
+						$selected_columns[] = $select_alias;
+						break;
+					case 'function':
+						$expr = $this->_build_expression($select_value, $joined_info);
+						if($expr === false) {
 							return false;
 						}
-						$index = $keys[0];
-					} else {  // "null" keyword
-						$select_line .= 'NULL, ';
-						$selected_columns[] = $column;
-						continue;
-					}
-
-					$select_line .= "\$entry[$index], ";
-					$selected_columns[] = $alias;
+						$select_line .= $expr.', ';
+						$selected_columns[] = $select_alias;
+						break;
 				}
+				$column_info['name'] = $select_alias;
+				$fullColumnsInfo[] = $column_info;
 			}
-			// numeric constant
-			else if(preg_match('/\A(-?\d+(?:\.\d+)?)(?:\s+(?:AS\s+)?`?([^\W\d]\w*)`?)?\Z/is', $column, $colmatches)) {
-				$value = $colmatches[1];
-				$alias = !empty($colmatches[2]) ? $colmatches[2] : $value;
-				$select_line .= "$value, ";
-				$selected_columns[] = $alias;
+
+			if(!$singleRow)
+				$line = '$grouped_set['.$group_key.'][] = $entry;';
+			else
+				$line = '$group[] = $entry;';
+
+			$final_line = '$final_set[] = array('. substr($select_line, 0, -2) . ');';
+			$grouped_set = array();
+
+			if($having !== null) {
+				$final_line = "if({$having}) {\r\n\t\t\t\t\t\t$final_line\r\n\t\t\t\t\t}";
 			}
-			// string constant
-			else if(preg_match("/\A('(.*?(?<!\\\\))')(?:\s+(?:AS\s+)?`?([^\W\d]\w*)`?)?\Z/is", $column, $colmatches)) {
-				$value = $colmatches[1];
-				$alias = !empty($colmatches[3]) ? $colmatches[3] : $value;
-				$select_line .= "$value, ";
-				$selected_columns[] = $alias;
-			}
-			else {
-				return $this->_set_error("Parse Error: Unknown value in SELECT clause: $column");
+
+			if(!$singleRow) {
+				$final_code = <<<EOT
+				foreach(\$grouped_set as \$group) {
+					$final_line
+				}
+EOT;
+			} else {
+				$final_code = $final_line;
 			}
 		}
-
-		$line = '$final_set[] = array('. substr($select_line, 0, -2) . ');';
-		if(!empty($joins))
+		else
 		{
+			$select_line = '';
+			foreach($selectedInfo as $info) {
+				list($select_type, $select_value, $select_alias) = $info;
+				switch($select_type) {
+				// function call
+				case 'function':
+					$expr = $this->_build_expression($select_value, $joined_info, false);
+					if($expr !== false)	{
+						$select_line .= $expr.', ';
+						$selected_columns[] = $select_alias;
+					} else {
+						return false; // error should already be set by parser
+					}
+					break;
+
+				case 'column':
+					if(strpos($select_value, '.') !== false) {
+						list($table_name, $column) = explode('.', $select_value);
+					} else {
+						$table_name = null;
+						$column = $select_value;
+					}
+
+					if($column === '*') {
+						$star_tables = !empty($table_name) ? array($table_name) : array_keys($tables);
+						foreach($star_tables as $tname) {
+							$start_index = $joined_info['offsets'][$tname];
+							$table_columns = $joined_info['tables'][$tname];
+							$column_names = array_keys($table_columns);
+							foreach($column_names as $index => $column_name) {
+								$select_value = $start_index + $index;
+								$select_line .= "\$entry[$select_value], ";
+								$selected_columns[] = $column_name;
+							}
+						}
+
+						continue;
+					} else {
+						if($table_name) {
+							$table_columns = $joined_info['tables'][$table_name];
+							$column_names = array_keys($table_columns);
+							$index = array_search($column, $column_names) + $joined_info['offsets'][$table_name];
+						} else if(strcasecmp($column, 'null')){
+							$index = $this->_find_exactly_one($joined_info, $column, "SELECT columns");
+							if($index === false) {
+								return false;
+							}
+						} else {  // "null" keyword
+							$select_line .= 'NULL, ';
+							$selected_columns[] = $column;
+							continue;
+						}
+
+						$select_line .= "\$entry[$index], ";
+						$selected_columns[] = $select_alias;
+					}
+					break;
+
+				case 'number':
+				case 'string':
+					$select_line .= "$select_value, ";
+					$selected_columns[] = $select_alias;
+					break;
+
+				default:
+					return $this->_set_error("Parse Error: Unknown value in SELECT clause: $column");
+				}
+			}
+
+			$line = '$final_set[] = array('. substr($select_line, 0, -2) . ');';
+			$group = $data;
+		}
+
+		if(!empty($joins)) {
 			if($where !== null)
 				$line = "if({$where}) {\r\n\t\t\t\t\t$line\r\n\t\t\t\t}";
 
@@ -2024,11 +2188,10 @@ EOC;
 			foreach(\$data as \$entry) {
 				$line
 			}
+$final_code
 EOT;
 
-		}
-		else // Tableless SELECT
-		{
+		} else { // Tableless SELECT
 			$entry = array(true);  // hack so it passes count and !empty expressions
 			$code = $line;
 		}
@@ -2069,6 +2232,7 @@ EOT;
 			$params = $matches[2];
 			$final_param_list = '';
 			$paramExprs = array();
+			$expr_type = '"non-constant"';
 
 			$functionInfo = $this->lookup_function($function);
 			if($functionInfo === false) {
@@ -2076,6 +2240,10 @@ EOT;
 			}
 
 			list($function, $type) = $functionInfo;
+			$isAggregate = $type & FSQL_FUNC_AGGREGATE;
+
+			if($isAggregate) {
+				$paramExprs[] = '$group';
 			}
 
 			if(strlen($params) !== 0) {
@@ -2083,13 +2251,36 @@ EOT;
 				foreach($parameter as $param) {
 					$param = trim($param);
 
-					$paramExpr = $this->_build_expression($param, $join_info, $where_type | 1);
-					if($paramExpr === false) // parse error
-						return false;
 
-					$paramExprs[] = $paramExpr;
+					if($isAggregate && $param === '*') {
+						if($function === 'count') {
+							$paramExprs[] = '"*"';
+						} else {
+							return $this->environment->_set_error('Passing * as a paramter is only allowed in COUNT');
+						}
+					} else {
+						$paramExpr = $this->_build_expression($param, $join_info, $where_type | 1);
+						if($paramExpr === false) // parse error
+							return false;
+
+						if($isAggregate)
+						{
+							if(preg_match('/\\$entry\[(\d+)\]/', $paramExpr, $paramExpr_matches))
+								$paramExprs[] = $paramExpr_matches[1];
+							else //assume everything else is some form of constant
+							{
+								$expr_type = '"constant"';
+								$paramExprs[] = $pexp;
+							}
+						} else {
+							$paramExprs[] = $paramExpr;
+						}
+					}
 				}
 			}
+
+			if($isAggregate)
+				$paramExprs[] = $expr_type;
 
 			$final_param_list = implode(',', $paramExprs);
 
@@ -2137,7 +2328,12 @@ EOT;
 			else if(!strcasecmp($exprStr, 'TRUE') || !strcasecmp($exprStr, 'FALSE')) {
 				$expr = strtoupper($exprStr);
 			}
-			else {  // column/alias
+			else if($where_type === FSQL_WHERE_HAVING) { // column/alias in grouping clause
+				$colIndex = array_search($column, $join_info['columns']);
+				if(in_array($colIndex, $join_info['group_columns'])) {
+					$expr = "\$group[0][$colIndex]";
+				}
+			} else {  // column/alias
 				$colIndex = $this->_find_exactly_one($join_info, $column, "expression");
 				if($colIndex === false) {
 					return false;
@@ -3217,18 +3413,86 @@ EOC;
 		else {   return substr($number,0,$places) * pow(10, abs($places));  }
 	}
 
-	 /////Grouping and other Misc. Functions
-	function _fsql_functions_count($column, $id) {
-		if($column == "*") { return count($this->data[$id]); }
-		else {   $i = 0;   foreach($this->data[$id] as $entry) {  if($entry[$column]) { $i++; } }  return $i;  }
+	 ///// Aggregate Functions
+	function _fsql_functions_any($data, $column, $flag) {
+		if ($flag === "constant")
+			return $this->fsql_isTrue($data);
+		foreach($data as $entry){
+			if($this->fsql_isTrue($entry[$column]))
+				return true;
+		}
+		return false;
 	}
-	function _fsql_functions_max($column, $id) {
-		foreach($this->data[$id] as $entry){   if($entry[$column] > $i || !$i) { $i = $entry[$column]; }  }	return $i;
+
+	function _fsql_functions_avg($data, $column, $flag) {
+		$sum = $this->_fsql_functions_sum($data, $column, $flag);
+		return $sum !== null ? $sum / count($data) : null;
 	}
-	function _fsql_functions_min($column, $id) {
-		foreach($this->data[$id] as $entry){   if($entry[$column] < $i || !$i) { $i = $entry[$column]; }  }	return $i;
+
+	function _fsql_functions_count($data, $column, $flag) {
+		if($column == '*') { return count($data); }
+		else if($flag === "constant") { return (int) ($column !== null); }
+		else {
+			$i = 0;
+			foreach($data as $entry) {
+				if($entry[$column] !== null) { $i++; }
+			}
+			return $i;
+		}
 	}
-	function _fsql_functions_sum($column, $id) {  foreach($this->data[$id] as $entry){ $i += $entry[$column]; }  return $i; }
+
+	function _fsql_functions_every($data, $column, $flag) {
+		if ($flag === "constant")
+			return $this->_fsql_functions_isTrue($data);
+		foreach($data as $entry){
+			if(!$this->_fsql_functions_isTrue($entry[$column]))
+				return false;
+		}
+		return true;
+	}
+
+	function _fsql_functions_max($data, $column, $flag) {
+		$max = null;
+		if ($flag === "constant")
+			$max = $column;
+		else {
+			foreach($data as $entry){
+				if($entry[$column] > $max || $max === null) {
+					$max = $entry[$column];
+				}
+			}
+		}
+		return $max;
+	}
+
+	function  _fsql_functions_min($data, $column, $flag) {
+		$min = null;
+		if ($flag === "constant")
+			$min = $column;
+		else {
+			foreach($data as $entry){
+				if($entry[$column] < $min || $min === null) {
+					$min = $entry[$column];
+				}
+			}
+		}
+		return $min;
+	}
+
+	function  _fsql_functions_sum($data, $column, $flag) {
+		$i = null;
+
+		if ($flag === "constant" && $column !== null)
+			$i = $column * sizeof($data);
+		else {
+			foreach($data as $entry)
+			{
+				$i += $entry[$column];
+			}
+		}
+
+		return $i;
+	}
 
 	 /////String Functions
 	function _fsql_functions_concat_ws($string) {
