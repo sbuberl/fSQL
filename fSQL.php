@@ -1941,8 +1941,13 @@ EOC;
 			$group_key_list = '';
 			foreach($GROUPBY as $group_item)
 			{
-				if(preg_match('/`?([^\W\d]\w*)`?/is', $group_item, $additional)) {
-					$group_col = array_search($additional[1], $joined_info['columns']);
+				if(preg_match('/(?:`?([^\W\d]\w*)`?\.)?`?`?([^\W\d]\w*)`?/is', $group_item, $additional)) {
+					list( , $table_alias, $column) = $additional;
+					$group_col = $this->_find_column($column, $table_alias, $joined_info, "GROUP BY clause");
+					if($group_col === false) {
+						return false;
+					}
+
 					$group_array[] = $group_col;
 					$group_key_list .= '$entry[' . $group_col .'], ';
 					$joined_info['group_columns'][] = $group_col;
@@ -1962,6 +1967,7 @@ EOC;
 				$isGrouping = true;
 				$singleRow = true;
 			}
+
 			$having = $this->_build_where($additional[1], $joined_info, FSQL_WHERE_HAVING);
 			if(!$having) {
 				return $this->_set_error('Invalid/Unsupported HAVING clause');
@@ -1974,20 +1980,9 @@ EOC;
 			foreach($ORDERBY as $order_item) {
 				if(preg_match('/(?:`?([^\W\d]\w*)`?\.)?`?([^\W\d]\w*)`?(?:\s+(ASC|DESC))?/is', $order_item, $additional)) {
 					list( , $table_alias, $column) = $additional;
-					if(!empty($table_alias)) {
-						if(!isset($tables[$table_alias])) {
-							return $this->_set_error("Unknown table name/alias in ORDER BY: $table_alias");
-						}
-
-						$index = array_search($column,  array_keys($joined_info['tables'][$table_alias])) + $joined_info['offsets'][$table_alias];
-						if($index === false || $index === null) {
-							return $this->_set_error("Unknown column in ORDER BY: $column");
-						}
-					} else {
-						$index = $this->_find_exactly_one($joined_info, $column, "ORDER BY clause");
-						if($index === false) {
-							return false;
-						}
+					$index = $this->_find_column($column, $table_alias, $joined_info, "ORDER BY clause");
+					if($index === false) {
+						return false;
 					}
 
 					$ascend = !empty($additional[3]) ? !strcasecmp('ASC', $additional[3]) : true;
@@ -2031,19 +2026,17 @@ EOC;
 							$column = $select_value;
 						}
 
-						if($table_name) {
-							$table_columns = $joined_info['tables'][$table_name];
-							$column_names = array_keys($table_columns);
-							$index = array_search($column, $column_names) + $joined_info['offsets'][$table_name];
-						} else if(strcasecmp($column, 'null')){
-							$index = $this->_find_exactly_one($joined_info, $column, "SELECT columns");
+						if(!strcasecmp($select_value, 'NULL')) {
+							$select_line .= 'NULL, ';
+							$selected_columns[] = $select_alias;
+							continue;
+						} else {
+							$index = $this->_find_column($column, $table_name, $joined_info, 'SELECT clause');
 							if($index === false) {
 								return false;
 							}
-						} else {  // "null" keyword
-							$select_line .= 'NULL, ';
-							$selected_columns[] = $column;
-							continue;
+							$select_line .= "\$entry[$index], ";
+							$selected_columns[] = $select_alias;
 						}
 
 						if(!in_array($index, $group_array)) {
@@ -2131,22 +2124,15 @@ EOT;
 						}
 
 						continue;
+					} else if(!strcasecmp($select_value, 'NULL')) {
+						$select_line .= 'NULL, ';
+						$selected_columns[] = $select_alias;
+						continue;
 					} else {
-						if($table_name) {
-							$table_columns = $joined_info['tables'][$table_name];
-							$column_names = array_keys($table_columns);
-							$index = array_search($column, $column_names) + $joined_info['offsets'][$table_name];
-						} else if(strcasecmp($column, 'null')){
-							$index = $this->_find_exactly_one($joined_info, $column, "SELECT columns");
-							if($index === false) {
-								return false;
-							}
-						} else {  // "null" keyword
-							$select_line .= 'NULL, ';
-							$selected_columns[] = $column;
-							continue;
+						$index = $this->_find_column($column, $table_name, $joined_info, 'SELECT clause');
+						if($index === false) {
+							return false;
 						}
-
 						$select_line .= "\$entry[$index], ";
 						$selected_columns[] = $select_alias;
 					}
@@ -2207,6 +2193,26 @@ EOT;
 		}
 
 		return $this->_create_result_set($selected_columns, $final_set);
+	}
+
+	function _find_column($column, $table_name, $joined_info, $where) {
+		if(!empty($table_name)) {
+			if(!isset($joined_info['tables'][$table_name])) {
+				return $this->_set_error("Unknown table name/alias in $where: $table_name");
+			}
+
+			$index = array_search($column,  array_keys($joined_info['tables'][$table_name])) + $joined_info['offsets'][$table_name];
+			if($index === false || $index === null) {
+				return $this->_set_error("Unknown column in $where: $column");
+			}
+		} else {
+			$index = $this->_find_exactly_one($joined_info, $column, $where);
+			if($index === false) {
+				return false;
+			}
+		}
+
+		return $index;
 	}
 
 	function _build_expression($exprStr, $join_info, $where_type = FSQL_WHERE_NORMAL)
