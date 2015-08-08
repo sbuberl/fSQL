@@ -1919,9 +1919,11 @@ EOC;
 
 		$this->tosort = array();
 		$where = null;
-		$group_list = null;
+		$group_key = null;
+		$isGrouping = false;
 		$having = null;
 		$limit = null;
+		$singleRow = false;
 
 		if(preg_match('/\s+WHERE\s+((?:.+?)(?:(?:(?:(?:\s+)(?:AND|OR)(?:\s+))?(?:.+?)?)*?)?)(\s+(?:HAVING|(?:GROUP|ORDER)\s+BY|LIMIT|FETCH).*)?\Z/is', $the_rest, $additional)) {
 			$the_rest = isset($additional[2]) ? $additional[2] : '';
@@ -1933,21 +1935,36 @@ EOC;
 		if(preg_match('/\s+GROUP\s+BY\s+(.*?)(\s+(?:HAVING|ORDER\s+BY|LIMIT).*)?\Z/is', $the_rest, $additional)) {
 			$the_rest = isset($additional[2]) ? $additional[2] : '';
 			$GROUPBY = explode(',', $additional[1]);
+			$joined_info['group_columns'] = array();
+			$isGrouping = true;
+			$group_array = array();
+			$group_key_list = '';
 			foreach($GROUPBY as $group_item)
 			{
-				if(preg_match('/([^\W\d]\w*)(?:\s+(ASC|DESC))?/is', $group_item, $additional)) {
-					$index = array_search($additional[1], $joined_info['columns']);
-					$ascend = !empty($additional[2]) ? !strcasecmp('ASC', $additional[2]) : true;
-					$group_list[] = array('key' => $index, 'ascend' => $ascend);
+				if(preg_match('/`?([^\W\d]\w*)`?/is', $group_item, $additional)) {
+					$group_col = array_search($additional[1], $joined_info['columns']);
+					$group_array[] = $group_col;
+					$group_key_list .= '$entry[' . $group_col .'], ';
+					$joined_info['group_columns'][] = $group_col;
 				}
+			}
+
+			$group_key = substr($group_key_list, 0, -2);
+			if(count($group_array) > 1) {
+				$group_key = 'serialize(array('. $group_key . '))';
 			}
 		}
 
 		if(preg_match('/\s+HAVING\s+((?:.+?)(?:(?:(?:(?:\s+)(?:AND|OR)(?:\s+))?(?:.+?)?)*?)?)(?:\s+(?:ORDER\s+BY|LIMIT).*)?\Z/is', $the_rest, $additional)) {
 			$the_rest = isset($additional[2]) ? $additional[2] : '';
+			if(!isset($joined_info['group_columns'])) { // no GROUP BY
+				$joined_info['group_columns'] = array();
+				$isGrouping = true;
+				$singleRow = true;
+			}
 			$having = $this->_build_where($additional[1], $joined_info, FSQL_WHERE_HAVING);
 			if(!$having) {
-				return $this->environment->_set_error('Invalid/Unsupported HAVING clause');
+				return $this->_set_error('Invalid/Unsupported HAVING clause');
 			}
 		}
 
@@ -1994,43 +2011,13 @@ EOC;
 			$limit = array((int) $limit_start, (int) $limit_stop);
 		}
 
-		if($group_list === null && $oneAggregate)
-			$group_list = array();
+		if(!$isGrouping && $oneAggregate)
+			$isGrouping = true;
 
-		$singleRow = false;
 		$selected_columns = array();
-		$group_key = null;
 		$final_code = null;
-		if($group_list !== null)
+		if($isGrouping)
 		{
-			$joined_info['group_columns'] = array();
-
-			$group_array = array();
-			$groupByCount = count($group_list);
-			if($groupByCount === 1)
-			{
-				$group_col = $group_list[0]['key'];
-				$group_key = '$entry[' . $group_col .']';
-				$group_array[] = $group_col;
-				$joined_info['group_columns'][] = $group_col;
-			}
-			else if($groupByCount > 1)
-			{
-				$all_ascend = 1;
-				$group_key_list = '';
-				foreach($group_list as $group_item)
-				{
-					$all_ascend &= (int) $group_item['ascend'];
-					$group_col = $group_item['key'];
-					$group_array[] = $group_col;
-					$group_key_list .= '$entry[' . $group_col .'], ';
-					$joined_info['group_columns'][] = $group_col;
-				}
-				$group_key = 'serialize(array('. substr($group_key_list, 0, -2) . '))';
-			}
-			else // empty array -> aggregate function call in expression list but no GROUP BY
-				$singleRow = true;
-
 			$select_line = '';
 			foreach($selectedInfo as $info) {
 				list($select_type, $select_value, $select_alias) = $info;
