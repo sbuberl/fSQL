@@ -17,6 +17,10 @@ define('FSQL_TYPE_TIME','t',true);
 define('FSQL_WHERE_NORMAL',2,true);
 define('FSQL_WHERE_ON',4,true);
 
+define('FSQL_FUNC_REGISTERED', 0, true);
+define('FSQL_FUNC_NORMAL', 1, true);
+define('FSQL_FUNC_AGGREGATE', 2, true);
+
 define('FSQL_TRUE', 3, true);
 define('FSQL_FALSE', 0,true);
 define('FSQL_NULL', 1,true);
@@ -858,9 +862,10 @@ class fSQLEnvironment
 
 	var $allow_func = array('abs','acos','asin','atan2','atan','ceil','cos','crc32','exp','floor',
 	   'ltrim','md5','pi','pow','rand','rtrim','round','sha1','sin','soundex','sqrt','strcmp','tan');
-	var $custom_func = array('concat','concat_ws','count','curdate','curtime','database','dayofweek',
-	   'dayofyear','elt','from_unixtime','last_insert_id', 'left','locate','log','log2','log10','lpad','max','min',
-	   'mod','month','now','repeat','right','row_count','sign','substring_index','sum','truncate','unix_timestamp',
+	var $aggregates = array('any','avg','count','every','max','min','sum');
+	var $custom_func = array('concat','concat_ws','curdate','curtime','database','dayofweek',
+	   'dayofyear','elt','from_unixtime','last_insert_id', 'left','locate','log','log2','log10','lpad',
+	   'mod','month','now','repeat','right','row_count','sign','substring_index','truncate','unix_timestamp',
 	   'weekday','year');
 	var $renamed_func = array('conv'=>'base_convert','ceiling' => 'ceil','degrees'=>'rad2deg','format'=>'number_format',
 	   'length'=>'strlen','lower'=>'strtolower','ln'=>'log','power'=>'pow','quote'=>'addslashes',
@@ -973,6 +978,24 @@ class fSQLEnvironment
 			$this->_set_error("Unable to load table {$db->name}.{$table_name}");
 
 		return $table;
+	}
+
+	function lookup_function($function)
+	{
+		if(isset($this->renamed_func[$function])) {
+			$newName = $this->renamed_func[$function];
+			$type = in_array($newName, $this->custom_func) ? FSQL_FUNC_NORMAL : FSQL_TYPE_REGISTERED;
+			return array($newName, $type);
+		} else if(in_array($function, $this->aggregates)) {
+			return array($function, FSQL_FUNC_AGGREGATE | FSQL_FUNC_NORMAL);
+		} else if(in_array($function, $this->custom_func)) {
+			return array($function, FSQL_FUNC_NORMAL);
+		} else if(in_array($function, $this->allow_func)) {
+			return array($function, FSQL_FUNC_REGISTERED);
+		} else {
+			return $this->_set_error("Call to unknown SQL function");
+		}
+
 	}
 
 	function escape_string($string)
@@ -1730,7 +1753,7 @@ EOC;
 
 			$tbls = explode(',', $from_matches[1]);
 			foreach($tbls as $tbl) {
-				if(preg_match('/\A\s*(`?(?:[^\W\d]\w*)`?\.)?`?([^\W\d]\w*)`?(?:\s+(?:AS\s+)?`?([^\W\d]\w*)`?)?\s*(.*)/is', $tbl, $table_matches)) {
+				if(preg_match('/\A\s*(?:`?([^\W\d]\w*)`?\.)?`?([^\W\d]\w*)`?(?:\s+(?:AS\s+)?`?([^\W\d]\w*)`?)?\s*(.*)/is', $tbl, $table_matches)) {
 					list(, $db_name, $table_name, $saveas, $table_unparsed) = $table_matches;
 					if(empty($saveas)) {
 						$saveas = $table_name;
@@ -2046,17 +2069,13 @@ EOT;
 			$params = $matches[2];
 			$final_param_list = '';
 			$paramExprs = array();
-			$isCustom = false;
-			if(isset($this->renamed_func[$function])) {
-				$function = $this->renamed_func[$function];
+
+			$functionInfo = $this->lookup_function($function);
+			if($functionInfo === false) {
+				return false;
 			}
 
-			if(in_array($function, $this->custom_func)) {
-				$isCustom = true;
-				$function = "_fsql_functions_".$function;
-			} else if(!in_array($function, $this->allow_func)) {
-				$this->_set_error("Call to unknown SQL function");
-				continue;
+			list($function, $type) = $functionInfo;
 			}
 
 			if(strlen($params) !== 0) {
@@ -2074,8 +2093,8 @@ EOT;
 
 			$final_param_list = implode(',', $paramExprs);
 
-			if($isCustom)
-				$expr = "\$this->$function($final_param_list)";
+			if($type & FSQL_FUNC_NORMAL)
+				$expr = "\$this->_fsql_functions_$function($final_param_list)";
 			else
 				$expr = "$function($final_param_list)";
 		}
