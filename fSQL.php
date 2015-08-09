@@ -1550,7 +1550,7 @@ class fSQLEnvironment
 			{
 				$where = $this->_build_where($matches[5], array('tables' => array($table_name => $columns), 'offsets' => array($table_name => 0), 'columns' => $columnNames));
 				if(!$where) {
-					return $this->_set_error('Invalid/Unsupported WHERE clause');
+					return $this->_set_error('Invalid WHERE clause: '.$this->error_msg);
 				}
 			}
 
@@ -1868,7 +1868,7 @@ EOC;
 
 							$conditional = $this->_build_where($conditions, $joined_info, FSQL_WHERE_ON);
 							if(!$conditional) {
-								return $this->_set_error('Invalid/Unsupported WHERE clause');
+								return $this->_set_error('Invalid ON/USING clause: '.$this->error_msg);
 							}
 
 							if(!isset($this->join_lambdas[$conditional])) {
@@ -1929,7 +1929,7 @@ EOC;
 			$the_rest = isset($additional[2]) ? $additional[2] : '';
 			$where = $this->_build_where($additional[1], $joined_info);
 			if(!$where)
-				return $this->_set_error('Invalid/Unsupported WHERE clause');
+				return $this->_set_error('Invalid WHERE clause: ' . $this->error_msg);
 		}
 
 		if(preg_match('/\s+GROUP\s+BY\s+(.*?)(\s+(?:HAVING|ORDER\s+BY|LIMIT).*)?\Z/is', $the_rest, $additional)) {
@@ -1970,7 +1970,7 @@ EOC;
 
 			$having = $this->_build_where($additional[1], $joined_info, FSQL_WHERE_HAVING);
 			if(!$having) {
-				return $this->_set_error('Invalid/Unsupported HAVING clause');
+				return $this->_set_error('Invalid HAVING clause: ' . $this->error_msg);
 			}
 		}
 
@@ -2249,7 +2249,7 @@ EOT;
 						if($function === 'count') {
 							$paramExprs[] = '"*"';
 						} else {
-							return $this->environment->_set_error('Passing * as a paramter is only allowed in COUNT');
+							return $this->_set_error('Passing * as a paramter is only allowed in COUNT');
 						}
 					} else {
 						$paramExpr = $this->_build_expression($param, $join_info, $where_type | 1);
@@ -2290,48 +2290,56 @@ EOT;
 				if(isset($join_info['tables'][$table_name])) {
 					$table_columns = $join_info['tables'][$table_name];
 					if(isset($table_columns[ $column ])) {
-						$columnData = $table_columns[ $column ];
 						if( isset($join_info['offsets'][$table_name]) ) {
 							$colIndex = array_search($column,  array_keys($table_columns)) + $join_info['offsets'][$table_name];
-							$expr = ($where_type & FSQL_WHERE_ON) ? "\$left_entry[$colIndex]" : "\$entry[$colIndex]";
+							if($where_type === FSQL_WHERE_HAVING) { // column/alias in grouping clause
+								if(in_array($colIndex, $join_info['group_columns'])) {
+									$expr = "\$group[0][$colIndex]";
+								} else {
+									return $this->_set_error("Column $column is not a grouped column");
+								}
+							} else {
+								$expr = ($where_type & FSQL_WHERE_ON) ? "\$left_entry[$colIndex]" : "\$entry[$colIndex]";
+							}
 						} else {
 							$colIndex = array_search($column, array_keys($table_columns));
 							$expr = "\$right_entry[$colIndex]";
 						}
+					} else {
+						return $this->_set_error("Unknown column $column for table $table_name");
 					}
-				}
-				else if($where_type & FSQL_WHERE_ON && $table_name === '{{left}}')
-				{
+				} else if($where_type & FSQL_WHERE_ON && $table_name === '{{left}}') {
 					$colIndex = $this->_find_exactly_one($joined_info, $column, "expression");
 					if($colIndex === false) {
 						return false;
 					}
 					$expr = "\$left_entry[$colIndex]";
+				} else {
+					return $this->_set_error('Unknown table/alias '.$table_name);
 				}
+
 			}
-			// null
-			else if(!strcasecmp($exprStr, 'NULL')) {
-				$expr = 'NULL';
-			}
-			// unknown
-			else if(!strcasecmp($exprStr, 'UNKNOWN')) {
+			// null/unkown
+			else if(!strcasecmp($exprStr, 'NULL') || !strcasecmp($exprStr, 'UNKNOWN')) {
 				$expr = 'NULL';
 			}
 			// true/false
 			else if(!strcasecmp($exprStr, 'TRUE') || !strcasecmp($exprStr, 'FALSE')) {
 				$expr = strtoupper($exprStr);
-			}
-			else if($where_type === FSQL_WHERE_HAVING) { // column/alias in grouping clause
-				$colIndex = array_search($column, $join_info['columns']);
-				if(in_array($colIndex, $join_info['group_columns'])) {
-					$expr = "\$group[0][$colIndex]";
-				}
-			} else {  // column/alias
+			} else {  // column/alias no table
 				$colIndex = $this->_find_exactly_one($join_info, $column, "expression");
 				if($colIndex === false) {
 					return false;
 				}
-				$expr = ($where_type & FSQL_WHERE_ON) ? "\$left_entry[$colIndex]" : "\$entry[$colIndex]";
+				if($where_type === FSQL_WHERE_HAVING) { // column/alias in grouping clause
+					if(in_array($colIndex, $join_info['group_columns'])) {
+						$expr = "\$group[0][$colIndex]";
+					} else {
+						return $this->_set_error("Column $column is not a grouped column");
+					}
+				} else {
+					$expr = ($where_type & FSQL_WHERE_ON) ? "\$left_entry[$colIndex]" : "\$entry[$colIndex]";
+				}
 			}
 		}
 		// number
@@ -2527,7 +2535,7 @@ EOT;
 			if(isset($matches[3])) {
 				$where = $this->_build_where($matches[3], array('tables' => array($table_name => $columns), 'offsets' => array($table_name => 0), 'columns' => $columnNames));
 				if(!$where) {
-					return $this->_set_error('Invalid/Unsupported WHERE clause');
+					return $this->_set_error('Invalid WHERE clause: '.$this->error_msg);
 				}
 
 				$code = <<<EOC
