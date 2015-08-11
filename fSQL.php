@@ -873,7 +873,7 @@ class fSQLEnvironment
 	var $renamed_func = array('conv'=>'base_convert','ceiling' => 'ceil','degrees'=>'rad2deg','format'=>'number_format',
 	   'length'=>'strlen','lower'=>'strtolower','ln'=>'log','power'=>'pow','quote'=>'addslashes',
 	   'radians'=>'deg2rad','repeat'=>'str_repeat','replace'=>'strtr','reverse'=>'strrev',
-	   'rpad'=>'str_pad','sha' => 'sha1', 'substring'=>'substr','upper'=>'strtoupper');
+	   'rpad'=>'str_pad','sha' => 'sha1','some' => 'any','substring'=>'substr','upper'=>'strtoupper');
 
 	function define_db($name, $path)
 	{
@@ -987,7 +987,13 @@ class fSQLEnvironment
 	{
 		if(isset($this->renamed_func[$function])) {
 			$newName = $this->renamed_func[$function];
-			$type = in_array($newName, $this->custom_func) ? FSQL_FUNC_NORMAL : FSQL_TYPE_REGISTERED;
+			if(in_array($newName, $this->custom_func)){
+				$type = FSQL_FUNC_NORMAL;
+			} else if(in_array($newName, $this->aggregates)){
+				$type = FSQL_FUNC_AGGREGATE | FSQL_FUNC_NORMAL;
+			} else {
+				$type = FSQL_TYPE_REGISTERED;
+			}
 			return array($newName, $type);
 		} else if(in_array($function, $this->aggregates)) {
 			return array($function, FSQL_FUNC_AGGREGATE | FSQL_FUNC_NORMAL);
@@ -1071,7 +1077,6 @@ class fSQLEnvironment
 		switch(strtoupper($function)) {
 			case 'CREATE':		return $this->_query_create($query);
 			case 'SELECT':		return $this->_query_select($query);
-			//case "SEARCH":		return $this->_query_search($query);
 			case 'INSERT':
 			case 'REPLACE':	return $this->_query_insert($query);
 			case 'UPDATE':		return $this->_query_update($query);
@@ -1093,7 +1098,6 @@ class fSQLEnvironment
 			case 'LOCK':		return $this->_query_lock($query);
 			case 'UNLOCK':		return $this->_query_unlock($query);
 			//case 'MERGE':		return $this->_query_merge($query);
-			//case 'IF':			return $this->_query_ifelse($query);
 			default:			$this->_set_error('Invalid Query');  return false;
 		}
 	}
@@ -2963,6 +2967,7 @@ EOC;
 
 			$row = array($name, $type, $null, $column['default'], $key, $extra);
 			if ($full) {
+				array_splice($row, 2, 0, array(null));
 				array_push($row, 'select,insert,update,references', '');
 			}
 
@@ -2971,6 +2976,7 @@ EOC;
 
 		$columns = array("Field", "Type", "Null", "Default", "Key", "Extra");
 		if($full) {
+			array_splice($columns, 2, 0, 'Correlation');
 			array_push($columns, "Privileges", "Comment");
 		}
 
@@ -3417,9 +3423,9 @@ EOC;
 	 ///// Aggregate Functions
 	function _fsql_functions_any($data, $column, $flag) {
 		if ($flag === "constant")
-			return $this->fsql_isTrue($data);
+			return $this->_fsql_isTrue($data);
 		foreach($data as $entry){
-			if($this->fsql_isTrue($entry[$column]))
+			if($this->_fsql_isTrue($entry[$column]))
 				return true;
 		}
 		return false;
@@ -3444,9 +3450,9 @@ EOC;
 
 	function _fsql_functions_every($data, $column, $flag) {
 		if ($flag === "constant")
-			return $this->_fsql_functions_isTrue($data);
+			return $this->_fsql_isTrue($data);
 		foreach($data as $entry){
-			if(!$this->_fsql_functions_isTrue($entry[$column]))
+			if(!$this->_fsql_isTrue($entry[$column]))
 				return false;
 		}
 		return true;
