@@ -395,10 +395,15 @@ class fSQLCachedTable
 	{
 		$toprint = count($columnDefs)."\r\n";
 		foreach($columnDefs as $name => $column) {
+			$default = $column['default'];
+			if(is_string($default)) {
+				$default = "'$default'";
+			}
+
 			if(!is_array($column['restraint'])) {
-				$toprint .= $name.": ".$column['type'].";;".$column['auto'].";".$column['default'].";".$column['key'].";".$column['null'].";\r\n";
+				$toprint .= $name.": ".$column['type'].";;".$column['auto'].";".$default.";".$column['key'].";".$column['null'].";\r\n";
 			} else {
-				$toprint .= $name.": ".$column['type'].";".implode(",", $column['restraint']).";".$column['auto'].";".$column['default'].";".$column['key'].";".$column['null'].";\r\n";
+				$toprint .= $name.": ".$column['type'].";".implode(",", $column['restraint']).";".$column['auto'].";".$default.";".$column['key'].";".$column['null'].";\r\n";
 			}
 		}
 		return $toprint;
@@ -443,6 +448,9 @@ class fSQLCachedTable
 						$default = (int) $default;
 					else if($type === 'f')
 						$default = (float) $default;
+					else if($default{0} == "'" && substr($default, -1) == "'") {
+						$default = substr($default, 1, -1);
+					}
 					$this->columns[$matches[1]] = array(
 						'type' => $type, 'auto' => $matches[4], 'default' => $default, 'key' => $matches[6], 'null' => $matches[7]
 					);
@@ -788,18 +796,6 @@ class fSQLDatabase
 		return $tables;
 	}
 
-	function &loadTable($table_name)
-	{
-		$table =& $this->getTable($table_name);
-		if(!$table->exists())
-			return false;
-
-		$table->_loadEntries();
-
-		$old_style_table = array('columns' => $table->getColumns(), 'entries' => $table->entries);
-		return $old_style_table;
-	}
-
 	function renameTable($old_table_name, $new_table_name, &$new_db)
 	{
 		$oldTable =& $this->getTable($old_table_name);
@@ -972,15 +968,6 @@ class fSQLEnvironment
 		}
 
 		return $db;
-	}
-
-	function &_load_table(&$db, $table_name)
-	{
-		$table =& $db->loadTable($table_name);
-		if(!$table)
-			$this->_set_error("Unable to load table {$db->name}.{$table_name}");
-
-		return $table;
 	}
 
 	function lookup_function($function)
@@ -1249,39 +1236,49 @@ class fSQLEnvironment
 							$restraint = null;
 						}
 
-						if(preg_match("/DEFAULT\s+((?:[\+\-]\s*)?\d+(?:\.\d+)?|NULL|(\"|').*?(?<!\\\\)(?:\\2))/is", $options, $matches)) {
+						if(preg_match("/DEFAULT\s+((?:[\+\-]\s*)?\d+(?:\.\d+)?|NULL|'.*?(?<!\\\\)')/is", $options, $matches)) {
+							if($auto) {
+								return $this->_set_error("Can not specify a default value for an AUTO_INCREMENT column");
+							}
+
 							$default = $matches[1];
 							if(!$null && strcasecmp($default, "NULL")) {
-								if(preg_match("/\A(\"|')(.*)(?:\\1)\Z/is", $default, $matches)) {
-									if($type == 'i')
-										$default = intval($matches[2]);
-									else if($type == 'f')
-										$default = floatval($matches[2]);
-									else if($type == 'e') {
-										if(in_array($default, $restraint))
+								if(preg_match("/\A'(.*)'\Z/is", $default, $matches)) {
+									if($type == FSQL_TYPE_INTEGER)
+										$default = (int) $matches[1];
+									else if($type == FSQL_TYPE_FLOAT)
+										$default = (float) $matches[1];
+									else if($type == FSQL_TYPE_ENUM) {
+										if(in_array($matches[1], $restraint))
 											$default = array_search($default, $restraint) + 1;
 										else
 											$default = 0;
+									} else if($type == FSQL_TYPE_STRING) {
+										$default = $matches[1];
 									}
 								} else {
-									if($type == 'i')
-										$default = intval($default);
-									else if($type == 'f')
-										$default = floatval($default);
-									else if($type == 'e') {
-										$default = intval($default);
+									if($type == FSQL_TYPE_INTEGER)
+										$default = (int) $default;
+									else if($type == FSQL_TYPE_FLOAT)
+										$default = (float) $default;
+									else if($type == FSQL_TYPE_ENUM) {
+										$default = (int) $default;
 										if($default < 0 || $default > count($restraint)) {
 											return $this->_set_error("Numeric ENUM value out of bounds");
 										}
+									} else if($type == FSQL_TYPE_STRING) {
+										$default = "'".$matches[1]."'";
 									}
 								}
 							}
-						} else if($type == 's')
-							// The default for string types is the empty string
-							$default = "''";
-						else
-							// The default for dates, times, and number types is 0
+						} else if($type === FSQL_TYPE_STRING) {
+							$default = '';
+						 } else if($type === FSQL_TYPE_FLOAT) {
+							$default = 0.0;
+						 } else {
+							// The default for dates, times, enums, and int types is 0
 							$default = 0;
+						 }
 
 						if(preg_match("/(PRIMARY KEY|UNIQUE(?: KEY)?)/is", $options, $keymatches)) {
 							$keytype = strtolower($keymatches[1]);
@@ -2596,8 +2593,6 @@ EOC;
 			}
 			$columns =  $tableObj->getColumns();
 
-			$table = $this->_load_table($db, $table_name);
-
 			preg_match_all("/(?:ADD|ALTER|CHANGE|DROP|RENAME).*?(?:,|\Z)/is", trim($changes), $specs);
 			for($i = 0; $i < count($specs[0]); $i++) {
 				if(preg_match("/\AADD\s+(?:CONSTRAINT\s+`?[A-Z][A-Z0-9\_]*`?\s+)?PRIMARY\s+KEY\s*\((.+?)\)/is", $specs[0][$i], $matches)) {
@@ -2613,7 +2608,7 @@ EOC;
 					$tableObj->setColumns($columns);
 
 					return true;
-				} else if(preg_match("/\ACHANGE(?:\s+(?:COLUMN))?\s+`?([A-Z][A-Z0-9\_]*)`?\s+(?:SET\s+DEFAULT ((?:[\+\-]\s*)?\d+(?:\.\d+)?|NULL|(\"|').*?(?<!\\\\)(?:\\3))|DROP\s+DEFAULT)(?:,|;|\Z)/is", $specs[0][$i], $matches)) {
+				} else if(preg_match("/\ACHANGE(?:\s+(?:COLUMN))?\s+`?([A-Z][A-Z0-9\_]*)`?\s+(?:SET\s+DEFAULT\s+((?:[\+\-]\s*)?\d+(?:\.\d+)?|NULL|'.*?(?<!\\\\)')|DROP\s+DEFAULT)(?:,|;|\Z)/is", $specs[0][$i], $matches)) {
 					$columnDef =& $columns[$matches[1]];
 					if(isset($matches[2]))
 						$default = $matches[2];
@@ -2621,7 +2616,7 @@ EOC;
 						$default = "NULL";
 
 					if(!$columnDef['null'] && strcasecmp($default, "NULL")) {
-						if(preg_match("/\A(\"|')(.*)(?:\\1)\Z/is", $default, $matches)) {
+						if(preg_match("/\A'(.*)'\Z/is", $default, $matches)) {
 							if($columnDef['type'] == 'i')
 								$default = intval($matches[2]);
 							else if($columnDef['type'] == 'f')
