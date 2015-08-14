@@ -1084,7 +1084,7 @@ class fSQLEnvironment
 			case 'SHOW':		return $this->_query_show($query);
 			case 'LOCK':		return $this->_query_lock($query);
 			case 'UNLOCK':		return $this->_query_unlock($query);
-			//case 'MERGE':		return $this->_query_merge($query);
+			case 'MERGE':		return $this->_query_merge($query);
 			default:			$this->_set_error('Invalid Query');  return false;
 		}
 	}
@@ -1273,12 +1273,12 @@ class fSQLEnvironment
 							}
 						} else if($type === FSQL_TYPE_STRING) {
 							$default = '';
-						 } else if($type === FSQL_TYPE_FLOAT) {
+						} else if($type === FSQL_TYPE_FLOAT) {
 							$default = 0.0;
-						 } else {
+						} else {
 							// The default for dates, times, enums, and int types is 0
 							$default = 0;
-						 }
+						}
 
 						if(preg_match("/(PRIMARY KEY|UNIQUE(?: KEY)?)/is", $options, $keymatches)) {
 							$keytype = strtolower($keymatches[1]);
@@ -1371,14 +1371,13 @@ class fSQLEnvironment
 		}
 		// SET syntax
 		else if(preg_match("/^SET\s+(.+)/is", $the_rest, $matches)) {
-			$SET = explode(",", $matches[1]);
+			$SET = $this->_parseSetClause($matches[1], $tableColumns);
 			$Columns= array();
 			$data_values = array();
 
 			foreach($SET as $set) {
-				list($column, $value) = explode("=", $set);
-				$Columns[] = trim($column);
-				$data_values[] = trim($value);
+				$Columns[] = $set[0];
+				$data_values[] = $set[1];
 			}
 
 			$get_data_from = implode(",", $data_values);
@@ -1533,18 +1532,7 @@ class fSQLEnvironment
 			$cursor =& $table->getCursor();
 			$col_indicies = array_flip($columnNames);
 
-			if(preg_match_all("/`?((?:\S+)`?\s*=\s*(?:'(?:.*?)'|\S+))`?\s*(?:,|\Z)/is", $matches[4], $sets)) {
-				foreach($sets[1] as $set) {
-					$s = preg_split("/`?\s*=\s*`?/", $set);
-					$SET[] = $s;
-					if(!isset($columns[$s[0]])) {
-						return $this->_set_error("Invalid column name '{$s[0]}' found");
-					}
-				}
-				unset($s);
-			}
-			else
-				$SET[0] = preg_split("/\s*=\s*/", $matches[4]);
+			$SET = $this->_parseSetClause($matches[4], $columns);
 
 			$where = null;
 			if(isset($matches[5]))
@@ -1668,7 +1656,6 @@ EOC;
 		  table_dest d
 		USING
 		  table_source s
-		  table_source s
 		ON
 		  (s.id = d.id)
 		when	 matched then update set d.txt = s.txt
@@ -1676,8 +1663,8 @@ EOC;
 	*/
 	function _query_merge($query)
 	{
-		if(preg_match("/\AMERGE\s+INTO\s+`?(?:([A-Z][A-Z0-9\_]*)`?\.`?)?([A-Z][A-Z0-9\_]*)`?(?:\s+AS\s+`?([A-Z][A-Z0-9\_]*)`?)?\s+USING\s+(?:([A-Z][A-Z0-9\_]*)\.)?([A-Z][A-Z0-9\_]*)(?:\s+AS\s+([A-Z][A-Z0-9\_]*))?\s+ON\s+(.+?)(?:\s+WHEN\s+MATCHED\s+THEN\s+(UPDATE .+?))?(?:\s+WHEN\s+NOT\s+MATCHED\s+THEN\s+(INSERT .+?))?/is", $query, $matches)) {
-			list( , $dest_db_name, $dest_table, $dest_alias, $src_db_name, $src_table, $src_alias, $on_clause) = $matches;
+		if(preg_match("/\AMERGE\s+INTO\s+(?:`?([^\W\d]\w*)`?\.)?`?([^\W\d]\w*)`?(?:\s+(?:AS\s+)?`?([A-Z][A-Z0-9\_]*)`?)?\s+USING\s+(?:`?([^\W\d]\w*)`?\.)?`?([^\W\d]\w*)`?(?:\s(?:AS\s+)?`?([^\W\d]\w*)`?)?\s+ON\s+(.+?)\s+(WHEN\s+(?:NOT\s+)?MATCHED.+?);?\Z/is", $query, $matches)) {
+			list( , $dest_db_name, $dest_table_name, $dest_alias, $src_db_name, $src_table_name, $src_alias, $on_clause, $matches_clause) = $matches;
 
 			$dest_db =& $this->_get_database($dest_db_name);
 			if($dest_db === false) {
@@ -1689,32 +1676,125 @@ EOC;
 				return false;
 			}
 
-			if(!($dest = $this->_load_table($dest_db, $dest_table))) {
+			if(!($dest_table =& $dest_db->getTable($dest_table_name))) {
 				return false;
 			}
 
-			if(!($src = $this->_load_table($src_db, $src_table))) {
+			if(!($src_table =& $src_db->getTable($src_table_name))) {
 				return false;
 			}
 
-			if(preg_match("/(?:\()?(\S+)\s*=\s*(\S+)(?:\))?/", $on_clause, $on_pieces)) {
+			if(empty($dest_alias)) {
+				$dest_alias = $dest_table_name;
+			}
 
+			if(empty($src_alias)) {
+				$src_alias = $src_table_name;
+			}
+
+			$src_table_columns = $src_table->getColumns();
+			$src_columns_size = count($src_table_columns);
+			$joined_info = array(
+				'tables' => array($src_alias => $src_table_columns),
+				'offsets' => array($src_alias => 0),
+				'columns' => array_keys($src_table_columns));
+
+			$dest_table_columns = $dest_table->getColumns();
+			$dest_table_column_names = array_keys($dest_table_columns);
+			$dest_column_indices = array_flip($dest_table_column_names);
+
+			$joined_info['tables'][$dest_alias] = $dest_table_columns;
+			$new_offset = count($joined_info['columns']);
+			$joined_info['columns'] = array_merge($joined_info['columns'], $dest_table_column_names);
+
+			$conditional = $this->_build_where($on_clause, $joined_info, FSQL_WHERE_ON);
+			if(!$conditional) {
+				return $this->_set_error('Invalid ON clause: '.$this->error_msg);
+			}
+
+			if(!isset($this->join_lambdas[$conditional])) {
+				$join_function = create_function('$left_entry,$right_entry', "return $conditional;");
+				$this->join_lambdas[$conditional] = $join_function;
 			} else {
-				return $this->_set_error('Invalid ON clause');
+				$join_function = $this->join_lambdas[$conditional];
 			}
 
-			$TABLES = explode(",", $matches[1]);
-			foreach($TABLES as $table_name) {
-				$table_name = trim($table_name);
-				if(!$this->table_exists($table_name)) { $this->error_msg = "Table $table_name does not exist";  return false; }
-				$table = $this->load_table($table_name);
-				$tables[] = $table;
+			$joined_info['offsets'][$dest_alias] = $new_offset;
+
+			$matches_clause = trim($matches_clause);
+			while(!empty($matches_clause)) {
+
+				if(preg_match("/\AWHEN\s+MATCHED\s+THEN\s+UPDATE\s+SET\s+(.+?)(\s+when\s+.+|\s*\Z)/is", $matches_clause, $clause)) {
+					list(, $setList, $matches_clause) = $clause;
+					$sets = $this->_parseSetClause($setList, $dest_table_columns);
+					$updateCode = '';
+					foreach($sets as $set) {
+						$valueExpr = $this->_build_expression($set[1], $joined_info, FSQL_WHERE_NORMAL);
+						if($valueExpr === false) {
+							return false;
+						}
+						$colIndex = $dest_column_indices[$set[0]];
+						$updateCode .= $colIndex . " => $valueExpr, ";
+					}
+					$updateCode = 'return array(' . substr($updateCode, 0, -2) . ');';
+				} else if(preg_match("/\AWHEN\s+NOT\s+MATCHED\s+THEN\s+INSERT\s*(?:\((.+?)\))?\s*VALUES\s*\((.+?)\)(\s+when\s+.+|\s*\Z)/is", $matches_clause, $clause)) {
+					list(, $columnList, $values, $matches_clause) = $clause;
+					$columnList = trim($columnList);
+					if(!empty($columnList)) {
+						$columns = preg_split("/\s*,\s*/", columnList);
+					} else {
+						$columns = $dest_table_column_names;
+					}
+
+					preg_match_all("/\((?:[^()]|(?R))+\)|'[^']*'|[^(),\s]+/", $values, $valuesList);
+					$valuesList = $valuesList[0];
+
+					if(count($valuesList) != count($columns)) {
+						return $this->_set_error("Number of inserted values and columns are not equal in MERGE WHEN NOT MATCHED clause");
+					}
+
+					$insertCode = '';
+					foreach($valuesList as $value) {
+						$valueExpr = $this->_build_expression($value, $joined_info, FSQL_WHERE_NORMAL);
+						if($valueExpr === false) {
+							return false;
+						}
+						$insertCode .= $valueExpr.', ';
+					}
+					$insertCode = 'return array(' . substr($insertCode, 0, -2) . ');';
+				} else {
+					return $this->_set_error("Unknown MERGE WHEN clause");
+				}
+
+				$matches_clause = trim($matches_clause);
 			}
-			foreach($tables as $table) {
-				if($table['columns'] != $tables[1]['columns']) { $this->error_msg = "Columns in the tables to be merged don't match"; return false; }
-				foreach($table['entries'] as $tbl_entry) { $entries[] = $tbl_entry; }
+
+			$joinMatches = array();
+			$join_data = $this->_left_join($src_table->getEntries(), $dest_table->getEntries(), $join_function, $src_columns_size, $joinMatches);
+
+			$affected = 0;
+			$srcCursor = $src_table->getCursor();
+			for($srcRowId = $srcCursor->first(); !$srcCursor->isDone(); $srcRowId = $srcCursor->next()) {
+				$entry = $srcCursor->getRow();
+				$destRowId = $joinMatches[$srcRowId];
+				if($destRowId === false) {
+					$newRow = eval($insertCode);
+					$dest_table->insertRow($newRow);
+					++$affected;
+				} else {
+					$updates = eval($updateCode);
+					$dest_table->updateRow($destRowId, $updates);
+					++$affected;
+				}
 			}
-			$this->print_tbl($matches[2], $tables[1]['columns'], $entries);
+
+			if($this->auto) {
+				$dest_table->commit();
+			} else if(!in_array($dest_table, $this->updatedTables)) {
+				$this->updatedTables[] =& $dest_table;
+			}
+
+			$this->affected = $affected;
 			return true;
 		} else {
 			return $this->_set_error("Invalid MERGE query");
@@ -1884,7 +1964,9 @@ EOC;
 
 							$joining_entries = $join_table->getEntries();
 							if(!strncasecmp($join_name, "LEFT", 4)) {
-								$join_data = $this->_left_join($join_data, $joining_entries, $join_function, $joining_columns_size);
+								$joinMatches = array();
+								$join_data = $this->_left_join($join_data, $joining_entries, $join_function, $joining_columns_size, $joinMatches);
+								unset($joinMatches);
 							} else if(!strncasecmp($join_name, "RIGHT", 5)) {
 								$join_data = $this->_right_join($join_data, $joining_entries, $join_function, $join_columns_size);
 							} else if(!strncasecmp($join_name, "FULL", 4)) {
@@ -2214,6 +2296,22 @@ EOT;
 		}
 
 		return $index;
+	}
+
+	function _parseSetClause($clause, $columns) {
+		$result = array();
+		if(preg_match_all("/`?((?:\S+)`?\s*=\s*(?:'(?:.*?)'|\S+))`?\s*(?:,|\Z)/is", $clause, $sets)) {
+			foreach($sets[1] as $set) {
+				$s = preg_split("/`?\s*=\s*`?/", $set);
+				$result[] = $s;
+				if(!isset($columns[$s[0]])) {
+					return $this->_set_error("Invalid column name '{$s[0]}' found in SET clause");
+				}
+			}
+		} else {
+			$result[0] = preg_split("/\s*=\s*/", $clause);
+		}
+		return $result;
 	}
 
 	function _build_expression($exprStr, $join_info, $where_type = FSQL_WHERE_NORMAL)
@@ -3137,23 +3235,26 @@ EOC;
 		return $new_join_data;
 	}
 
-	function _left_join($left_data, $right_data, $join_comparator, $pad_length)
+	function _left_join($left_data, $right_data, $join_comparator, $pad_length, &$joinMatches)
 	{
 		$new_join_data = array();
 		$right_padding = array_fill(0, $pad_length, null);
 
-		foreach($left_data as $left_entry)
+		foreach($left_data as $left_row => $left_entry)
 		{
 			$match_found = false;
-			foreach($right_data as $right_entry) {
+			foreach($right_data as $right_row => $right_entry) {
 				if($join_comparator($left_entry, $right_entry)) {
 					$match_found = true;
+					$joinMatches[$left_row] = $right_row;
 					$new_join_data[] = array_merge($left_entry, $right_entry);
 				}
 			}
 
-			if(!$match_found)
+			if(!$match_found) {
 				$new_join_data[] = array_merge($left_entry, $right_padding);
+				$joinMatches[$left_row] = false;
+			}
 		}
 
 		return $new_join_data;
