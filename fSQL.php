@@ -20,14 +20,17 @@ define('FSQL_WHERE_ON',4,true);
 define('FSQL_WHERE_HAVING',8,true);
 define('FSQL_WHERE_HAVING_AGG',9,true);
 
-define('FSQL_FUNC_REGISTERED', 0, true);
-define('FSQL_FUNC_NORMAL', 1, true);
-define('FSQL_FUNC_AGGREGATE', 2, true);
-
 define('FSQL_TRUE', 3, true);
 define('FSQL_FALSE', 0,true);
 define('FSQL_NULL', 1,true);
 define('FSQL_UNKNOWN', 1,true);
+
+if(!defined('FSQL_INCLUDE_PATH')) {
+	define('FSQL_INCLUDE_PATH', dirname(__FILE__));
+}
+
+require_once FSQL_INCLUDE_PATH.'/fSQLDatabase.php';
+require_once FSQL_INCLUDE_PATH.'/fSQLFunctions.php';
 
 // This function is in PHP5 but nowhere else so we're making it in case we're on PHP4
 if (!function_exists('array_combine')) {
@@ -39,808 +42,6 @@ if (!function_exists('array_combine')) {
 			return $combined;
 		}
 		return false;
-	}
-}
-
-/* A reentrant read write lock for a file */
-class fSQLFileLock
-{
-	var $handle;
-	var $filepath;
-	var $lock;
-	var $rcount = 0;
-	var $wcount = 0;
-
-	function fSQLFileLock($filepath)
-	{
-		$this->filepath = $filepath;
-		$this->handle = null;
-		$this->lock = 0;
-	}
-
-	function getHandle()
-	{
-		return $this->handle;
-	}
-
-	function acquireRead()
-	{
-		if($this->lock !== 0 && $this->handle !== null) {  /* Already have at least a read lock */
-			$this->rcount++;
-			return true;
-		}
-		else if($this->lock === 0 && $this->handle === null) /* New lock */
-		{
-			$this->handle = fopen($this->filepath, 'rb');
-			if($this->handle)
-			{
-				flock($this->handle, LOCK_SH);
-				$this->lock = 1;
-				$this->rcount = 1;
-				return true;
-			}
-		}
-
-		return false;
-	}
-
-	function acquireWrite()
-	{
-		if($this->lock === 2 && $this->handle !== null)  /* Already have a write lock */
-		{
-			$this->wcount++;
-			return true;
-		}
-		else if($this->lock === 1 && $this->handle !== null)  /* Upgrade a lock*/
-		{
-			flock($this->handle, LOCK_EX);
-			$this->lock = 2;
-			$this->wcount++;
-			return true;
-		}
-		else if($this->lock === 0 && $this->handle === null) /* New lock */
-		{
-			touch($this->filepath); // make sure it exists
-			$this->handle = fopen($this->filepath, 'r+b');
-			if($this->handle)
-			{
-				flock($this->handle, LOCK_EX);
-				$this->lock = 2;
-				$this->wcount = 1;
-				return true;
-			}
-		}
-
-		return false;
-	}
-
-	function releaseRead()
-	{
-		if($this->lock !== 0 && $this->handle !== null)
-		{
-			$this->rcount--;
-
-			if($this->lock === 1 && $this->rcount === 0) /* Read lock now empty */
-			{
-				// no readers or writers left, release lock
-				flock($this->handle, LOCK_UN);
-				fclose($this->handle);
-				$this->handle = null;
-				$this->lock = 0;
-			}
-		}
-
-		return true;
-	}
-
-	function releaseWrite()
-	{
-		if($this->lock !== 0 && $this->handle !== null)
-		{
-			if($this->lock === 2) /* Write lock */
-			{
-				$this->wcount--;
-				if($this->wcount === 0) // no writers left.
-				{
-					if($this->rcount > 0)  // only readers left.  downgrade lock.
-					{
-						flock($this->handle, LOCK_SH);
-						$this->lock = 1;
-					}
-					else // no readers or writers left, release lock
-					{
-						flock($this->handle, LOCK_UN);
-						fclose($this->handle);
-						$this->handle = null;
-						$this->lock = 0;
-					}
-				}
-			}
-		}
-
-		return true;
-	}
-}
-
-class fSQLTableCursor
-{
-	var $entries;
-	var $num_rows;
-	var $pos;
-
-	function close() {
-		unset($this->entries, $this->num_rows, $this->pos);
-	}
-
-	function first()
-	{
-		$this->pos = 0;
-		return $this->pos;
-	}
-
-	function getPosition()
-	{
-		return $this->pos;
-	}
-
-	function getRow()
-	{
-		if($this->pos >= 0 && $this->pos < $this->num_rows)
-			return $this->entries[$this->pos];
-		else
-			return false;
-	}
-
-	function isDone()
-	{
-		return $this->pos < 0 || $this->pos >= $this->num_rows;
-	}
-
-	function last()
-	{
-		$this->pos = $this->num_rows - 1;
-	}
-
-	function previous()
-	{
-		$this->pos--;
-	}
-
-	function next()
-	{
-		$this->pos++;
-		return $this->pos;
-	}
-
-	function seek($pos)
-	{
-		if($pos >=0 & $pos < count($this->entries))
-			$this->pos = $pos;
-	}
-}
-
-class fSQLTable
-{
-	var $cursor = null;
-	var $columns = null;
-	var $entries = null;
-	var $data_load =0;
-	var $uncommited = false;
-
-	function &create($path_to_db, $table_name, $columnDefs)
-	{
-		$table =& new fSQLTable;
-		$table->columns = $columnDefs;
-		$table->temporary = true;
-		return $table;
-	}
-
-	function close()
-	{
-		if($this->cursor !== null) {
-			$this->cursor->close();
-		}
-		unset($this->cursor, $this->columns, $this->entries, $this->data_load, $this->uncommited);
-	}
-
-	function exists() {
-		return true;
-	}
-
-	function getColumnNames() {
-		return array_keys($this->getColumns());
-	}
-
-	function getColumns() {
-		return $this->columns;
-	}
-
-	function setColumns($columns) {
-		$this->columns = $columns;
-	}
-
-	function getEntries()
-	{
-		return $this->entries;
-	}
-
-	function &getCursor()
-	{
-		if($this->cursor === null)
-			$this->cursor =& new fSQLTableCursor;
-
-		$this->cursor->entries =& $this->entries;
-		$this->cursor->num_rows = count($this->entries);
-		$this->cursor->pos = 0;
-
-		return $this->cursor;
-	}
-
-	function newCursor()
-	{
-		$cursor =& new fSQLTableCursor;
-		$cursor->entries =& $this->entries;
-		$cursor->num_rows = count($this->entries);
-		$cursor->pos = 0;
-
-		return $cursor;
-	}
-
-	function insertRow($data) {
-		$this->entries[] = $data;
-		$this->uncommited = true;
-	}
-
-	function updateRow($row, $data) {
-		foreach($data as $key=> $value)
-			$this->entries[$row][$key] = $value;
-		$this->uncommited = true;
-	}
-
-	function deleteRow($row) {
-		unset($this->entries[$row]);
-		$this->uncommited = true;
-	}
-
-	function commit()
-	{
-		$this->uncommited = false;
-	}
-
-	function rollback()
-	{
-		$this->data_load = 0;
-		$this->uncommited = false;
-	}
-
-	/* Unecessary for temporary tables */
-	function readLock() { return true; }
-	function writeLock() { return true; }
-	function unlock() { return true; }
-}
-
-class fSQLCachedTable
-{
-	var $cursor = null;
-	var $columns = null;
-	var $entries = null;
-	var $columns_path;
-	var $data_path;
-	var $columns_load = null;
-	var $data_load = null;
-	var $uncommited = false;
-	var $columnsLockFile;
-	var $columnsFile;
-	var $dataLockFile;
-	var $dataFile;
-	var $lock = null;
-
-	function fSQLCachedTable($path_to_db, $table_name)
-	{
-		$this->columns_path = $path_to_db.$table_name.'.columns';
-		$this->data_path = $path_to_db.$table_name.'.data';
-		$this->columnsLockFile = new fSQLFileLock($this->columns_path.'.lock.cgi');
-		$this->columnsFile = new fSQLFileLock($this->columns_path.'.cgi');
-		$this->dataLockFile = new fSQLFileLock($this->data_path.'.lock.cgi');
-		$this->dataFile = new fSQLFileLock($this->data_path.'.cgi');
-		$this->temporary = false;
-	}
-
-	function close()
-	{
-		unset($this->cursor, $this->columns, $this->entries, $this->columns_path, $this->data_path,
-			$this->columns_load, $this->data_load, $this->uncommited, $this->columnsLockFile, $this->dataLockFile,
-			$this->dataFile, $this->lock);
-	}
-
-	function &create($path_to_db, $table_name, $columnDefs)
-	{
-		$table =& new fSQLCachedTable($path_to_db, $table_name);
-		$table->columns = $columnDefs;
-
-		list($msec, $sec) = explode(' ', microtime());
-		$table->columns_load = $table->data_load = $sec.$msec;
-
-		// create the columns lock
-		$table->columnsLockFile->acquireWrite();
-		$columnsLock = $table->columnsLockFile->getHandle();
-		ftruncate($columnsLock, 0);
-		fwrite($columnsLock, $table->columns_load);
-
-		// create the columns file
-		$table->columnsFile->acquireWrite();
-		$toprint = $table->_printColumns($columnDefs);
-		fwrite($table->columnsFile->getHandle(), $toprint);
-
-		$table->columnsFile->releaseWrite();
-		$table->columnsLockFile->releaseWrite();
-
-		// create the data lock
-		$table->dataLockFile->acquireWrite();
-		$dataLock = $table->dataLockFile->getHandle();
-		ftruncate($dataLock, 0);
-		fwrite($dataLock, $table->data_load);
-
-		// create the data file
-		$table->dataFile->acquireWrite();
-		fwrite($table->dataFile->getHandle(), "0\r\n");
-
-		$table->dataFile->releaseWrite();
-		$table->dataLockFile->releaseWrite();
-
-		return $table;
-	}
-
-	function _printColumns($columnDefs)
-	{
-		$toprint = count($columnDefs)."\r\n";
-		foreach($columnDefs as $name => $column) {
-			$default = $column['default'];
-			if(is_string($default)) {
-				$default = "'$default'";
-			}
-
-			if(!is_array($column['restraint'])) {
-				$toprint .= $name.": ".$column['type'].";;".$column['auto'].";".$default.";".$column['key'].";".$column['null'].";\r\n";
-			} else {
-				$toprint .= $name.": ".$column['type'].";".implode(",", $column['restraint']).";".$column['auto'].";".$default.";".$column['key'].";".$column['null'].";\r\n";
-			}
-		}
-		return $toprint;
-	}
-
-	function exists() {
-		return file_exists($this->columns_path.'.cgi');
-	}
-
-	function getColumnNames() {
-		return array_keys($this->getColumns());
-	}
-
-	function getColumns() {
-		$this->columnsLockFile->acquireRead();
-		$lock = $this->columnsLockFile->getHandle();
-
-		$modified = fread($lock, 20);
-		if($this->columns_load === null || strcmp($this->columns_load, $modified) < 0)
-		{
-			$this->columns_load = $modified;
-
-			$this->columnsFile->acquireRead();
-			$columnsHandle = $this->columnsFile->getHandle();
-
-			$line = fgets($columnsHandle);
-			if(!preg_match("/^(\d+)/", $line, $matches))
-			{
-				$this->columnsFile->releaseRead();
-				$this->columnsLockFile->releaseRead();
-				return false;
-			}
-
-			$num_columns = $matches[1];
-
-			for($i = 0; $i < $num_columns; $i++) {
-				$line =	fgets($columnsHandle, 4096);
-				if(preg_match("/(\S+): (dt|d|i|f|s|t|e);(.*);(0|1);(-?\d+(?:\.\d+)?|'.*'|NULL);(p|u|k|n);(0|1);/", $line, $matches)) {
-					$type = $matches[2];
-					$default = $matches[5];
-					if($type === 'i')
-						$default = (int) $default;
-					else if($type === 'f')
-						$default = (float) $default;
-					else if($default{0} == "'" && substr($default, -1) == "'") {
-						$default = substr($default, 1, -1);
-					}
-					$this->columns[$matches[1]] = array(
-						'type' => $type, 'auto' => $matches[4], 'default' => $default, 'key' => $matches[6], 'null' => $matches[7]
-					);
-					if(preg_match_all("/'(.*?(?<!\\\\))'/", $matches[3], $restraint) !== false) {
-						$this->columns[$matches[1]]['restraint'] = $restraint[1];
-					} else {
-						$this->columns[$matches[1]]['restraint'] = array();
-					}
-				} else {
-					return false;
-				}
-			}
-
-			$this->columnsFile->releaseRead();
-		}
-
-		$this->columnsLockFile->releaseRead();
-
-		return $this->columns;
-	}
-
-	function getEntries()
-	{
-		$this->_loadEntries();
-		return $this->entries;
-	}
-
-	function &getCursor()
-	{
-		$this->_loadEntries();
-
-		if($this->cursor === null)
-			$this->cursor = new fSQLTableCursor;
-
-		$this->cursor->entries =& $this->entries;
-		$this->cursor->num_rows = count($this->entries);
-		$this->cursor->pos = 0;
-
-		return $this->cursor;
-	}
-
-	function newCursor()
-	{
-		$this->_loadEntries();
-
-		$cursor =& new fSQLTableCursor;
-		$cursor->entries =& $this->entries;
-		$cursor->num_rows = count($this->entries);
-		$cursor->pos = 0;
-
-		return $cursor;
-	}
-
-	function _loadEntries()
-	{
-		$this->dataLockFile->acquireRead();
-		$lock = $this->dataLockFile->getHandle();
-
-		$modified = fread($lock, 20);
-		if($this->data_load === null || strcmp($this->data_load, $modified) < 0)
-		{
-			$entries = null;
-			$this->data_load = $modified;
-
-			$this->dataFile->acquireRead();
-			$dataHandle = $this->dataFile->getHandle();
-
-			$line = fgets($dataHandle);
-			if(!preg_match("/^(\d+)/", $line, $matches))
-			{
-				$this->dataFile->releaseRead();
-				$this->dataLockFile->releaseRead();
-				return false;
-			}
-
-			$num_entries = rtrim($matches[1]);
-
-			if($num_entries != 0)
-			{
-				$skip = false;
-				$entries = array();
-
-				$columnDefs = array_values($this->getColumns());
-				for($i = 0;  $i < $num_entries; $i++) {
-					$line = rtrim(fgets($dataHandle, 4096));
-
-					if(!$skip) {
-						if(preg_match("/^(\d+):(.*)$/", $line, $matches))
-						{
-							$row = $matches[1];
-							$data = trim($matches[2]);
-						}
-						else
-							continue;
-					}
-					else {
-						$data .= $line;
-					}
-
-					if(!preg_match("/(-?\d+(?:\.\d+)?|'.*?(?<!\\\\)'|NULL);$/", $line)) {
-						$skip = true;
-						continue;
-					} else {
-						$skip = false;
-					}
-
-					preg_match_all("#((-?\d+(?:\.\d+)?)|'.*?(?<!\\\\)'|NULL);#s", $data, $matches);
-					for($m = 0; $m < count($matches[0]); $m++) {
-						if($matches[1][$m] === 'NULL') {
-							$entries[$row][$m] = null;
-						} else if(!empty($matches[2][$m])) {
-							$number = $matches[2][$m];
-							if($strpos($number, '.') !== false) {
-								$number = (float) $number;
-							} else {
-								$number = (int) $number;
-							}
-							$entries[$row][$m] = $number;
-						} else if($columnDefs['type'] === FSQL_TYPE_ENUM) {
-							$index = (int) $matches[2][$m];
-							$entries[$row][$m] = $index > 0 ? $columnDefs[$m]['restraint'][$index] : "";
-						} else {
-							$entries[$row][$m] = $matches[1][$m];
-						}
-					}
-				}
-			}
-
-			$this->entries = $entries;
-
-			$this->dataFile->releaseRead();
-		}
-
-		$this->dataLockFile->releaseRead();
-
-		return true;
-	}
-
-	function insertRow($data) {
-		$this->_loadEntries();
-		$this->entries[] = $data;
-		$this->uncommited = true;
-	}
-
-	function updateRow($row, $data) {
-		$this->_loadEntries();
-		foreach($data as $key=> $value)
-			$this->entries[$row][$key] = $value;
-		$this->uncommited = true;
-	}
-
-	function deleteRow($row) {
-		$this->_loadEntries();
-		unset($this->entries[$row]);
-		$this->uncommited = true;
-	}
-
-	function setColumns($columnDefs)
-	{
-		$this->columnsLockFile->acquireWrite();
-		$lock = $this->columnsLockFile->getHandle();
-		$modified = fread($lock, 20);
-
-		$this->columns = $columnDefs;
-
-		list($msec, $sec) = explode(' ', microtime());
-		$this->columns_load = $sec.$msec;
-		fseek($lock, 0, SEEK_SET);
-		fwrite($lock, $this->columns_load);
-
-		$this->columnsFile->acquireWrite();
-
-		$toprint = $this->_printColumns($columnDefs);
-		$columnsHandle = $this->columnsFile->getHandle();
-		ftruncate($columnsHandle, 0);
-		fwrite($columnsHandle, $toprint);
-
-		$this->columnsFile->releaseWrite();
-		$this->columnsLockFile->releaseWrite();
-	}
-
-	function commit()
-	{
-		if($this->uncommited === false)
-			return;
-
-		$this->dataLockFile->acquireWrite();
-		$lock = $this->dataLockFile->getHandle();
-		$modified = fread($lock, 20);
-
-		if($this->data_load === null || strcmp($this->data_load, $modified) >= 0)
-		{
-			$columnDefs = array_values($this->getColumns());
-			$toprint = count($this->entries)."\r\n";
-			foreach($this->entries as $number => $entry) {
-				$toprint .= $number.': ';
-				foreach($entry as $key => $value) {
-					if($value === NULL) {
-						$value = 'NULL';
-					} else if($columnDefs[$key]['type'] === FSQL_TYPE_ENUM) {
-						$value = (int) array_search($value, $columnDefs[$key]['restraint']);;
-					} else if(is_string($value)) {
-						$value = "'$value'";
-					}
-					$toprint .= $value.';';
-				}
-				$toprint .= "\r\n";
-			}
-		} else {
-			$toprint = "0\r\n";
-		}
-
-		list($msec, $sec) = explode(' ', microtime());
-		$this->data_load = $sec.$msec;
-		fseek($lock, 0, SEEK_SET);
-		fwrite($lock, $this->data_load);
-
-		$this->dataFile->acquireWrite();
-
-		$dataHandle = $this->dataFile->getHandle();
-		ftruncate($dataHandle, 0);
-		fwrite($dataHandle, $toprint);
-
-		$this->dataFile->releaseWrite();
-		$this->dataLockFile->releaseWrite();
-
-		$this->uncommited = false;
-	}
-
-	function rollback()
-	{
-		$this->data_load = 0;
-		$this->uncommited = false;
-	}
-
-	function isReadLocked()
-	{
-		return $this->lock === 'r';
-	}
-
-	function readLock()
-	{
-		$success = $this->columnsLockFile->acquireRead() && $this->columnsFile->acquireRead()
-	 		&& $this->dataLockFile->acquireRead() && $this->dataFile->acquireRead();
-		if($success) {
-			$this->lock = 'r';
-			return true;
-		} else {
-			$this->unlock();  // release any locks that did work if at least one failed
-			return false;
-		}
-	}
-
-	function writeLock()
-	{
-		$success = $this->columnsLockFile->acquireRead() && $this->columnsFile->acquireRead()
-			&& $this->dataLockFile->acquireRead() && $this->dataFile->acquireRead();
-		if($success) {
-			$this->lock = 'w';
-			return true;
-		} else {
-			$this->unlock();  // release any locks that did work if at least one failed
-			return false;
-		}
-	}
-
-	function unlock()
-	{
-		if($this->lock === 'r')
-		{
-			$this->columnsLockFile->releaseRead();
-			$this->columnsFile->releaseRead();
-			$this->dataLockFile->releaseRead();
-			$this->dataFile->releaseRead();
-		}
-		else if($this->lock === 'w')
-		{
-			$this->columnsLockFile->releaseWrite();
-			$this->columnsFile->releaseWrite();
-			$this->dataLockFile->releaseWrite();
-			$this->dataFile->releaseWrite();
-		}
-		$this->lock = null;
-		return true;
-	}
-}
-
-class fSQLDatabase
-{
-	var $name = null;
-	var $path_to_db = null;
-	var $loadedTables = array();
-
-	function close()
-	{
-		foreach(array_keys($this->loadedTables) as $table_name) {
-			$this->loadedTables[$table_name]->close();
-		}
-
-		unset($this->name, $this->path_to_db, $this->loadedTables);
-	}
-
-	function createTable($table_name, $columns, $temporary = false)
-	{
-		$table = null;
-
-		if(!$temporary) {
-			$table = fSQLCachedTable::create($this->path_to_db, $table_name, $columns);
-		} else {
-			$table = fSQLTable::create($this->path_to_db, $table_name, $columns);
-			$this->loadedTables[$table_name] =& $table;
-		}
-
-		return $table;
-	}
-
-	function &getTable($table_name)
-	{
-		if(!isset($this->loadedTables[$table_name])) {
-			$table = new fSQLCachedTable($this->path_to_db, $table_name);
-			$this->loadedTables[$table_name] = $table;
-			unset($table);
-		}
-
-		return $this->loadedTables[$table_name];
-	}
-
-	function listTables()
-	{
-		$dir = opendir($this->path_to_db);
-
-		$tables = array();
-		while (false !== ($file = readdir($dir))) {
-			if ($file != '.' && $file != '..' && !is_dir($file)) {
-				if(substr($file, -12) == '.columns.cgi') {
-					$tables[] = substr($file, 0, -12);
-				}
-			}
-		}
-
-		closedir($dir);
-
-		return $tables;
-	}
-
-	function renameTable($old_table_name, $new_table_name, &$new_db)
-	{
-		$oldTable =& $this->getTable($old_table_name);
-		if($oldTable->exists()) {
-			if(!$oldTable->temporary) {
-				$newTable = $new_db->createTable($new_table_name,  $oldTable->getColumns());
-				copy($oldTable->data_path.'.cgi', $newTable->data_path.'.cgi');
-				copy($oldTable->data_path.'.lock.cgi', $newTable->data_path.'.lock.cgi');
-				$this->dropTable($old_table_name);
-			} else {
-				$new_db->loadedTables[$new_table_name] =& $this->loadedTables[$old_table_name];
-				unset($this->loadedTables[$old_table_name]);
-			}
-
-			return true;
-		} else {
-			return false;
-		}
-	}
-
-	function dropTable($table_name)
-	{
-		$table =& $this->getTable($table_name);
-		if($table->exists()) {
-			if(!$table->temporary) {
-				unlink($table->columns_path.'.cgi');
-				unlink($table->columns_path.'.lock.cgi');
-				unlink($table->data_path.'.cgi');
-				unlink($table->data_path.'.lock.cgi');
-			}
-
-			$table = null;
-			unset($this->loadedTables[$table_name]);
-			unset($table);
-
-			return true;
-		} else {
-			return false;
-		}
-	}
-
-	function copyTable($name, $src_path, $dest_path)
-	{
-		copy($src_path.$name.'columns.cgi', $dest_path.$name.'columns.cgi');
-		copy($src_path.$name.'data.cgi', $dest_path.$name.'data.cgi');
 	}
 }
 
@@ -858,18 +59,12 @@ class fSQLEnvironment
 	var $affected = 0;
 	var $insert_id = 0;
 	var $auto = 1;
+	var $functions;
 
-	var $allow_func = array('abs','acos','asin','atan2','atan','ceil','cos','crc32','exp','floor',
-	   'ltrim','md5','pi','pow','rand','rtrim','round','sha1','sin','soundex','sqrt','strcmp','tan');
-	var $aggregates = array('any','avg','count','every','max','min','sum');
-	var $custom_func = array('concat','concat_ws','curdate','curtime','database','dayofweek',
-	   'dayofyear','elt','from_unixtime','last_insert_id', 'left','locate','log','log2','log10','lpad',
-	   'mod','month','now','repeat','right','row_count','sign','substring_index','truncate','unix_timestamp',
-	   'weekday','year');
-	var $renamed_func = array('conv'=>'base_convert','ceiling' => 'ceil','degrees'=>'rad2deg','format'=>'number_format',
-	   'length'=>'strlen','lower'=>'strtolower','ln'=>'log','power'=>'pow','quote'=>'addslashes',
-	   'radians'=>'deg2rad','repeat'=>'str_repeat','replace'=>'strtr','reverse'=>'strrev',
-	   'rpad'=>'str_pad','sha' => 'sha1','some' => 'any','substring'=>'substr','upper'=>'strtoupper');
+	function fSQLEnvironment()
+	{
+		$functions =& new fSQLFunctions();
+	}
 
 	function define_db($name, $path)
 	{
@@ -914,12 +109,13 @@ class fSQLEnvironment
 	function close()
 	{
 		$this->_unlock_tables();
+		$this->functions->close();
 		foreach (array_keys($this->databases) as $db_name ) {
 			$this->databases[$db_name]->close();
 		}
 		unset($this->Columns, $this->cursors, $this->data, $this->currentDB, $this->databases,
 			$this->error_msg, $this->join_lambdas, $this->updatedTables, $this->lockedTables,
-			$this->allow_func, $this->custom_func, $this->renamed_func);
+			$this->functions);
 	}
 
 	function error()
@@ -929,8 +125,7 @@ class fSQLEnvironment
 
 	function register_function($sqlName, $phpName)
 	{
-		$this->renamed_func[$sqlName] = $phpName;
-		return true;
+		return $this->functions->register($sqlName, $phpName);
 	}
 
 	function _set_error($error)
@@ -973,26 +168,11 @@ class fSQLEnvironment
 
 	function lookup_function($function)
 	{
-		if(isset($this->renamed_func[$function])) {
-			$newName = $this->renamed_func[$function];
-			if(in_array($newName, $this->custom_func)){
-				$type = FSQL_FUNC_NORMAL;
-			} else if(in_array($newName, $this->aggregates)){
-				$type = FSQL_FUNC_AGGREGATE | FSQL_FUNC_NORMAL;
-			} else {
-				$type = FSQL_TYPE_REGISTERED;
-			}
-			return array($newName, $type);
-		} else if(in_array($function, $this->aggregates)) {
-			return array($function, FSQL_FUNC_AGGREGATE | FSQL_FUNC_NORMAL);
-		} else if(in_array($function, $this->custom_func)) {
-			return array($function, FSQL_FUNC_NORMAL);
-		} else if(in_array($function, $this->allow_func)) {
-			return array($function, FSQL_FUNC_REGISTERED);
-		} else {
+		$match = $this->functions->lookup($function);
+		if($match === false) {
 			return $this->_set_error("Call to unknown SQL function");
 		}
-
+		return $match;
 	}
 
 	function escape_string($string)
@@ -2425,7 +1605,7 @@ EOT;
 			$final_param_list = implode(',', $paramExprs);
 
 			if($type & FSQL_FUNC_NORMAL)
-				$expr = "\$this->_fsql_functions_$function($final_param_list)";
+				$expr = "\$this->functions->$function($final_param_list)";
 			else
 				$expr = "$function($final_param_list)";
 		}
@@ -2579,23 +1759,23 @@ EOT;
 							if($rightExpr === 'NULL')
 								$local_condition = "($leftExpr === null ? FSQL_TRUE : FSQL_FALSE)";
 							else if($rightExpr === 'TRUE')
-								$local_condition = "\$this->_fsql_isTrue($leftExpr) ? FSQL_TRUE : FSQL_FALSE)";
+								$local_condition = "\$this->functions->isTrue($leftExpr) ? FSQL_TRUE : FSQL_FALSE)";
 							else if($rightExpr === 'FALSE')
-								$local_condition = "\$this->_fsql_isFalse($leftExpr) ? FSQL_TRUE : FSQL_FALSE)";
+								$local_condition = "\$this->functions->isFalse($leftExpr) ? FSQL_TRUE : FSQL_FALSE)";
 							else
 								return false;
 							break;
 						case 'NOT LIKE':
 							$not = !$not;
 						case 'LIKE':
-							$local_condition = "\$this->_fsql_like($leftExpr, $rightExpr)";
+							$local_condition = "\$this->functions->like($leftExpr, $rightExpr)";
 							break;
 						case 'NOT RLIKE':
 						case 'NOT REGEXP':
 							$not = !$not;
 						case 'RLIKE':
 						case 'REGEXP':
-							$local_condition = "\$this->_fsql_regexp($leftExpr, $rightExpr)";
+							$local_condition = "\$this->functions->regexp($leftExpr, $rightExpr)";
 							break;
 						default:
 							$local_condition = "$leftExpr $operator $rightExpr";
@@ -2613,7 +1793,7 @@ EOT;
 							$valuesExpressions[] = $valueExpr['expression'];
 						}
 						$valuesString = implode(',', $valuesExpressions);
-						$local_condition = "\$this->_fsql_in($leftExpr, array($valuesString))";
+						$local_condition = "\$this->functions->in($leftExpr, array($valuesString))";
 
 						if($operator === 'NOT IN')
 							$not = !$not;
@@ -2628,7 +1808,7 @@ EOT;
 					$condition .= ' | ';
 
 				if($not)
-					$condition .= '\$this->_fsql_not('.$local_condition.')';
+					$condition .= '\$this->functions->not('.$local_condition.')';
 				else
 					$condition .= $local_condition;
 			}
@@ -3458,237 +2638,6 @@ EOC;
 			case FSQL_TYPE_TIME:				return 'TIME';
 			default:							return false;
 		}
-	}
-
-	function _fsql_strip_stringtags($string)
-	{
-		return preg_replace("/^'(.+)'$/s", "\\1", $string);
-	}
-
-	// operators
-
-	function _fsql_not($x)
-	{
-		$c = ~$x & 3;
-		return (($c << 1) ^ ($c >> 1)) & 3;
-	}
-
-	function _fsql_isTrue($expr)
-	{
-		return !in_array($expr, array(0, 0.0, '', null), true);
-	}
-
-	function _fsql_isFalse($expr)
-	{
-		return in_array($expr, array(0, 0.0, ''), true);
-	}
-
-	function _fsql_like($left, $right)
-	{
-		if($left !== null && $right !== null)
-		{
-			$right = strtr(preg_quote($right, "/"), array('_' => '.', '%' => '.*', '\_' => '_', '\%' => '%'));
-			return (preg_match("/\A{$right}\Z/is", $left)) ? FSQL_TRUE : FSQL_FALSE;
-		}
-		else
-			return FSQL_UNKNOWN;
-	}
-
-	function _fsql_in($needle, $haystack)
-	{
-		if($needle !== null)
-		{
-			return (in_array($needle, $haystack)) ? FSQL_TRUE : FSQL_FALSE;
-		}
-		else
-			return FSQL_UNKNOWN;
-	}
-
-	function _fsql_regexp($left, $right)
-	{
-		if($left !== null && $right !== null)
-			return (preg_match('/'.$right.'/i', $left)) ? FSQL_TRUE : FSQL_FALSE;
-		else
-			return FSQL_UNKNOWN;
-	}
-
-	//////Misc Functions
-	function _fsql_functions_database()
-	{
-		return $this->currentDB->name;
-	}
-
-	function _fsql_functions_last_insert_id()
-	{
-		return $this->insert_id;
-	}
-
-	function _fsql_functions_row_count()
-	{
-		return $this->affected;
-	}
-
-	/////Math Functions
-	function _fsql_functions_log($arg1, $arg2 = null) {
-		$arg1 = $this->_fsql_strip_stringtags($arg1);
-		if($arg2) {
-			$arg2 = $this->_fsql_strip_stringtags($arg2);
-		}
-		if(($arg1 < 0 || $arg1 == 1) && !$arg2) { return null; }
-		if(!$arg2) { return log($arg1); } else { return log($arg2) / log($arg1); }
-	}
-	function _fsql_functions_log2($arg)
-	{
-		$arg = $this->_fsql_strip_stringtags($arg);
-		return $this->_fsql_functions_log(2, $arg);
-	}
-	function _fsql_functions_log10($arg) {
-		$arg = $this->_fsql_strip_stringtags($arg);
-		return $this->_fsql_functions_log(10, $arg);
-	}
-	function _fsql_functions_mod($one, $two) {
-		$one = $this->_fsql_strip_stringtags($one);
-		$two = $this->_fsql_strip_stringtags($two);
-		return $one % $two;
-	}
-	function _fsql_functions_sign($number) {
-		$number = $this->_fsql_strip_stringtags($number);
-		if($number > 0) { return 1; } else if($number == 0) { return 0; } else { return -1; }
-	}
-	function _fsql_functions_truncate($number, $places) {
-		$number = $this->_fsql_strip_stringtags($number);
-		$places = round($this->_fsql_strip_stringtags($number));
-		list($integer, $decimals) = explode(".", $number);
-		if($places == 0) { return $integer; }
-		else if($places > 0) { return $integer.'.'.substr($decimals,0,$places); }
-		else {   return substr($number,0,$places) * pow(10, abs($places));  }
-	}
-
-	 ///// Aggregate Functions
-	function _fsql_functions_any($data, $column, $flag) {
-		if ($flag === "constant")
-			return $this->_fsql_isTrue($data);
-		foreach($data as $entry){
-			if($this->_fsql_isTrue($entry[$column]))
-				return true;
-		}
-		return false;
-	}
-
-	function _fsql_functions_avg($data, $column, $flag) {
-		$sum = $this->_fsql_functions_sum($data, $column, $flag);
-		return $sum !== null ? $sum / count($data) : null;
-	}
-
-	function _fsql_functions_count($data, $column, $flag) {
-		if($column == '*') { return count($data); }
-		else if($flag === "constant") { return (int) ($column !== null); }
-		else {
-			$i = 0;
-			foreach($data as $entry) {
-				if($entry[$column] !== null) { $i++; }
-			}
-			return $i;
-		}
-	}
-
-	function _fsql_functions_every($data, $column, $flag) {
-		if ($flag === "constant")
-			return $this->_fsql_isTrue($data);
-		foreach($data as $entry){
-			if(!$this->_fsql_isTrue($entry[$column]))
-				return false;
-		}
-		return true;
-	}
-
-	function _fsql_functions_max($data, $column, $flag) {
-		$max = null;
-		if ($flag === "constant")
-			$max = $column;
-		else {
-			foreach($data as $entry){
-				if($entry[$column] > $max || $max === null) {
-					$max = $entry[$column];
-				}
-			}
-		}
-		return $max;
-	}
-
-	function  _fsql_functions_min($data, $column, $flag) {
-		$min = null;
-		if ($flag === "constant")
-			$min = $column;
-		else {
-			foreach($data as $entry){
-				if($entry[$column] < $min || $min === null) {
-					$min = $entry[$column];
-				}
-			}
-		}
-		return $min;
-	}
-
-	function  _fsql_functions_sum($data, $column, $flag) {
-		$i = null;
-
-		if ($flag === "constant" && $column !== null)
-			$i = $column * sizeof($data);
-		else {
-			foreach($data as $entry)
-			{
-				$i += $entry[$column];
-			}
-		}
-
-		return $i;
-	}
-
-	 /////String Functions
-	function _fsql_functions_concat_ws($string) {
-		$numargs = func_num_args();
-		if($numargs > 2) {
-			for($i = 1; $i < $numargs; $i++) { $return[] = func_get_arg($i);  }
-			return implode($string, $return);
-		}
-		else { return null; }
-	}
-	function _fsql_functions_concat() { return call_user_func_array(array($this,'_fsql_functions_concat_ws'), array("",func_get_args())); }
-	function _fsql_functions_elt() {
-		$return = func_get_arg(0);
-		if(func_num_args() > 1 && $return >= 1 && $return <= func_num_args()) {	return func_get_arg($return);  }
-		else { return null; }
-	}
-	function _fsql_functions_locate($string, $find, $start = null) {
-		if($start) { $string = substr($string, $start); }
-		$pos = strpos($string, $find);
-		if($pos === false) { return 0; } else { return $pos; }
-	}
-	function _fsql_functions_lpad($string, $length, $pad) { return str_pad($string, $length, $pad, STR_PAD_LEFT); }
-	function _fsql_functions_left($string, $end)	{ return substr($string, 0, $end); }
-	function _fsql_functions_right($string,$end)	{ return substr($string, -$end); }
-	function _fsql_functions_substring_index($string, $delim, $count) {
-		$parts = explode($delim, $string);
-		if($count < 0) {   for($i = $count; $i > 0; $i++) { $part = count($parts) + $i; $array[] = $parts[$part]; }  }
-		else { for($i = 0; $i < $count; $i++) { $array[] = $parts[$i]; }  }
-		return implode($delim, $array);
-	}
-
-	////Date/Time functions
-	function _fsql_functions_now()		{ return $this->_fsql_functions_from_unixtime(time()); }
-	function _fsql_functions_curdate()	{ return $this->_fsql_functions_from_unixtime(time(), "%Y-%m-%d"); }
-	function _fsql_functions_curtime() 	{ return $this->_fsql_functions_from_unixtime(time(), "%H:%M:%S"); }
-	function _fsql_functions_dayofweek($date) 	{ return $this->_fsql_functions_from_unixtime($date, "%w"); }
-	function _fsql_functions_weekday($date)		{ return $this->_fsql_functions_from_unixtime($date, "%u"); }
-	function _fsql_functions_dayofyear($date)		{ return round($this->_fsql_functions_from_unixtime($date, "%j")); }
-	function _fsql_functions_unix_timestamp($date = null) {
-		if(!$date) { return null; } else { return strtotime(str_replace("-","/",$date)); }
-	}
-	function _fsql_functions_from_unixtime($timestamp, $format = "%Y-%m-%d %H:%M:%S")
-	{
-		if(!is_int($timestamp)) { $timestamp = $this->_fsql_functions_unix_timestamp($timestamp); }
-		return strftime($format, $timestamp);
 	}
 }
 
