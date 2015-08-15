@@ -214,7 +214,7 @@ class fSQLTableCursor
 
 	function seek($pos)
 	{
-		if($pos >=0 & $pos < $count($this->entries))
+		if($pos >=0 & $pos < count($this->entries))
 			$this->pos = $pos;
 	}
 }
@@ -913,6 +913,7 @@ class fSQLEnvironment
 
 	function close()
 	{
+		$this->_unlock_tables();
 		foreach (array_keys($this->databases) as $db_name ) {
 			$this->databases[$db_name]->close();
 		}
@@ -1721,12 +1722,21 @@ EOC;
 
 			$joined_info['offsets'][$dest_alias] = $new_offset;
 
+			$hasMatched = false;
+			$hasNotMatched = false;
 			$matches_clause = trim($matches_clause);
 			while(!empty($matches_clause)) {
 
-				if(preg_match("/\AWHEN\s+MATCHED\s+THEN\s+UPDATE\s+SET\s+(.+?)(\s+when\s+.+|\s*\Z)/is", $matches_clause, $clause)) {
-					list(, $setList, $matches_clause) = $clause;
-					$sets = $this->_parseSetClause($setList, $dest_table_columns);
+				if(preg_match("/\AWHEN\s+MATCHED\s+(?:AND\s+(.+?)\s+)?THEN\s+UPDATE\s+SET\s+(.+?)(\s+when\s+.+|\s*\Z)/is", $matches_clause, $clause)) {
+					if($hasMatched) {
+						return $this->_set_error("Can only have one WHEN MATCHED clause");
+					}
+					list(, $andClause, $setList, $matches_clause) = $clause;
+					$sets = $this->_parseSetClause($setList, $dest_table_columns, $dest_alias);
+					if($sets === false) {
+						return false;
+					}
+
 					$updateCode = '';
 					foreach($sets as $set) {
 						$valueExpr = $this->_build_expression($set[1], $joined_info, FSQL_WHERE_NORMAL);
@@ -1737,8 +1747,20 @@ EOC;
 						$updateCode .= $colIndex . " => $valueExpr, ";
 					}
 					$updateCode = 'return array(' . substr($updateCode, 0, -2) . ');';
-				} else if(preg_match("/\AWHEN\s+NOT\s+MATCHED\s+THEN\s+INSERT\s*(?:\((.+?)\))?\s*VALUES\s*\((.+?)\)(\s+when\s+.+|\s*\Z)/is", $matches_clause, $clause)) {
-					list(, $columnList, $values, $matches_clause) = $clause;
+
+					if(!empty($andClause)) {
+						$updateAndExpr = $this->_build_where($andClause, $joined_info, FSQL_WHERE_NORMAL);
+						if(!$updateAndExpr) {
+							return $this->_set_error('Invalid AND clause: '.$this->error_msg);
+						}
+						$updateCode = "if($updateAndExpr) { $updateCode } else { return false; }";
+					}
+					$hasMatched = true;
+				} else if(preg_match("/\AWHEN\s+NOT\s+MATCHED\s+(?:AND\s+(.+?)\s+)?THEN\s+INSERT\s*(?:\((.+?)\))?\s*VALUES\s*\((.+?)\)(\s+when\s+.+|\s*\Z)/is", $matches_clause, $clause)) {
+					if($hasNotMatched) {
+						return $this->_set_error("Can only have one WHEN NOT MATCHED clause");
+					}
+					list(, $andClause, $columnList, $values, $matches_clause) = $clause;
 					$columnList = trim($columnList);
 					if(!empty($columnList)) {
 						$columns = preg_split("/\s*,\s*/", columnList);
@@ -1762,6 +1784,16 @@ EOC;
 						$insertCode .= $valueExpr.', ';
 					}
 					$insertCode = 'return array(' . substr($insertCode, 0, -2) . ');';
+
+					if(!empty($andClause)) {
+						$insertAndExpr = $this->_build_where($andClause, $joined_info, FSQL_WHERE_NORMAL);
+						if(!$insertAndExpr) {
+							return $this->_set_error('Invalid AND clause: '.$this->error_msg);
+						}
+						$insertCode = "if($insertAndExpr) { $insertCode } else { return false; }";
+					}
+
+					$hasNotMatched = true;
 				} else {
 					return $this->_set_error("Unknown MERGE WHEN clause");
 				}
@@ -1774,17 +1806,25 @@ EOC;
 
 			$affected = 0;
 			$srcCursor = $src_table->getCursor();
+			$destCursor = $src_table->getCursor();
 			for($srcRowId = $srcCursor->first(); !$srcCursor->isDone(); $srcRowId = $srcCursor->next()) {
 				$entry = $srcCursor->getRow();
 				$destRowId = $joinMatches[$srcRowId];
 				if($destRowId === false) {
 					$newRow = eval($insertCode);
-					$dest_table->insertRow($newRow);
-					++$affected;
+					if($newRow !== false) {
+						$dest_table->insertRow($newRow);
+						++$affected;
+					}
 				} else {
+					$destCursor->seek($destRowId);
+					$destRow = $destCursor->getRow();
+					$entry = array_merge($entry, $destRow);
 					$updates = eval($updateCode);
-					$dest_table->updateRow($destRowId, $updates);
-					++$affected;
+					if($updates !== false) {
+						$dest_table->updateRow($destRowId, $updates);
+						++$affected;
+					}
 				}
 			}
 
@@ -2298,11 +2338,19 @@ EOT;
 		return $index;
 	}
 
-	function _parseSetClause($clause, $columns) {
+	function _parseSetClause($clause, $columns, $tableAlias = null) {
 		$result = array();
-		if(preg_match_all("/`?((?:\S+)`?\s*=\s*(?:'(?:.*?)'|\S+))`?\s*(?:,|\Z)/is", $clause, $sets)) {
+		if(preg_match_all("/((?:\S+)\s*=\s*(?:'(?:.*?)'|\S+))`?\s*(?:,|\Z)/is", $clause, $sets)) {
 			foreach($sets[1] as $set) {
 				$s = preg_split("/`?\s*=\s*`?/", $set);
+				if(preg_match("/\A\s*(?:`?([^\W\d]\w*)`?\.)?`?([^\W\d]\w*)`?/is", $s[0], $namePieces)) {
+					list(, $prefix, $columnName) = $namePieces;
+					if($tableAlias !== null && !empty($prefix) && $tableAlias !== $prefix) {
+						return $this->_set_error("Unknown table alias in SET clause");
+					}
+					$s[0] = $columnName;
+				}
+
 				$result[] = $s;
 				if(!isset($columns[$s[0]])) {
 					return $this->_set_error("Invalid column name '{$s[0]}' found in SET clause");
