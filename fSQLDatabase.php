@@ -1,5 +1,10 @@
 <?php
 
+function _fsql_abstract_method()
+{
+	trigger_error('This method is abstract. It should be overriden',E_USER_ERROR);
+}
+
 /* A reentrant read write lock for a file */
 class fSQLFileLock
 {
@@ -179,41 +184,53 @@ class fSQLTableCursor
 
 class fSQLTable
 {
+	var $name;
 	var $cursor = null;
 	var $columns = null;
 	var $entries = null;
-	var $data_load =0;
-	var $uncommited = false;
 
-	function &create($path_to_db, $table_name, $columnDefs)
+	function fSQLTable($name)
 	{
-		$table =& new fSQLTable;
-		$table->columns = $columnDefs;
-		$table->temporary = true;
-		return $table;
+		$this->name = $name;
 	}
 
 	function close()
 	{
-		if($this->cursor !== null) {
-			$this->cursor->close();
-		}
-		unset($this->cursor, $this->columns, $this->entries, $this->data_load, $this->uncommited);
+		unset($this->name, $this->cursor, $this->columns, $this->entries);
 	}
 
-	function exists() {
-		return true;
+	function name()
+	{
+		return $this->name;
 	}
 
-	function getColumnNames() {
+	function exists()
+	{
+		_fsql_abstract_method();
+	}
+
+	function temporary()
+	{
+		_fsql_abstract_method();
+	}
+
+	function drop()
+	{
+		_fsql_abstract_method();
+	}
+
+	function getColumnNames()
+	{
 		return array_keys($this->getColumns());
 	}
 
-	function getColumns() {
+	function getColumns()
+	{
 		return $this->columns;
 	}
 
-	function setColumns($columns) {
+	function setColumns($columns)
+	{
 		$this->columns = $columns;
 	}
 
@@ -244,44 +261,71 @@ class fSQLTable
 		return $cursor;
 	}
 
-	function insertRow($data) {
+	function insertRow($data)
+	{
 		$this->entries[] = $data;
-		$this->uncommited = true;
 	}
 
-	function updateRow($row, $data) {
+	function updateRow($row, $data)
+	{
 		foreach($data as $key=> $value)
 			$this->entries[$row][$key] = $value;
-		$this->uncommited = true;
 	}
 
-	function deleteRow($row) {
+	function deleteRow($row)
+	{
 		unset($this->entries[$row]);
-		$this->uncommited = true;
 	}
 
 	function commit()
 	{
-		$this->uncommited = false;
+		_fsql_abstract_method();
 	}
 
 	function rollback()
 	{
-		$this->data_load = 0;
-		$this->uncommited = false;
+		_fsql_abstract_method();
+	}
+
+	function isReadLocked() { _fsql_abstract_method(); }
+	function readLock() { _fsql_abstract_method(); }
+	function writeLock() { _fsql_abstract_method(); }
+	function unlock() { _fsql_abstract_method(); }
+}
+
+class fSQLTempTable extends fSQLTable
+{
+	function fSQLTempTable($tableName, $columnDefs)
+	{
+		parent::fSQLTable($tableName);
+	}
+
+	function exists()
+	{
+		return true;
+	}
+
+	function temporary()
+	{
+		return true;
+	}
+
+	function drop()
+	{
+		$this->close();
 	}
 
 	/* Unecessary for temporary tables */
-	function readLock() { return true; }
-	function writeLock() { return true; }
-	function unlock() { return true; }
+	function commit() { }
+	function rollback() { }
+	function isReadLocked() { return false; }
+	function readLock() { }
+	function writeLock() { }
+	function unlock() { }
 }
 
-class fSQLCachedTable
+class fSQLCachedTable extends fSQLTable
 {
-	var $cursor = null;
-	var $columns = null;
-	var $entries = null;
 	var $columns_path;
 	var $data_path;
 	var $columns_load = null;
@@ -295,20 +339,19 @@ class fSQLCachedTable
 
 	function fSQLCachedTable($path_to_db, $table_name)
 	{
+		parent::fSQLTable($table_name);
 		$this->columns_path = $path_to_db.$table_name.'.columns';
 		$this->data_path = $path_to_db.$table_name.'.data';
 		$this->columnsLockFile = new fSQLFileLock($this->columns_path.'.lock.cgi');
 		$this->columnsFile = new fSQLFileLock($this->columns_path.'.cgi');
 		$this->dataLockFile = new fSQLFileLock($this->data_path.'.lock.cgi');
 		$this->dataFile = new fSQLFileLock($this->data_path.'.cgi');
-		$this->temporary = false;
 	}
 
 	function close()
 	{
-		unset($this->cursor, $this->columns, $this->entries, $this->columns_path, $this->data_path,
-			$this->columns_load, $this->data_load, $this->uncommited, $this->columnsLockFile, $this->dataLockFile,
-			$this->dataFile, $this->lock);
+		unset($this->columns_path, $this->data_path, $this->columns_load, $this->data_load,
+			$this->uncommited, $this->columnsLockFile, $this->dataLockFile, $this->dataFile, $this->lock);
 	}
 
 	function &create($path_to_db, $table_name, $columnDefs)
@@ -367,15 +410,27 @@ class fSQLCachedTable
 		return $toprint;
 	}
 
-	function exists() {
+	function exists()
+	{
 		return file_exists($this->columns_path.'.cgi');
 	}
 
-	function getColumnNames() {
-		return array_keys($this->getColumns());
+	function temporary()
+	{
+		return false;
 	}
 
-	function getColumns() {
+	function drop()
+	{
+		unlink($this->columns_path.'.cgi');
+		unlink($this->columns_path.'.lock.cgi');
+		unlink($this->data_path.'.cgi');
+		unlink($this->data_path.'.lock.cgi');
+		$this->close();
+	}
+
+	function getColumns()
+	{
 		$this->columnsLockFile->acquireRead();
 		$lock = $this->columnsLockFile->getHandle();
 
@@ -440,26 +495,14 @@ class fSQLCachedTable
 	{
 		$this->_loadEntries();
 
-		if($this->cursor === null)
-			$this->cursor = new fSQLTableCursor;
-
-		$this->cursor->entries =& $this->entries;
-		$this->cursor->num_rows = count($this->entries);
-		$this->cursor->pos = 0;
-
-		return $this->cursor;
+		return parent::getCursor();
 	}
 
 	function newCursor()
 	{
 		$this->_loadEntries();
 
-		$cursor =& new fSQLTableCursor;
-		$cursor->entries =& $this->entries;
-		$cursor->num_rows = count($this->entries);
-		$cursor->pos = 0;
-
-		return $cursor;
+		return parent::newCursor();
 	}
 
 	function _loadEntries()
@@ -549,20 +592,19 @@ class fSQLCachedTable
 
 	function insertRow($data) {
 		$this->_loadEntries();
-		$this->entries[] = $data;
+		parent::insertRow($data);
 		$this->uncommited = true;
 	}
 
 	function updateRow($row, $data) {
 		$this->_loadEntries();
-		foreach($data as $key=> $value)
-			$this->entries[$row][$key] = $value;
+		parent::updateRow($row, $data);
 		$this->uncommited = true;
 	}
 
 	function deleteRow($row) {
 		$this->_loadEntries();
-		unset($this->entries[$row]);
+		parent::deleteRow($row);
 		$this->uncommited = true;
 	}
 
@@ -716,9 +758,9 @@ class fSQLDatabase
 		$table = null;
 
 		if(!$temporary) {
-			$table = fSQLCachedTable::create($this->path_to_db, $table_name, $columns);
+			$table =& fSQLCachedTable::create($this->path_to_db, $table_name, $columns);
 		} else {
-			$table = fSQLTable::create($this->path_to_db, $table_name, $columns);
+			$table =& new fSQLTempTable($table_name, $columns);
 			$this->loadedTables[$table_name] =& $table;
 		}
 
@@ -758,7 +800,7 @@ class fSQLDatabase
 	{
 		$oldTable =& $this->getTable($old_table_name);
 		if($oldTable->exists()) {
-			if(!$oldTable->temporary) {
+			if(!$oldTable->temporary()) {
 				$newTable = $new_db->createTable($new_table_name,  $oldTable->getColumns());
 				copy($oldTable->data_path.'.cgi', $newTable->data_path.'.cgi');
 				copy($oldTable->data_path.'.lock.cgi', $newTable->data_path.'.lock.cgi');
@@ -778,12 +820,7 @@ class fSQLDatabase
 	{
 		$table =& $this->getTable($table_name);
 		if($table->exists()) {
-			if(!$table->temporary) {
-				unlink($table->columns_path.'.cgi');
-				unlink($table->columns_path.'.lock.cgi');
-				unlink($table->data_path.'.cgi');
-				unlink($table->data_path.'.lock.cgi');
-			}
+			$table->drop();
 
 			$table = null;
 			unset($this->loadedTables[$table_name]);
