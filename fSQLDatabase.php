@@ -185,23 +185,30 @@ class fSQLTableCursor
 class fSQLTable
 {
 	var $name;
+	var $database;
 	var $cursor = null;
 	var $columns = null;
 	var $entries = null;
 
-	function fSQLTable($name)
+	function fSQLTable(&$database, $name)
 	{
 		$this->name = $name;
+		$this->database =& $database;
 	}
 
 	function close()
 	{
-		unset($this->name, $this->cursor, $this->columns, $this->entries);
+		unset($this->name, $this->database, $this->cursor, $this->columns, $this->entries);
 	}
 
 	function name()
 	{
 		return $this->name;
+	}
+
+	function fullName()
+	{
+		return $this->db->name(). '.' . $this->name;
 	}
 
 	function exists()
@@ -295,9 +302,9 @@ class fSQLTable
 
 class fSQLTempTable extends fSQLTable
 {
-	function fSQLTempTable($tableName, $columnDefs)
+	function fSQLTempTable(&$database, $tableName, $columnDefs)
 	{
-		parent::fSQLTable($tableName);
+		parent::fSQLTable($database, $tableName);
 	}
 
 	function exists()
@@ -337,9 +344,10 @@ class fSQLCachedTable extends fSQLTable
 	var $dataFile;
 	var $lock = null;
 
-	function fSQLCachedTable($path_to_db, $table_name)
+	function fSQLCachedTable(&$database, $table_name)
 	{
-		parent::fSQLTable($table_name);
+		parent::fSQLTable($database, $table_name);
+		$path_to_db = $this->database->path();
 		$this->columns_path = $path_to_db.$table_name.'.columns';
 		$this->data_path = $path_to_db.$table_name.'.data';
 		$this->columnsLockFile = new fSQLFileLock($this->columns_path.'.lock.cgi');
@@ -354,9 +362,9 @@ class fSQLCachedTable extends fSQLTable
 			$this->uncommited, $this->columnsLockFile, $this->dataLockFile, $this->dataFile, $this->lock);
 	}
 
-	function &create($path_to_db, $table_name, $columnDefs)
+	function &create(&$database, $table_name, $columnDefs)
 	{
-		$table =& new fSQLCachedTable($path_to_db, $table_name);
+		$table =& new fSQLCachedTable($database, $table_name);
 		$table->columns = $columnDefs;
 
 		list($msec, $sec) = explode(' ', microtime());
@@ -741,16 +749,35 @@ class fSQLCachedTable extends fSQLTable
 class fSQLDatabase
 {
 	var $name = null;
-	var $path_to_db = null;
+	var $path = null;
 	var $loadedTables = array();
+
+	function fSQLDatabase($name, $filePath)
+	{
+		$this->name = $name;
+		$this->path = $filePath;
+	}
 
 	function close()
 	{
 		foreach(array_keys($this->loadedTables) as $table_name) {
-			$this->loadedTables[$table_name]->close();
+			$table =& $this->loadedTables[$table_name];
+			$table->close();
+			$table = null;
+			unset($table);
 		}
 
 		unset($this->name, $this->path_to_db, $this->loadedTables);
+	}
+
+	function name()
+	{
+		return $this->name;
+	}
+
+	function path()
+	{
+		return $this->path;
 	}
 
 	function createTable($table_name, $columns, $temporary = false)
@@ -758,9 +785,9 @@ class fSQLDatabase
 		$table = null;
 
 		if(!$temporary) {
-			$table =& fSQLCachedTable::create($this->path_to_db, $table_name, $columns);
+			$table =& fSQLCachedTable::create($this, $table_name, $columns);
 		} else {
-			$table =& new fSQLTempTable($table_name, $columns);
+			$table =& new fSQLTempTable($this, $table_name, $columns);
 			$this->loadedTables[$table_name] =& $table;
 		}
 
@@ -770,8 +797,8 @@ class fSQLDatabase
 	function &getTable($table_name)
 	{
 		if(!isset($this->loadedTables[$table_name])) {
-			$table = new fSQLCachedTable($this->path_to_db, $table_name);
-			$this->loadedTables[$table_name] = $table;
+			$table =& new fSQLCachedTable($this, $table_name);
+			$this->loadedTables[$table_name] =& $table;
 			unset($table);
 		}
 

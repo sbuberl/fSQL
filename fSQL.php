@@ -63,7 +63,7 @@ class fSQLEnvironment
 
 	function fSQLEnvironment()
 	{
-		$functions =& new fSQLFunctions();
+		$this->functions =& new fSQLFunctions();
 	}
 
 	function define_db($name, $path)
@@ -83,9 +83,7 @@ class fSQLEnvironment
 		srand((float) $sec + ((float) $usec * 100000));
 
 		if(is_dir($path) && is_readable($path) && is_writeable($path)) {
-			$db = new fSQLDatabase;
-			$db->name = $name;
-			$db->path_to_db = $path;
+			$db =& new fSQLDatabase($name, $path);
 			$this->databases[$name] =& $db;
 			unset($db);
 			return true;
@@ -134,14 +132,14 @@ class fSQLEnvironment
 		return false;
 	}
 
-	function _error_table_not_exists($db_name, $table_name)
+	function _error_table_not_exists($tableFullName)
 	{
-		return $this->_set_error("Table {$db_name}.{$table_name} does not exist");
+		return $this->_set_error("Table {$tableFullName} does not exist");
 	}
 
-	function _error_table_read_lock($db_name, $table_name)
+	function _error_table_read_lock($tableFullName)
 	{
-		return $this->_set_error("Table {$db_name}.{$table_name} is locked for reading only");
+		return $this->_set_error("Table {$tableFullName} is locked for reading only");
 	}
 
 	function &_get_database($db_name)
@@ -164,6 +162,22 @@ class fSQLEnvironment
 		}
 
 		return $db;
+	}
+
+	function &_findTable($dbName, $tableName)
+	{
+		$table = false;
+
+		$db = & $this->_get_database($dbName);
+		if($db !== false) {
+			$table =& $db->getTable($tableName);
+			if(!$table->exists()) {
+				$this->_error_table_not_exists($table->fullName());
+				$table = false;
+			}
+		}
+
+		return $table;
 	}
 
 	function lookup_function($function)
@@ -476,16 +490,16 @@ class fSQLEnvironment
 				$src_db_name = $matches[6];
 				$src_table_name = $matches[7];
 
-				$src_db =& $this->_get_database($src_db_name);
+				$src_db =& $this->_get_database();
 				if($src_db === false) {
 					return false;
 				}
 
-				$src_table =& $src_db->getTable($src_table_name);
-				if($src_table->exists()) {
+				$src_table =& $this->_findTable($src_db_name, $src_table_name);
+				if($src_table !== false) {
 					$new_columns = $src_table->getColumns();
 				} else {
-					return $this->_set_error("Table {$src_db->name}.{$src_table_name} doesn't exist");
+					return false;
 				}
 			}
 
@@ -525,12 +539,11 @@ class fSQLEnvironment
 			return false;
 		}
 
-		$table =& $db->getTable($table_name);
-		if(!$table->exists()) {
-			return $this->_error_table_not_exists($db->name, $table_name);
-		}
-		elseif($table->isReadLocked()) {
-			return $this->_error_table_read_lock($db->name, $table_name);
+		$table =& $this->_findTable($db_name, $table_name);
+		if($table === false) {
+			return false;
+		} else if($table->isReadLocked()) {
+			return $this->_error_table_read_lock($table-fullName());
 		}
 
 		$tableColumns = $table->getColumns();
@@ -695,17 +708,11 @@ class fSQLEnvironment
 			$ignore = !empty($matches[1]);
 			$table_name = $matches[3];
 
-			$db =& $this->_get_database($matches[2]);
-			if($db === false) {
+			$table =& $this->_findTable($db_name, $table_name);
+			if($table === false) {
 				return false;
-			}
-
-			$table =& $db->getTable($table_name);
-			if(!$table->exists()) {
-				return $this->_error_table_not_exists($db->name, $table_name);
-			}
-			elseif($table->isReadLocked()) {
-				return $this->_error_table_read_lock($db->name, $table_name);
+			} else if($table->isReadLocked()) {
+				return $this->_error_table_read_lock($table-fullName());
 			}
 
 			$columns = $table->getColumns();
@@ -847,21 +854,11 @@ EOC;
 		if(preg_match("/\AMERGE\s+INTO\s+(?:`?([^\W\d]\w*)`?\.)?`?([^\W\d]\w*)`?(?:\s+(?:AS\s+)?`?([A-Z][A-Z0-9\_]*)`?)?\s+USING\s+(?:`?([^\W\d]\w*)`?\.)?`?([^\W\d]\w*)`?(?:\s(?:AS\s+)?`?([^\W\d]\w*)`?)?\s+ON\s+(.+?)\s+(WHEN\s+(?:NOT\s+)?MATCHED.+?);?\Z/is", $query, $matches)) {
 			list( , $dest_db_name, $dest_table_name, $dest_alias, $src_db_name, $src_table_name, $src_alias, $on_clause, $matches_clause) = $matches;
 
-			$dest_db =& $this->_get_database($dest_db_name);
-			if($dest_db === false) {
+			if(!($dest_table =& $this->_findTable($dest_db_name, $dest_table_name))) {
 				return false;
 			}
 
-			$src_db =& $this->_get_database($src_db_name);
-			if($src_db === false) {
-				return false;
-			}
-
-			if(!($dest_table =& $dest_db->getTable($dest_table_name))) {
-				return false;
-			}
-
-			if(!($src_table =& $src_db->getTable($src_table_name))) {
+			if(!($src_table =& $this->_findTable($src_db_name, $src_table_name))) {
 				return false;
 			}
 
@@ -1094,12 +1091,7 @@ EOC;
 						$saveas = $table_name;
 					}
 
-					$db =& $this->_get_database($db_name);
-					if($db === false) {
-						return false;
-					}
-
-					if(!($table =& $db->getTable($table_name))) {
+					if(!($table =& $this->_findTable($db_name, $table_name))) {
 						return false;
 					}
 
@@ -1130,12 +1122,7 @@ EOC;
 								$join_table_saveas = $join_table_name;
 							}
 
-							$join_db =& $this->_get_database($join_db_name);
-							if($join_db === false) {
-								return false;
-							}
-
-							if(!($join_table =& $join_db->getTable($join_table_name))) {
+							if(!($join_table =& $this->_findTable($join_db_name, $join_table_name))) {
 								return false;
 							}
 
@@ -1838,17 +1825,11 @@ EOT;
 		if(preg_match('/\ADELETE\s+FROM\s+(?:`?([^\W\d]\w*)`?\.)?`?([^\W\d]\w*)`?(?:\s+WHERE\s+(.+?))?\s*[;]?\Z/is', $query, $matches)) {
 			list(, $db_name, $table_name) = $matches;
 
-			$db =& $this->_get_database($db_name);
-			if($db === false) {
+			$table =& $this->_findTable($db_name, $table_name);
+			if($table === false) {
 				return false;
-			}
-
-			$table =& $db->getTable($table_name);
-			if(!$table->exists()) {
-				return $this->_error_table_not_exists($db->name, $table_name);
-			}
-			elseif($table->isReadLocked()) {
-				return $this->_error_table_read_lock($db->name, $table_name);
+			} else if($table->isReadLocked()) {
+				return $this->_error_table_read_lock($table->fullName());
 			}
 
 			$columns = $table->getColumns();
@@ -1905,18 +1886,13 @@ EOC;
 		if(preg_match("/\AALTER\s+TABLE\s+`?(?:([A-Z][A-Z0-9\_]*)`?\.`?)?([A-Z][A-Z0-9\_]*)`?\s+(.*)/is", $query, $matches)) {
 			list(, $db_name, $table_name, $changes) = $matches;
 
-			$db =& $this->_get_database($db_name);
-			if($db === false) {
+			$tableObj =& $this->_findTable($db_name, $table_name);
+			if($tableObj === false) {
 				return false;
+			} else if($tableObj->isReadLocked()) {
+				return $this->_error_table_read_lock($tableObj->fullName());
 			}
 
-			$tableObj =& $db->getTable($table_name);
-			if(!$tableObj->exists()) {
-				return $this->_error_table_not_exists($db->name, $table_name);
-			}
-			elseif($tableObj->isReadLocked()) {
-				return $this->_error_table_read_lock($db->name, $table_name);
-			}
 			$columns =  $tableObj->getColumns();
 
 			preg_match_all("/(?:ADD|ALTER|CHANGE|DROP|RENAME).*?(?:,|\Z)/is", trim($changes), $specs);
@@ -2047,12 +2023,12 @@ EOC;
 					return $this->_set_error("Parse error in table listing");
 				}
 
-				$old_table =& $old_db->getTable($old_table_name);
-				if(!$old_table->exists()) {
-					return $this->_error_table_not_exists($old_db_name, $old_table_name);
+				$old_table =& $this->_findTable($old_db_name, $old_table_name);
+				if($old_table === false) {
+					return false;
 				}
 				elseif($old_table->isReadLocked()) {
-					return $this->_error_table_read_lock($old_db_name, $old_table_name);
+					return $this->_error_table_read_lock($old_table_name->fullName());
 				}
 
 				$new_table =& $new_db->getTable($new_table_name);
@@ -2132,22 +2108,16 @@ EOC;
 				if(preg_match("/`?(?:([A-Z][A-Z0-9\_]*)`?\.`?)?([A-Z][A-Z0-9\_]*)`?/is", $table, $matches)) {
 					list(, $db_name, $table_name) = $matches;
 
-					$db =& $this->_get_database($db_name);
-					if($db === false) {
+					$table =& $this->_findTable($db_name, $table_name);
+					if($table === false) {
 						return false;
+					} else if($table->isReadLocked()) {
+						return $this->_error_table_read_lock($table->fullName());
 					}
 
-					$table =& $db->getTable($table_name);
-					if($table->exists()) {
-						if($table->isReadLocked()) {
-							return $this->_error_table_read_lock($db->name, $table_name);
-						}
-						$columns = $table->getColumns();
-						$db->dropTable($table_name);
-						$db->createTable($table_name, $columns);
-					} else {
-						return false;
-					}
+					$columns = $table->getColumns();
+					$db->dropTable($table_name);
+					$db->createTable($table_name, $columns);
 				} else {
 					return $this->_set_error("Parse error in table listing");
 				}
@@ -2256,16 +2226,11 @@ EOC;
 
 	function _show_columns($db_name, $table_name, $full)
 	{
-		$db =& $this->_get_database($db_name);
-		if($db === false) {
+		$table =& $this->_findTable($db_name, $table_name);
+		if($table === false) {
 			return false;
 		}
-
-		$tableObj =& $db->getTable($table_name);
-		if(!$tableObj->exists()) {
-			return $this->_error_table_not_exists($db->name, $table_name);
-		}
-		$tableColumns =  $tableObj->getColumns();
+		$tableColumns =  $table->getColumns();
 
 		$data = array();
 
@@ -2329,15 +2294,12 @@ EOC;
 			preg_match_all("/(?:([A-Z][A-Z0-9\_]*)`?\.`?)?`?([A-Z][A-Z0-9\_]*)`?\s+((?:READ(?:\s+LOCAL)?)|((?:LOW\s+PRIORITY\s+)?WRITE))/is", $matches[1], $rules);
 			$numRules = count($rules[0]);
 			for($r = 0; $r < $numRules; $r++) {
-				$db =& $this->_get_database($rules[1][$r]);
-				if($db === false) {
-					return false;
-				}
-
+				$db_name = $rules[1][$r];
 				$table_name = $rules[2][$r];
-				$table =& $db->getTable($table_name);
-				if(!$table->exists()) {
-					return $this->_error_table_not_exists($db->name, $table_name);
+
+				$table =& $this->_findTable($db_name, $table_name);
+				if($table !== false) {
+					return false;
 				}
 
 				if(!strcasecmp(substr($rules[3][$r], 0, 4), "READ")) {
