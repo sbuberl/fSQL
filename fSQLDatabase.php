@@ -405,7 +405,7 @@ class fSQLCachedTable extends fSQLTable
 		$toprint = count($columnDefs)."\r\n";
 		foreach($columnDefs as $name => $column) {
 			$default = $column['default'];
-			if(is_string($default)) {
+			if(is_string($default) && $default !== "NULL") {
 				$default = "'$default'";
 			}
 
@@ -465,13 +465,16 @@ class fSQLCachedTable extends fSQLTable
 				if(preg_match("/(\S+): (dt|d|i|f|s|t|e);(.*);(0|1);(-?\d+(?:\.\d+)?|'.*'|NULL);(p|u|k|n);(0|1);/", $line, $matches)) {
 					$type = $matches[2];
 					$default = $matches[5];
-					if($type === 'i')
+					if($type === FSQL_TYPE_INTEGER)
 						$default = (int) $default;
-					else if($type === 'f')
+					else if($type === FSQL_TYPE_FLOAT)
 						$default = (float) $default;
 					else if($default{0} == "'" && substr($default, -1) == "'") {
 						$default = substr($default, 1, -1);
+					} else if($default === "NULL") {
+						$default = null;
 					}
+
 					$this->columns[$matches[1]] = array(
 						'type' => $type, 'auto' => $matches[4], 'default' => $default, 'key' => $matches[6], 'null' => $matches[7]
 					);

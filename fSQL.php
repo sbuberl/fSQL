@@ -436,36 +436,9 @@ class fSQLEnvironment
 								return $this->_set_error("Can not specify a default value for an AUTO_INCREMENT column");
 							}
 
-							$default = $matches[1];
-							if(!$null && strcasecmp($default, "NULL")) {
-								if(preg_match("/\A'(.*)'\Z/is", $default, $matches)) {
-									if($type == FSQL_TYPE_INTEGER)
-										$default = (int) $matches[1];
-									else if($type == FSQL_TYPE_FLOAT)
-										$default = (float) $matches[1];
-									else if($type == FSQL_TYPE_ENUM) {
-										if(in_array($matches[1], $restraint))
-											$default = array_search($default, $restraint) + 1;
-										else
-											$default = 0;
-									} else if($type == FSQL_TYPE_STRING) {
-										$default = $matches[1];
-									}
-								} else {
-									if($type == FSQL_TYPE_INTEGER)
-										$default = (int) $default;
-									else if($type == FSQL_TYPE_FLOAT)
-										$default = (float) $default;
-									else if($type == FSQL_TYPE_ENUM) {
-										$default = (int) $default;
-										if($default < 0 || $default > count($restraint)) {
-											return $this->_set_error("Numeric ENUM value out of bounds");
-										}
-									} else if($type == FSQL_TYPE_STRING) {
-										$default = "'".$matches[1]."'";
-									}
-								}
-							}
+							$default = $this->_parseDefault($matches[1], $type, $null, $restraint);
+						} else if($null) {
+							$default = "NULL";
 						} else if($type === FSQL_TYPE_STRING) {
 							$default = '';
 						} else if($type === FSQL_TYPE_FLOAT) {
@@ -1910,44 +1883,29 @@ EOC;
 					$tableObj->setColumns($columns);
 
 					return true;
-				} else if(preg_match("/\ACHANGE(?:\s+(?:COLUMN))?\s+`?([A-Z][A-Z0-9\_]*)`?\s+(?:SET\s+DEFAULT\s+((?:[\+\-]\s*)?\d+(?:\.\d+)?|NULL|'.*?(?<!\\\\)')|DROP\s+DEFAULT)(?:,|;|\Z)/is", $specs[0][$i], $matches)) {
-					$columnDef =& $columns[$matches[1]];
-					if(isset($matches[2]))
-						$default = $matches[2];
-					else
-						$default = "NULL";
+				} else if(preg_match("/\AALTER(?:\s+(?:COLUMN))?\s+`?([A-Z][A-Z0-9\_]*)`?\s+(?:SET\s+DEFAULT\s+((?:[\+\-]\s*)?\d+(?:\.\d+)?|NULL|'.*?(?<!\\\\)')|DROP\s+DEFAULT)(?:,|;|\Z)/is", $specs[0][$i], $matches)) {
+					$columnName = $matches[1];
+					if(!isset($columns[$columnName])) {
+						return $this->_set_error("Column named '$columnName' does not exist in table '$table_name'");
+					}
 
-					if(!$columnDef['null'] && strcasecmp($default, "NULL")) {
-						if(preg_match("/\A'(.*)'\Z/is", $default, $matches)) {
-							if($columnDef['type'] == 'i')
-								$default = intval($matches[2]);
-							else if($columnDef['type'] == 'f')
-								$default = floatval($matches[2]);
-							else if($columnDef['type'] == 'e') {
-								if(in_array($default, $columnDef['restraint']))
-									$default = array_search($default, $columnDef['restraint']) + 1;
-								else
-									$default = 0;
-							}
+					$columnDef =& $columns[$matches[1]];
+					if(!empty($matches[2]))
+					{
+						$default = $this->_parseDefault($matches[2], $columnDef['type'], $columnDef['null'], $columnDef['restraint']);
+					} else {
+						if($columnDef['null']) {
+							$default = "NULL";
 						} else {
-							if($columnDef['type'] == 'i')
-								$default = intval($default);
-							else if($columnDef['type'] == 'f')
-								$default = floatval($default);
-							else if($columnDef['type'] == 'e') {
-								$default = intval($default);
-								if($default < 0 || $default > count($columnDef['restraint'])) {
-									return $this->_set_error("Numeric ENUM value out of bounds");
-								}
+							$type = $columnDef['type'];
+							if($type === FSQL_TYPE_STRING) {
+								$default = '';
+							} else if($type === FSQL_TYPE_FLOAT) {
+								$default = 0.0;
+							} else {
+								$default = 0;
 							}
 						}
-					} else if(!$columnDef['null']) {
-						if($columnDef['type'] == 's')
-							// The default for string types is the empty string
-							$default = "''";
-						else
-							// The default for dates, times, and number types is 0
-							$default = 0;
 					}
 
 					$columnDef['default'] = $default;
@@ -1992,6 +1950,50 @@ EOC;
 		} else {
 			return $this->_set_error("Invalid ALTER query");
 		}
+	}
+
+	function _parseDefault($default, $type, $null, $restraint)
+	{
+		if(strcasecmp($default, "NULL")) {
+			if(preg_match("/\A'(.*)'\Z/is", $default, $matches)) {
+				if($type == FSQL_TYPE_INTEGER)
+					$default = (int) $matches[1];
+				else if($type == FSQL_TYPE_FLOAT)
+					$default = (float) $matches[1];
+				else if($type == FSQL_TYPE_ENUM) {
+					if(in_array($default, $restraint))
+						$default = array_search($default, $restraint) + 1;
+					else
+						$default = 0;
+				} else if($type == FSQL_TYPE_STRING) {
+					$default = $matches[1];
+				}
+			} else {
+				if($type == FSQL_TYPE_INTEGER)
+					$default = (int) $default;
+				else if($type == FSQL_TYPE_FLOAT)
+					$default = (float) $default;
+				else if($type == FSQL_TYPE_ENUM) {
+					$default = (int) $default;
+					if($default < 0 || $default > count($restraint)) {
+						return $this->_set_error("Numeric ENUM value out of bounds");
+					}
+				} else if($type == FSQL_TYPE_STRING) {
+					$default = "'".$matches[1]."'";
+				}
+			}
+		} else if(!$null) {
+			if($type === FSQL_TYPE_STRING) {
+				$default = '';
+			} else if($type === FSQL_TYPE_FLOAT) {
+				$default = 0.0;
+			} else {
+				// The default for dates, times, enums, and int types is 0
+				$default = 0;
+			}
+		}
+
+		return $default;
 	}
 
 	function _query_rename($query)
