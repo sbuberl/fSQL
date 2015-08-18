@@ -1931,6 +1931,8 @@ EOC;
 				else if(preg_match("/\ARENAME\s+(?:TO\s+)?`?(?:([A-Z][A-Z0-9\_]*)`?\.`?)?([A-Z][A-Z0-9\_]*)`?/is", $specs[0][$i], $matches)) {
 					list(, $new_db_name, $new_table_name) = $matches;
 
+					$db =& $tableObj->database();
+
 					$new_db =& $this->_get_database($new_db_name);
 					if($new_db === false) {
 						return false;
@@ -1941,7 +1943,7 @@ EOC;
 						return $this->_set_error("Destination table {$new_db_name}.{$new_table_name} already exists");
 					}
 
-					return $db->renameTable($old_table_name, $new_table_name, $new_db);
+					return $db->renameTable($table_name, $new_table_name, $new_db);
 				}
 				else {
 					return $this->_set_error("Invalid ALTER query");
@@ -2106,8 +2108,8 @@ EOC;
 	{
 		if(preg_match("/\ATRUNCATE\s+TABLE\s+(.*)[;]?\Z/is", $query, $matches)) {
 			$tables = explode(",", $matches[1]);
-			foreach($tables as $table) {
-				if(preg_match("/`?(?:([A-Z][A-Z0-9\_]*)`?\.`?)?([A-Z][A-Z0-9\_]*)`?/is", $table, $matches)) {
+			foreach($tables as $tableFullName) {
+				if(preg_match("/`?(?:([A-Z][A-Z0-9\_]*)`?\.`?)?([A-Z][A-Z0-9\_]*)`?/is", $tableFullName, $matches)) {
 					list(, $db_name, $table_name) = $matches;
 
 					$table =& $this->_findTable($db_name, $table_name);
@@ -2117,9 +2119,7 @@ EOC;
 						return $this->_error_table_read_lock($table->fullName());
 					}
 
-					$columns = $table->getColumns();
-					$db->dropTable($table_name);
-					$db->createTable($table_name, $columns);
+					$table->truncate();
 				} else {
 					return $this->_set_error("Parse error in table listing");
 				}

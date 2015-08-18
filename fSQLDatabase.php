@@ -208,7 +208,12 @@ class fSQLTable
 
 	function fullName()
 	{
-		return $this->db->name(). '.' . $this->name;
+		return $this->database->name(). '.' . $this->name;
+	}
+
+	function &database()
+	{
+		return $this->database;
 	}
 
 	function exists()
@@ -222,6 +227,11 @@ class fSQLTable
 	}
 
 	function drop()
+	{
+		_fsql_abstract_method();
+	}
+
+	function truncate()
 	{
 		_fsql_abstract_method();
 	}
@@ -305,6 +315,8 @@ class fSQLTempTable extends fSQLTable
 	function fSQLTempTable(&$database, $tableName, $columnDefs)
 	{
 		parent::fSQLTable($database, $tableName);
+		$this->columns = $columnDefs;
+		$this->entries = array();
 	}
 
 	function exists()
@@ -320,6 +332,11 @@ class fSQLTempTable extends fSQLTable
 	function drop()
 	{
 		$this->close();
+	}
+
+	function truncate()
+	{
+		$this->enries = array();
 	}
 
 	/* Unecessary for temporary tables */
@@ -437,6 +454,27 @@ class fSQLCachedTable extends fSQLTable
 		$this->close();
 	}
 
+	function truncate()
+	{
+		list($msec, $sec) = explode(' ', microtime());
+		$this->data_load = $sec.$msec;
+
+		$this->dataLockFile->acquireWrite();
+		$dataLock = $this->dataLockFile->getHandle();
+		ftruncate($dataLock, 0);
+		fwrite($dataLock, $this->data_load);
+
+		$this->dataFile->acquireWrite();
+		$dataFile = $this->dataFile->getHandle();
+		ftruncate($dataFile, 0);
+		fwrite($dataFile, "0\r\n");
+
+		$this->dataFile->releaseWrite();
+		$this->dataLockFile->releaseWrite();
+
+		$this->entries = array();
+	}
+
 	function getColumns()
 	{
 		$this->columnsLockFile->acquireRead();
@@ -484,6 +522,8 @@ class fSQLCachedTable extends fSQLTable
 						$this->columns[$matches[1]]['restraint'] = array();
 					}
 				} else {
+					$this->columnsFile->releaseRead();
+					$this->columnsLockFile->releaseRead();
 					return false;
 				}
 			}
