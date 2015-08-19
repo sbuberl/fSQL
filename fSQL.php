@@ -2133,7 +2133,7 @@ EOC;
 
 	function _query_backup($query)
 	{
-		if(!preg_match("/\ABACKUP TABLE (.*?) TO '(.*?)'\s*[;]?\Z/is", $query, $matches)) {
+		if(preg_match("/\ABACKUP TABLE (.*?) TO '(.*?)'\s*[;]?\Z/is", $query, $matches)) {
 			if(substr($matches[2], -1) != "/")
 				$matches[2] .= '/';
 
@@ -2147,7 +2147,12 @@ EOC;
 						return false;
 					}
 
-					$db->copyTable($table_name, $db->path_to_db, $matches[2]);
+					$tableObj =& $db->getTable($table_name);
+					if($tableObj->temporary()) {
+						return $this->_set_error("Can not backup a temporary table");
+					}
+
+					$db->copyTable($table_name, $db->path(), $matches[2]);
 				} else {
 					return $this->_set_error("Parse error in table listing");
 				}
@@ -2159,7 +2164,7 @@ EOC;
 
 	function _query_restore($query)
 	{
-		if(!preg_match("/\ARESTORE TABLE (.*?) FROM '(.*?)'\s*[;]?\s*\Z/is", $query, $matches)) {
+		if(preg_match("/\ARESTORE TABLE (.*?) FROM '(.*?)'\s*[;]?\s*\Z/is", $query, $matches)) {
 			if(substr($matches[2], -1) != "/")
 				$matches[2] .= '/';
 
@@ -2173,13 +2178,19 @@ EOC;
 						return false;
 					}
 
-					$db->copyTable($table_name, $matches[2], $db->path_to_db);
+					$tableObj =& $db->getTable($table_name);
+					if($tableObj->temporary()) {
+						return $this->_set_error("Can not restore a temporary table");
+					}
+
+
+					$db->copyTable($table_name, $matches[2], $db->path());
 				} else {
 					return $this->_set_error("Parse error in table listing");
 				}
 			}
 		} else {
-			return $this->_set_error("Invalid Query");
+			return $this->_set_error("Invalid RESTORE Query");
 		}
 	}
 

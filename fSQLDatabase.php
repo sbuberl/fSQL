@@ -904,8 +904,10 @@ class fSQLDatabase
 
 	function copyTable($name, $src_path, $dest_path)
 	{
-		copy($src_path.$name.'columns.cgi', $dest_path.$name.'columns.cgi');
-		copy($src_path.$name.'data.cgi', $dest_path.$name.'data.cgi');
+		copy($src_path.$name.'.columns.cgi', $dest_path.$name.'.columns.cgi');
+		copy($src_path.$name.'.columns.lock.cgi', $dest_path.$name.'.columns.lock.cgi');
+		copy($src_path.$name.'.data.cgi', $dest_path.$name.'.data.cgi');
+		copy($src_path.$name.'.data.lock.cgi', $dest_path.$name.'.data.lock.cgi');
 	}
 }
 
