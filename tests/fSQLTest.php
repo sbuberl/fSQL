@@ -1,5 +1,7 @@
 <?php
 
+require dirname(__FILE__) . '../fSQL.php';
+
 class fSQLTest extends PHPUnit_Framework_TestCase
 {
     var $fsql;
