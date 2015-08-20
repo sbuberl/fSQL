@@ -999,7 +999,7 @@ EOC;
 		}
 
 		$distinct = !strncasecmp($matches[1], "DISTINCT", 8);
-		$has_random = !empty(trim($matches[2]));
+		$has_random = strlen(trim($matches[2])) > 0;
 		$isTableless = true;
 
 		$oneAggregate = false;
