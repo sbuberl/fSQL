@@ -810,7 +810,7 @@ class fSQLDatabase
 			unset($table);
 		}
 
-		unset($this->name, $this->path_to_db, $this->loadedTables);
+		unset($this->name, $this->path, $this->loadedTables);
 	}
 
 	function name()
@@ -850,18 +850,18 @@ class fSQLDatabase
 
 	function listTables()
 	{
-		$dir = opendir($this->path_to_db);
-
 		$tables = array();
-		while (false !== ($file = readdir($dir))) {
-			if ($file != '.' && $file != '..' && !is_dir($file)) {
-				if(substr($file, -12) == '.columns.cgi') {
-					$tables[] = substr($file, 0, -12);
+		if(file_exists($this->path) && is_dir($this->path)) {
+			$dir = opendir($this->path);
+			while (false !== ($file = readdir($dir))) {
+				if ($file != '.' && $file != '..' && !is_dir($file)) {
+					if(substr($file, -12) == '.columns.cgi') {
+						$tables[] = substr($file, 0, -12);
+					}
 				}
 			}
+			closedir($dir);
 		}
-
-		closedir($dir);
 
 		return $tables;
 	}

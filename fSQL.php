@@ -2133,7 +2133,7 @@ EOC;
 
 	function _query_backup($query)
 	{
-		if(preg_match("/\ABACKUP TABLE (.*?) TO '(.*?)'\s*[;]?\Z/is", $query, $matches)) {
+		if(preg_match("/\ABACKUP\s+TABLE\s+(.*?)\s+TO\s+'(.*?)'\s*[;]?\Z/is", $query, $matches)) {
 			if(substr($matches[2], -1) != "/")
 				$matches[2] .= '/';
 
@@ -2164,7 +2164,7 @@ EOC;
 
 	function _query_restore($query)
 	{
-		if(preg_match("/\ARESTORE TABLE (.*?) FROM '(.*?)'\s*[;]?\s*\Z/is", $query, $matches)) {
+		if(preg_match("/\ARESTORE\s+TABLE\s+(.*?)\s+FROM\s+'(.*?)'\s*[;]?\Z/is", $query, $matches)) {
 			if(substr($matches[2], -1) != "/")
 				$matches[2] .= '/';
 
@@ -2284,7 +2284,7 @@ EOC;
 
 	function _query_describe($query)
 	{
-		if(preg_match("/\ADESC(?:RIBE)?\s+`?(?:([A-Z][A-Z0-9\_]*)`?\.`?)?([A-Z][A-Z0-9\_]*)`?\s*[;]?\s*\Z/is", $query, $matches)) {
+		if(preg_match("/\ADESC(?:RIBE)?\s+`?(?:([A-Z][A-Z0-9\_]*)`?\.`?)?([A-Z][A-Z0-9\_]*)`?\s*[;]?\Z/is", $query, $matches)) {
 			return $this->_show_columns($matches[1], $matches[2], false);
 		} else {
 			return $this->_set_error('Invalid DESCRIBE query');
@@ -2293,7 +2293,7 @@ EOC;
 
 	function _query_use($query)
 	{
-		if(preg_match("/\AUSE\s+`?([A-Z][A-Z0-9\_]*)`?\s*[;]?\s*\Z/is", $query, $matches)) {
+		if(preg_match("/\AUSE\s+`?([A-Z][A-Z0-9\_]*)`?\s*[;]?\Z/is", $query, $matches)) {
 			$this->select_db($matches[1]);
 			return true;
 		} else {
@@ -2303,7 +2303,7 @@ EOC;
 
 	function _query_lock($query)
 	{
-		if(preg_match("/\ALOCK\s+TABLES\s+(.+?)\s*[;]?\s*\Z/is", $query, $matches)) {
+		if(preg_match("/\ALOCK\s+TABLES\s+(.+?)\s*[;]?\Z/is", $query, $matches)) {
 			preg_match_all("/(?:([A-Z][A-Z0-9\_]*)`?\.`?)?`?([A-Z][A-Z0-9\_]*)`?\s+((?:READ(?:\s+LOCAL)?)|((?:LOW\s+PRIORITY\s+)?WRITE))/is", $matches[1], $rules);
 			$numRules = count($rules[0]);
 			for($r = 0; $r < $numRules; $r++) {
@@ -2332,7 +2332,7 @@ EOC;
 
 	function _query_unlock($query)
 	{
-		if(preg_match("/\AUNLOCK\s+TABLES\s*[;]?\s*\Z/is", $query)) {
+		if(preg_match("/\AUNLOCK\s+TABLES\s*[;]?\Z/is", $query)) {
 			$this->_unlock_tables();
 			return true;
 		} else {
