@@ -1,12 +1,10 @@
 <?php
 
-require dirname(__FILE__) . '/../fSQL.php';
+require_once dirname(__FILE__) . '/fSQLBaseTest.php';
 
-class fSQLTest extends PHPUnit_Framework_TestCase
+class fSQLTest extends fSQLBaseTest
 {
     var $fsql;
-
-    static $tempDir = ".tmp";
 
     static function setUpBeforeClass()
     {
@@ -15,7 +13,7 @@ class fSQLTest extends PHPUnit_Framework_TestCase
 
     static function tearDownAfterClass()
     {
-        rmdir (self::$tempDir);
+        self::deleteDir(self::$tempDir);
     }
 
     function setUp()
@@ -32,7 +30,7 @@ class fSQLTest extends PHPUnit_Framework_TestCase
     function testDefineDB()
     {
         $dbName = "db1";
-        $passed = $this->fsql->define_db($dbName, self::$tempDir);
+        $passed = $this->fsql->define_db($dbName, parent::$tempDir);
         $this->assertTrue($passed);
 
         $db2Name = "stuff";
@@ -46,7 +44,7 @@ class fSQLTest extends PHPUnit_Framework_TestCase
     function testSelectDB()
     {
         $dbName = "db";
-        $this->fsql->define_db($dbName, self::$tempDir);
+        $this->fsql->define_db($dbName, parent::$tempDir);
 
         $fakeDb = "BAM";
         $fakePassed = $this->fsql->select_db($fakeDb);
