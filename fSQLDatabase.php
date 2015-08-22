@@ -475,6 +475,24 @@ class fSQLCachedTable extends fSQLTable
 		$this->entries = array();
 	}
 
+	function copyTo($destination)
+	{
+		$destName = $destination.$this->name;
+		copy($this->columns_path.'.cgi', $destName.'.columns.cgi');
+		copy($this->columns_path.'.lock.cgi', $destName.'.columns.lock.cgi');
+		copy($this->data_path.'.cgi', $destName.'.data.cgi');
+		copy($this->data_path.'.lock.cgi', $destName.'.data.lock.cgi');
+	}
+
+	function copyFrom($source)
+	{
+		$sourceName = $source.$this->name;
+		copy($sourceName.'.columns.cgi', $this->columns_path.'.cgi');
+		copy($sourceName.'.columns.lock.cgi', $this->columns_path.'.lock.cgi');
+		copy($sourceName.'.data.cgi', $this->data_path.'.cgi');
+		copy($sourceName.'.data.lock.cgi', $this->data_path.'.lock.cgi');
+	}
+
 	function getColumns()
 	{
 		$this->columnsLockFile->acquireRead();
@@ -823,9 +841,9 @@ class fSQLDatabase
 		return $this->path;
 	}
 
-	function createTable($table_name, $columns, $temporary = false)
+	function &createTable($table_name, $columns, $temporary = false)
 	{
-		$table = null;
+		$table = false;
 
 		if(!$temporary) {
 			$table =& fSQLCachedTable::create($this, $table_name, $columns);
@@ -900,14 +918,6 @@ class fSQLDatabase
 		} else {
 			return false;
 		}
-	}
-
-	function copyTable($name, $src_path, $dest_path)
-	{
-		copy($src_path.$name.'.columns.cgi', $dest_path.$name.'.columns.cgi');
-		copy($src_path.$name.'.columns.lock.cgi', $dest_path.$name.'.columns.lock.cgi');
-		copy($src_path.$name.'.data.cgi', $dest_path.$name.'.data.cgi');
-		copy($src_path.$name.'.data.lock.cgi', $dest_path.$name.'.data.lock.cgi');
 	}
 }
 

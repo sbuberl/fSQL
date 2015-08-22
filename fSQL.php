@@ -2142,17 +2142,14 @@ EOC;
 				if(preg_match("/`?(?:([A-Z][A-Z0-9\_]*)`?\.`?)?([A-Z][A-Z0-9\_]*)`?/is", $table, $table_name_matches)) {
 					list(, $db_name, $table_name) = $table_name_matches;
 
-					$db =& $this->_get_database($db_name);
-					if($db === false) {
+					$tableObj =& $this->_findTable($db_name, $table_name);
+					if($tableObj === false) {
 						return false;
-					}
-
-					$tableObj =& $db->getTable($table_name);
-					if($tableObj->temporary()) {
+					} else if($tableObj->temporary()) {
 						return $this->_set_error("Can not backup a temporary table");
 					}
 
-					$db->copyTable($table_name, $db->path(), $matches[2]);
+					$tableObj->copyTo($matches[2]);
 				} else {
 					return $this->_set_error("Parse error in table listing");
 				}
@@ -2173,18 +2170,14 @@ EOC;
 				if(preg_match("/`?(?:([A-Z][A-Z0-9\_]*)`?\.`?)?([A-Z][A-Z0-9\_]*)`?/is", $table, $table_name_matches)) {
 					list(, $db_name, $table_name) = $table_name_matches;
 
-					$db =& $this->_get_database($db_name);
-					if($db === false) {
+					$tableObj =& $this->_findTable($db_name, $table_name);
+					if($tableObj === false) {
 						return false;
-					}
-
-					$tableObj =& $db->getTable($table_name);
-					if($tableObj->temporary()) {
+					} else if($tableObj->temporary()) {
 						return $this->_set_error("Can not restore a temporary table");
 					}
 
-
-					$db->copyTable($table_name, $matches[2], $db->path());
+					$tableObj->copyFrom($matches[2]);
 				} else {
 					return $this->_set_error("Parse error in table listing");
 				}
