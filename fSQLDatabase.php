@@ -278,6 +278,37 @@ class fSQLTable
 		return $cursor;
 	}
 
+	function nextValueFor($column)
+	{
+		if(!isset($this->columns[$column]) || !$this->columns[$column]['auto'])
+			return false;
+
+		list(, $current, $increment, $min, $max, $canCycle) = $this->columns[$column]['restraint'];
+
+		$cycled = false;
+		if($increment > 0 && $current > $max)
+		{
+			$current = $min;
+			$this->columns[$column]['restraint'][1] = $min;
+			$cycled = true;
+		}
+		else if($increment < 0 && $current < $min)
+		{
+			$current = $max;
+			$this->columns[$column]['restraint'][1] = $max;
+			$cycled = true;
+		}
+
+		if($cycled && !$canCycle)
+			return false;
+
+		$this->columns[$column]['restraint'][1] += $increment;
+
+		$this->setColumns($this->columns);
+
+		return $current;
+	}
+
 	function insertRow($data)
 	{
 		$this->entries[] = $data;
@@ -422,15 +453,20 @@ class fSQLCachedTable extends fSQLTable
 		$toprint = count($columnDefs)."\r\n";
 		foreach($columnDefs as $name => $column) {
 			$default = $column['default'];
+			$type = $column['type'];
+			$auto = $column['auto'];
 			if(is_string($default) && $default !== "NULL") {
 				$default = "'$default'";
 			}
 
-			if(!is_array($column['restraint'])) {
-				$toprint .= $name.": ".$column['type'].";;".$column['auto'].";".$default.";".$column['key'].";".$column['null'].";\r\n";
-			} else {
-				$toprint .= $name.": ".$column['type'].";".implode(",", $column['restraint']).";".$column['auto'].";".$default.";".$column['key'].";".$column['null'].";\r\n";
+			$restraint = '';
+			if($type === FSQL_TYPE_ENUM) {
+				$restraint= "'".implode("','", $column['restraint'])."'";
+			} else if($auto) {
+				$restraint = implode(",", $column['restraint']);
 			}
+
+			$toprint .= $name.": ".$type.";".$restraint.";".$auto.";".$default.";".$column['key'].";".$column['null'].";\r\n";
 		}
 		return $toprint;
 	}
@@ -519,8 +555,12 @@ class fSQLCachedTable extends fSQLTable
 			for($i = 0; $i < $num_columns; $i++) {
 				$line =	fgets($columnsHandle, 4096);
 				if(preg_match("/(\S+): (dt|d|i|f|s|t|e);(.*);(0|1);(-?\d+(?:\.\d+)?|'.*'|NULL);(p|u|k|n);(0|1);/", $line, $matches)) {
+					$name = $matches[1];
 					$type = $matches[2];
+					$restraintString = $matches[3];
+					$auto = $matches[4];
 					$default = $matches[5];
+
 					if($type === FSQL_TYPE_INTEGER)
 						$default = (int) $default;
 					else if($type === FSQL_TYPE_FLOAT)
@@ -531,14 +571,20 @@ class fSQLCachedTable extends fSQLTable
 						$default = null;
 					}
 
-					$this->columns[$matches[1]] = array(
-						'type' => $type, 'auto' => $matches[4], 'default' => $default, 'key' => $matches[6], 'null' => $matches[7]
-					);
-					if(preg_match_all("/'(.*?(?<!\\\\))'/", $matches[3], $restraint) !== false) {
-						$this->columns[$matches[1]]['restraint'] = $restraint[1];
+					if($auto === '1' && !empty($restraintString)) {
+						list($always, $current, $increment, $min, $max, $cycle) = explode(',', $restraintString);
+						$restraint = array((int) $always, (int) $current, (int) $increment, (int) $min, (int) $max, (int) $cycle);
+					} else if($type === FSQL_TYPE_ENUM && preg_match_all("/'(.*?(?<!\\\\))'/", $restraintString, $enumMatches) !== false) {
+						$restraint = $enumMatches[1];
 					} else {
-						$this->columns[$matches[1]]['restraint'] = array();
+						$restraint = array();
 					}
+
+					$this->columns[$name] = array(
+						'type' => $type, 'auto' => $auto, 'default' => $default, 'key' => $matches[6], 'null' => $matches[7], 'restraint' => $restraint
+					);
+
+
 				} else {
 					$this->columnsFile->releaseRead();
 					$this->columnsLockFile->releaseRead();

@@ -352,7 +352,7 @@ class fSQLEnvironment
 
 			if(!isset($matches[6])) {
 				//preg_match_all("/(?:(KEY|PRIMARY KEY|UNIQUE) (?:([A-Z][A-Z0-9\_]*)\s*)?\((.+?)\))|(?:`?([A-Z][A-Z0-9\_]*?)`?(?:\s+((?:TINY|MEDIUM|BIG)?(?:TEXT|BLOB)|(?:VAR)?(?:CHAR|BINARY)|INTEGER|(?:TINY|SMALL|MEDIUM|BIG)?INT|FLOAT|REAL|DOUBLE(?: PRECISION)?|BIT|BOOLEAN|DEC(?:IMAL)?|NUMERIC|DATE(?:TIME)?|TIME(?:STAMP)?|YEAR|ENUM|SET)(?:\((.+?)\))?)(\s+UNSIGNED)?(.*?)?(?:,|\)|$))/is", trim($column_list), $Columns);
-				preg_match_all("/(?:(?:CONSTRAINT\s+(?:`?[A-Z][A-Z0-9\_]*`?\s+)?)?(KEY|INDEX|PRIMARY\s+KEY|UNIQUE)(?:\s+`?([A-Z][A-Z0-9\_]*)`?)?\s*\(`?(.+?)`?\))|(?:`?([A-Z][A-Z0-9\_]*?)`?(?:\s+((?:TINY|MEDIUM|LONG)?(?:TEXT|BLOB)|(?:VAR)?(?:CHAR|BINARY)|INTEGER|(?:TINY|SMALL|MEDIUM|BIG)?INT|FLOAT|REAL|DOUBLE(?: PRECISION)?|BIT|BOOLEAN|DEC(?:IMAL)?|NUMERIC|DATE(?:TIME)?|TIME(?:STAMP)?|YEAR|ENUM|SET)(?:\((.+?)\))?)\s*(UNSIGNED\s+)?(.*?)?(?:,|\)|$))/is", trim($column_list), $Columns);
+				preg_match_all("/(?:(?:CONSTRAINT\s+(?:`?[A-Z][A-Z0-9\_]*`?\s+)?)?(KEY|INDEX|PRIMARY\s+KEY|UNIQUE)(?:\s+`?([A-Z][A-Z0-9\_]*)`?)?\s*\(`?(.+?)`?\))|(?:`?([A-Z][A-Z0-9\_]*?)`?(?:\s+((?:TINY|MEDIUM|LONG)?(?:TEXT|BLOB)|(?:VAR)?(?:CHAR|BINARY)|INTEGER|(?:TINY|SMALL|MEDIUM|BIG)?INT|FLOAT|REAL|DOUBLE(?: PRECISION)?|BIT|BOOLEAN|DEC(?:IMAL)?|NUMERIC|DATE(?:TIME)?|TIME(?:STAMP)?|YEAR|ENUM|SET)(?:\((.+?)\))?)\s*(UNSIGNED\s+)?(?:GENERATED\s+(BY\s+DEFAULT|ALWAYS)\s+AS\s+IDENTITY(?:\s*\((.*?)\))?)?(.*?)?(?:,|\)|$))/is", trim($column_list), $Columns);
 
 				if(!$Columns) {
 					return $this->_set_error("Parsing error in CREATE TABLE query");
@@ -381,7 +381,7 @@ class fSQLEnvironment
 					{
 						$name = $Columns[4][$c];
 						$type = $Columns[5][$c];
-						$options =  $Columns[8][$c];
+						$options =  $Columns[10][$c];
 
 						if(isset($new_columns[$name])) {
 							return $this->_set_error("Column '{$name}' redefined");
@@ -419,21 +419,84 @@ class fSQLEnvironment
 						else
 							$null = 1;
 
-						if(preg_match("/AUTO_INCREMENT/i", $options))
+						$auto = 0;
+						$restraint = null;
+						if(!empty($Columns[8][$c])) {
 							$auto = 1;
-						else
-							$auto = 0;
+							$always = (int) !strcasecmp($Columns[8][$c], 'ALWAYS');
+							$parsed = array();
+							if(!empty($Columns[9][$c])) {
+								if(preg_match_all("/CYCLE|(?:NO\s+(M(?:IN|AX)VALUE|CYCLE))|(?:(START\s+WITH|INCREMENT\s+BY|M(?:IN|AX)VALUE))\s+([+-]?\d+(?:\.\d+)?)/is", $Columns[9][$c], $sequenceOptions, PREG_SET_ORDER)) {
+									foreach($sequenceOptions as $sequenceOption) {
+										$no = !empty($sequenceOption[1]);
+										$valueName = $no ? $sequenceOption[1] : $sequenceOption[0];
+										if(!strncasecmp($valueName, 'CYCLE', 5)) {
+											if(!isset($parsed['CYCLE'])) {
+												$parsed['CYCLE'] = (int) !$no;
+											} else {
+												return $this->_set_error('CYCLE already set for this identity column.');
+											}
+										} else {
+											$valueName = $no ? $sequenceOption[1] : $sequenceOption[2];
+											$valueName = strtoupper($valueName);
+											$keyName = preg_replace('/\s+/', '', $valueName);
+											if(!isset($parsed[$keyName])) {
+												$parsed[$keyName] = !$no ? $sequenceOption[3] : null;
+											} else {
+												return $this->_set_error("$valueName already set for this identity column.");
+											}
+										}
+									}
+								} else {
+									return $this->_set_error("Illegal identity column options");
+								}
+							}
 
-						if($type == 'e') {
-							preg_match_all("/'.*?(?<!\\\\)'/", $Columns[6][$c], $values);
-							$restraint = $values[0];
-						} else {
-							$restraint = null;
+							$increment = isset($parsed['INCREMENTBY']) ? (int) $parsed['INCREMENTBY'] : 1;
+							if($increment === 0)
+								return $this->_set_error('Increment of zero in identity column defintion is not allowed');
+
+							$intMax = defined('PHP_INT_MAX') ? PHP_INT_MAX : intval('420000000000000000000');
+							$intMin = defined('PHP_INT_MIN') ? PHP_INT_MIN : ~$intMax;
+
+							$climbing = $increment > 0;
+							$min = isset($parsed['MINVALUE']) ? (int) $parsed['MINVALUE'] : ($climbing ? 1 : $intMin);
+							$max = isset($parsed['MAXVALUE']) ? (int) $parsed['MAXVALUE'] : ($climbing ? $intMax : -1);
+							$cycle = isset($parsed['CYCLE']) ? (int) $parsed['CYCLE'] : 0;
+
+							if(isset($parsed['STARTSWITH'])) {
+								$start = (int) $parsed['STARTSWITH'];
+								if($start < $min || $start > $max) {
+									return $this->_set_error('Identity column start value not inside valid range');
+								}
+							} else if($climbing) {
+								$start = $min;
+							} else {
+								$start = $max;
+							}
+
+							$restraint = array($always, $start, $increment, $min, $max, $cycle);
+							$null = 0;
+						}
+						else if(preg_match('/\s+AUTO_?INCREMENT\b/i', $options))
+						{
+							$auto = 1;
+							$intMax = defined('PHP_INT_MAX') ? PHP_INT_MAX : intval('420000000000000000000');
+							$restraint = array(0, 1, 1, 1, $intMax, 0);
+						}
+
+						if($auto && ($type !== FSQL_TYPE_INTEGER && $type !== FSQL_TYPE_FLOAT)) {
+							return $this->_set_error("Identity columns and autoincrement only allowed on numeric columns");
+						}
+
+						if($type === FSQL_TYPE_ENUM) {
+							preg_match_all("/'(.*?(?<!\\\\))'/", $Columns[6][$c], $values);
+							$restraint = $values[1];
 						}
 
 						if(preg_match("/DEFAULT\s+((?:[\+\-]\s*)?\d+(?:\.\d+)?|NULL|'.*?(?<!\\\\)')/is", $options, $matches)) {
 							if($auto) {
-								return $this->_set_error("Can not specify a default value for an AUTO_INCREMENT column");
+								return $this->_set_error("Can not specify a default value for an identity column");
 							}
 
 							$default = $this->_parseDefault($matches[1], $type, $null, $restraint);
@@ -605,14 +668,45 @@ class fSQLEnvironment
 			$data = strtr($data, array("$" => "\$", "\$" => "\\\$"));
 
 			////Check for Auto_Increment
-			if((empty($data) || !strcasecmp($data, "AUTO") || !strcasecmp($data, "NULL")) && $columnDef['auto'] == 1) {
-				$tableCursor->last();
-				$lastRow = $tableCursor->getRow();
-				if($lastRow !== false)
-					$this->insert_id = $lastRow[$colIndex] + 1;
-				else
-					$this->insert_id = 1;
-				$newentry[$colIndex] = $this->insert_id;
+			if($columnDef['auto'] == 1) {
+				if(empty($columnDef['restraint'])) {  // upgrade old AUTOINCREMENT column to IDENTITY
+					$always = false;
+					$increment = 1;
+					$min = 1;
+					$max = defined('PHP_INT_MAX') ? PHP_INT_MAX : intval('420000000000000000000');
+					$cycle = false;
+
+					$entries = $table->getEntries();
+					$max = $this->functions->max($entries, $colIndex, "");
+					if($max !== null)
+						$insert_id = $max + 1;
+					else
+						$insert_id = 1;
+					$this->insert_id = $insert_id;
+					$newentry[$colIndex] = $this->insert_id;
+
+					$tableColumns[$col_name]['restraint'] = array($always, $insert_id, $increment, $min, $max, $cycle);
+					$table->setColumns($tableColumns);
+				} else if(empty($data) || !strcasecmp($data, "AUTO") || !strcasecmp($data, "NULL")) {
+					$insert_id = $table->nextValueFor($col_name);
+					if($insert_id !== false)
+					{
+						$this->insert_id = $insert_id;
+						$newentry[$colIndex] = $this->insert_id;
+					} else {
+						return $this->_set_error('Error getting next value for identity column: '.$col_name);
+					}
+				} else {
+					$always = $columnDef['restraint'][0];
+					if($always) {
+						return $this->_set_error("Manual value inserted into an ALWAYS identity column");
+					}
+					$data = $this->_parse_value($columnDef, $data);
+					if($data === false) {
+						return false;
+					}
+					$newentry[$colIndex] = $data;
+				}
 			}
 			///Check for NULL Values
 			else if((!strcasecmp($data, "NULL") && !$columnDef['null']) || empty($data) || !strcasecmp($data, "DEFAULT")) {
