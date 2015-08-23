@@ -424,35 +424,12 @@ class fSQLEnvironment
 						if(!empty($Columns[8][$c])) {
 							$auto = 1;
 							$always = (int) !strcasecmp($Columns[8][$c], 'ALWAYS');
-							$parsed = array();
-							if(!empty($Columns[9][$c])) {
-								if(preg_match_all("/CYCLE|(?:NO\s+(M(?:IN|AX)VALUE|CYCLE))|(?:(START\s+WITH|INCREMENT\s+BY|M(?:IN|AX)VALUE))\s+([+-]?\d+(?:\.\d+)?)/is", $Columns[9][$c], $sequenceOptions, PREG_SET_ORDER)) {
-									foreach($sequenceOptions as $sequenceOption) {
-										$no = !empty($sequenceOption[1]);
-										$valueName = $no ? $sequenceOption[1] : $sequenceOption[0];
-										if(!strncasecmp($valueName, 'CYCLE', 5)) {
-											if(!isset($parsed['CYCLE'])) {
-												$parsed['CYCLE'] = (int) !$no;
-											} else {
-												return $this->_set_error('CYCLE already set for this identity column.');
-											}
-										} else {
-											$valueName = $no ? $sequenceOption[1] : $sequenceOption[2];
-											$valueName = strtoupper($valueName);
-											$keyName = preg_replace('/\s+/', '', $valueName);
-											if(!isset($parsed[$keyName])) {
-												$parsed[$keyName] = !$no ? $sequenceOption[3] : null;
-											} else {
-												return $this->_set_error("$valueName already set for this identity column.");
-											}
-										}
-									}
-								} else {
-									return $this->_set_error("Illegal identity column options");
-								}
+							$parsed = $this->_parse_sequence_options($Columns[9][$c]);
+							if($parsed === false) {
+								return false;
 							}
 
-							$increment = isset($parsed['INCREMENTBY']) ? (int) $parsed['INCREMENTBY'] : 1;
+							$increment = isset($parsed['INCREMENT']) ? (int) $parsed['INCREMENT'] : 1;
 							if($increment === 0)
 								return $this->_set_error('Increment of zero in identity column defintion is not allowed');
 
@@ -464,8 +441,8 @@ class fSQLEnvironment
 							$max = isset($parsed['MAXVALUE']) ? (int) $parsed['MAXVALUE'] : ($climbing ? $intMax : -1);
 							$cycle = isset($parsed['CYCLE']) ? (int) $parsed['CYCLE'] : 0;
 
-							if(isset($parsed['STARTSWITH'])) {
-								$start = (int) $parsed['STARTSWITH'];
+							if(isset($parsed['START'])) {
+								$start = (int) $parsed['START'];
 								if($start < $min || $start > $max) {
 									return $this->_set_error('Identity column start value not inside valid range');
 								}
@@ -545,6 +522,69 @@ class fSQLEnvironment
 		} else {
 			return $this->_set_error('Invalid CREATE query');
 		}
+	}
+
+	function _parse_sequence_options($options, $isAlter = false)
+	{
+		$parsed = array();
+		if(!empty($options)) {
+			if(!$isAlter) {
+				$startName = 'START';
+			} else {
+				$startName = 'RESTART';
+			}
+
+			$valueTypes = array($startName, 'INCREMENT', 'MINVALUE', 'MAXVALUE');
+			$secondWords = array($startName => "WITH", 'INCREMENT' => 'BY');
+			$startKey = $startName.'WITH';
+			$optionsWords = preg_split('/\s+/', strtoupper($options));
+			$wordCount = count($optionsWords);
+			for($i = 0; $i < $wordCount; $i++) {
+				$word = $optionsWords[$i];
+				if($word === 'SET' && $isAlter) {
+					$word = $optionsWords[++$i];
+					if(in_array($word, array('INCREMENT', 'CYCLE', 'MAXVALUE', 'MINVALUE'))) {
+						return $this->_set_error('Unknown option after SET: '.$word);
+					}
+				}
+
+				if(in_array($word, $valueTypes)) {
+					$original = $word;
+					if(isset($secondWords[$original])) {
+						$word = $optionsWords[++$i];
+						$second = $secondWords[$original];
+						if($word !== $second) {
+							return $this->_set_error('Expected '.$second .' after '.$original);
+						}
+					}
+
+					$word = $optionsWords[++$i];
+					if(preg_match('/[+-]?\s*\d+(?:\.\d+)?/', $word, $number)) {
+						if(!isset($parsed[$original])) {
+							$parsed[$original] = $number[0];
+						} else {
+							return $this->_set_error($original.' already set for this identity column.');
+						}
+					} else {
+						return $this->_set_error('Could not parse number after '.$original);
+					}
+
+				} else if($word === 'NO') {
+					$word = $optionsWords[++$i];
+					if(in_array($word, array('CYCLE', 'MAXVALUE', 'MINVALUE'))) {
+						if(!isset($parsed[$word])) {
+							$parsed[$word] = null;
+						} else {
+							return $this->_set_error($word.' already set for this identity column.');
+						}
+					} else {
+						return $this->_set_error('Unknown option after NO: '.$word);
+					}
+				}
+			}
+		}
+
+		return $parsed;
 	}
 
 	function _query_insert($query)
@@ -1977,32 +2017,83 @@ EOC;
 					$tableObj->setColumns($columns);
 
 					return true;
-				} else if(preg_match("/\AALTER(?:\s+(?:COLUMN))?\s+`?([A-Z][A-Z0-9\_]*)`?\s+(?:SET\s+DEFAULT\s+((?:[\+\-]\s*)?\d+(?:\.\d+)?|NULL|'.*?(?<!\\\\)')|DROP\s+DEFAULT)(?:,|;|\Z)/is", $specs[0][$i], $matches)) {
-					$columnName = $matches[1];
+				} else if(preg_match("/\AALTER(?:\s+(?:COLUMN))?\s+`?([A-Z][A-Z0-9\_]*)`?\s+(.+?)(?:,|;|\Z)/is", $specs[0][$i], $matches)) {
+					list(, $columnName, $the_rest) = $matches;
 					if(!isset($columns[$columnName])) {
 						return $this->_set_error("Column named '$columnName' does not exist in table '$table_name'");
 					}
 
-					$columnDef =& $columns[$matches[1]];
-					if(!empty($matches[2]))
-					{
-						$default = $this->_parseDefault($matches[2], $columnDef['type'], $columnDef['null'], $columnDef['restraint']);
-					} else {
-						if($columnDef['null']) {
-							$default = "NULL";
+					$columnDef =& $columns[$columnName];
+					if(preg_match("/(?:SET\s+DEFAULT\s+((?:[\+\-]\s*)?\d+(?:\.\d+)?|NULL|'.*?(?<!\\\\)')|DROP\s+DEFAULT)/is", $the_rest, $defaults)) {
+						if(!empty($defaults[1])) {
+							$default = $this->_parseDefault($defaults[1], $columnDef['type'], $columnDef['null'], $columnDef['restraint']);
 						} else {
-							$type = $columnDef['type'];
-							if($type === FSQL_TYPE_STRING) {
-								$default = '';
-							} else if($type === FSQL_TYPE_FLOAT) {
-								$default = 0.0;
+							if($columnDef['null']) {
+								$default = "NULL";
 							} else {
-								$default = 0;
+								$type = $columnDef['type'];
+								if($type === FSQL_TYPE_STRING) {
+									$default = '';
+								} else if($type === FSQL_TYPE_FLOAT) {
+									$default = 0.0;
+								} else {
+									$default = 0;
+								}
 							}
+						}
+
+						$columnDef['default'] = $default;
+					} else {
+						$parsed = $this->_parse_sequence_options($the_rest, true);
+						if($parsed === false) {
+							return false;
+						} else if(!empty($parsed)) {
+							if(!$columnDef['auto']) {
+								return $this->_set_error("Column $columnName is not an identity column");
+							}
+
+							list($always,$current,$increment,$min,$max,$cycle) = $columnDef['restraint'];
+							if(array_key_exists('INCREMENT', $parsed)) {
+								$increment = (int) $parsed['INCREMENT'];
+								if($increment === 0) {
+									return $this->_set_error('Increment of zero in identity column defintion is not allowed');
+								}
+							}
+
+							$intMax = defined('PHP_INT_MAX') ? PHP_INT_MAX : intval('420000000000000000000');
+							$intMin = defined('PHP_INT_MIN') ? PHP_INT_MIN : ~$intMax;
+
+							$climbing = $increment > 0;
+							if(array_key_exists('MINVALUE', $parsed)) {
+								$min = isset($parsed['MINVALUE']) ? (int) $parsed['MINVALUE'] : ($climbing ? 1 : $intMin);
+							}
+							if(array_key_exists('MAXVALUE', $parsed)) {
+								$max = isset($parsed['MAXVALUE']) ? (int) $parsed['MAXVALUE'] : ($climbing ? $intMax : -1);
+							}
+							if(array_key_exists('CYCLE', $parsed)) {
+								$cycle = isset($parsed['CYCLE']) ? (int) $parsed['CYCLE'] : 0;
+							}
+							$cycle = isset($parsed['CYCLE']) ? (int) $parsed['CYCLE'] : 0;
+
+							if($min > $max) {
+								return $this->_set_error('Identity column minimum greater than maximum');
+							}
+
+							if(isset($parsed['RESTART'])) {
+								$current = (int) $parsed['RESTART'];
+								if($current < $min || $current > $max) {
+									return $this->_set_error('Identity column start value not between min and max');
+								}
+							} else if($climbing) {
+								$current = $min;
+							} else {
+								$current = $max;
+							}
+
+							$columnDef['restraint'] = array($always, $current, $increment, $min, $max, $cycle);
 						}
 					}
 
-					$columnDef['default'] = $default;
 					$tableObj->setColumns($columns);
 
 					return true;
