@@ -452,14 +452,14 @@ class fSQLEnvironment
 								$start = $max;
 							}
 
-							$restraint = array($always, $start, $increment, $min, $max, $cycle);
+							$restraint = array($start, $always, $start, $increment, $min, $max, $cycle);
 							$null = 0;
 						}
 						else if(preg_match('/\s+AUTO_?INCREMENT\b/i', $options))
 						{
 							$auto = 1;
 							$intMax = defined('PHP_INT_MAX') ? PHP_INT_MAX : intval('420000000000000000000');
-							$restraint = array(0, 1, 1, 1, $intMax, 0);
+							$restraint = array(1, 0, 1, 1, 1, $intMax, 0);
 						}
 
 						if($auto && ($type !== FSQL_TYPE_INTEGER && $type !== FSQL_TYPE_FLOAT)) {
@@ -541,10 +541,35 @@ class fSQLEnvironment
 			$wordCount = count($optionsWords);
 			for($i = 0; $i < $wordCount; $i++) {
 				$word = $optionsWords[$i];
-				if($word === 'SET' && $isAlter) {
-					$word = $optionsWords[++$i];
-					if(in_array($word, array('INCREMENT', 'CYCLE', 'MAXVALUE', 'MINVALUE'))) {
-						return $this->_set_error('Unknown option after SET: '.$word);
+				if($isAlter) {
+					if($word === 'SET') {
+						$word = $optionsWords[++$i];
+						if(!in_array($word, array('INCREMENT', 'CYCLE', 'MAXVALUE', 'MINVALUE', 'GENERATED'))) {
+							return $this->_set_error('Unknown option after SET: '.$word);
+						}
+					}
+
+					if($word === 'RESTART') {
+						if(($i + 1) == $wordCount || $optionsWords[$i + 1] !== 'WITH')
+						{
+							$parsed['RESTART'] = "start";
+							continue;
+						}
+					}
+
+					if($word === 'GENERATED') {
+						$word = $optionsWords[++$i];
+						if($word === 'BY') {
+							$word = $optionsWords[++$i];
+							if($word !== 'DEFAULT') {
+								return $this->_set_error('Expected DEFAULT after BY');
+							}
+							$parsed['ALWAYS'] = false;
+						} else if($word === 'ALWAYS') {
+							$parsed['ALWAYS'] = true;
+						} else {
+							return $this->_set_error('Unexpected word after GENERATED: ' + $word);
+						}
 					}
 				}
 
@@ -725,7 +750,7 @@ class fSQLEnvironment
 					$this->insert_id = $insert_id;
 					$newentry[$colIndex] = $this->insert_id;
 
-					$tableColumns[$col_name]['restraint'] = array($always, $insert_id, $increment, $min, $max, $cycle);
+					$tableColumns[$col_name]['restraint'] = array($insert_id, $always, $min, $increment, $min, $max, $cycle);
 					$table->setColumns($tableColumns);
 				} else if(empty($data) || !strcasecmp($data, "AUTO") || !strcasecmp($data, "NULL")) {
 					$insert_id = $table->nextValueFor($col_name);
@@ -737,7 +762,7 @@ class fSQLEnvironment
 						return $this->_set_error('Error getting next value for identity column: '.$col_name);
 					}
 				} else {
-					$always = $columnDef['restraint'][0];
+					$always = $columnDef['restraint'][1];
 					if($always) {
 						return $this->_set_error("Manual value inserted into an ALWAYS identity column");
 					}
@@ -2055,6 +2080,13 @@ EOC;
 						}
 
 						$columnDef['default'] = $default;
+					} else if(preg_match("/\ADROP\s+IDENTITY/i", $the_rest, $defaults)) {
+						if(!$columnDef['auto']) {
+							return $this->_set_error("Column $columnName is not an identity column");
+						}
+						$columnDef['auto'] = '0';
+						$columnDef['restraint'] = array();
+
 					} else {
 						$parsed = $this->_parse_sequence_options($the_rest, true);
 						if($parsed === false) {
@@ -2064,7 +2096,7 @@ EOC;
 								return $this->_set_error("Column $columnName is not an identity column");
 							}
 
-							list($always,$current,$increment,$min,$max,$cycle) = $columnDef['restraint'];
+							list($current,$always,$start,$increment,$min,$max,$cycle) = $columnDef['restraint'];
 							if(array_key_exists('INCREMENT', $parsed)) {
 								$increment = (int) $parsed['INCREMENT'];
 								if($increment === 0) {
@@ -2085,16 +2117,19 @@ EOC;
 							if(array_key_exists('CYCLE', $parsed)) {
 								$cycle = isset($parsed['CYCLE']) ? (int) $parsed['CYCLE'] : 0;
 							}
-							$cycle = isset($parsed['CYCLE']) ? (int) $parsed['CYCLE'] : 0;
+							if(array_key_exists('ALWAYS', $parsed)) {
+								$always = (int) $parsed['ALWAYS'];
+							}
 
 							if($min > $max) {
 								return $this->_set_error('Identity column minimum greater than maximum');
 							}
 
 							if(isset($parsed['RESTART'])) {
-								$current = (int) $parsed['RESTART'];
+								$restart = $parsed['RESTART'];
+								$current = $restart !== 'start' ? (int) $restart : $start;
 								if($current < $min || $current > $max) {
-									return $this->_set_error('Identity column start value not between min and max');
+									return $this->_set_error('Identity column restart value not between min and max');
 								}
 							} else if($climbing) {
 								$current = $min;
@@ -2102,7 +2137,7 @@ EOC;
 								$current = $max;
 							}
 
-							$columnDef['restraint'] = array($always, $current, $increment, $min, $max, $cycle);
+							$columnDef['restraint'] = array($current, $always, $start, $increment, $min, $max, $cycle);
 						}
 					}
 

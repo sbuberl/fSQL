@@ -283,26 +283,26 @@ class fSQLTable
 		if(!isset($this->columns[$column]) || !$this->columns[$column]['auto'])
 			return false;
 
-		list(, $current, $increment, $min, $max, $canCycle) = $this->columns[$column]['restraint'];
+		list($current, $always, $start, $increment, $min, $max, $canCycle) = $this->columns[$column]['restraint'];
 
 		$cycled = false;
 		if($increment > 0 && $current > $max)
 		{
 			$current = $min;
-			$this->columns[$column]['restraint'][1] = $min;
+			$this->columns[$column]['restraint'][0] = $min;
 			$cycled = true;
 		}
 		else if($increment < 0 && $current < $min)
 		{
 			$current = $max;
-			$this->columns[$column]['restraint'][1] = $max;
+			$this->columns[$column]['restraint'][0] = $max;
 			$cycled = true;
 		}
 
 		if($cycled && !$canCycle)
 			return false;
 
-		$this->columns[$column]['restraint'][1] += $increment;
+		$this->columns[$column]['restraint'][0] += $increment;
 
 		$this->setColumns($this->columns);
 
@@ -572,8 +572,8 @@ class fSQLCachedTable extends fSQLTable
 					}
 
 					if($auto === '1' && !empty($restraintString)) {
-						list($always, $current, $increment, $min, $max, $cycle) = explode(',', $restraintString);
-						$restraint = array((int) $always, (int) $current, (int) $increment, (int) $min, (int) $max, (int) $cycle);
+						list($current, $always, $start, $increment, $min, $max, $cycle) = explode(',', $restraintString);
+						$restraint = array((int) $current, (int) $always, (int) $start, (int) $increment, (int) $min, (int) $max, (int) $cycle);
 					} else if($type === FSQL_TYPE_ENUM && preg_match_all("/'(.*?(?<!\\\\))'/", $restraintString, $enumMatches) !== false) {
 						$restraint = $enumMatches[1];
 					} else {
