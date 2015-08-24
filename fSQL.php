@@ -1660,7 +1660,19 @@ EOT;
 				$paramExprs[] = '$group';
 			}
 
-			if(strlen($params) !== 0) {
+			if($type & FSQL_FUNC_CUSTOM_PARSE)	{
+				$originalFunction = $function;
+				$parseFunction = "_parse_{$function}_function";
+				$parsedData = $this->$parseFunction($join_info, $where_type | 1, $params);
+				if($parsedData !== false) {
+					list($function, $paramExprs, ) = $parsedData;
+					if(isset($parsedData[2]))  // used by CAST() to override based on params
+						$columnData['type'] = $parsedData[2];
+				} else {
+					return $this->_set_error("Error parsing parameters for function $originalFunction");
+				}
+			}
+			else if(strlen($params) !== 0) {
 				$parameter = explode(',', $params);
 				foreach($parameter as $param) {
 					$param = trim($param);
@@ -1698,7 +1710,7 @@ EOT;
 
 			$final_param_list = implode(',', $paramExprs);
 
-			if($type & FSQL_FUNC_NORMAL)
+			if($type != FSQL_FUNC_REGISTERED)
 				$expr = "\$this->functions->$function($final_param_list)";
 			else
 				$expr = "$function($final_param_list)";
@@ -2594,6 +2606,109 @@ EOC;
 		}
 
 		return false;
+	}
+
+	function _build_parameters($join_info, $where_type, $paramList)
+	{
+		$params = array();
+		array_shift($paramList);
+		foreach($paramList as $match)
+		{
+			$expr = $this->_build_expression($match, $join_info, $where_type);
+			if($expr === false) // parse error
+				return false;
+			$params[] = $expr;
+		}
+		return $params;
+	}
+
+	function _parse_extract_function($join_info, $where_type, $paramsStr)
+	{
+		if(preg_match("/\A\s*(\w+)\s+FROM\s+(.+?)\s*\Z/is", $paramsStr, $matches))
+		{
+			$field = strtolower($matches[1]);
+			$field = "'$field'";
+			$expr = $this->_build_expression($matches[2], $join_info, $where_type);
+			if($expr !== false)
+			{
+				return array('extract', array($field, $expr));
+			}
+		}
+
+		return $this->_set_error('Error parsing extract() function parameters');
+	}
+
+	function _parse_overlay_function($join_info, $where_type, $paramsStr)
+	{
+		if(preg_match("/\A\s*(.+?)\s+PLACING\s+(.+?)\s+FROM\s+(.+?)(?:\s+FOR\s+(.+?))?\s*\Z/is", $paramsStr, $matches))
+		{
+			$params = $this->_build_parameters($join_info, $where_type, $matches);
+			return $params !== false ? array('overlay', $params) : false;
+		}
+		else
+			return $this->environment->_set_error('Error parsing overlay() function parameters');
+	}
+
+	function _parse_position_function($join_info, $where_type, $params)
+	{
+		if(preg_match("/\A\s*(.+?)\s+IN\s+(.+?)\s*\Z/is", $params, $matches))
+		{
+			$substring = $this->_build_expression($matches[1], $join_info, $where_type);
+			$string = $this->_build_expression($matches[2], $join_info, $where_type);
+			if($substring !== false && $string !== false)
+			{
+				return array('position', array($substring, $string));
+			}
+		}
+
+		return $this->_set_error('Error parsing position() function parameters');
+	}
+
+	function _parse_substring_function($join_info, $where_type, $paramsStr)
+	{
+		if(preg_match("/\A\s*(.+?)\s+FROM\s+(.+?)(?:\s+FOR\s+(.+?))?\s*\Z/is", $paramsStr, $matches))
+		{
+			$params = $this->_build_parameters($join_info, $where_type, $matches);
+			return $params !== null ? array('substring', $params) : false;
+		}
+		else
+			return $this->_set_error('Error parsing substring() function parameters');
+	}
+
+	function _parse_trim_function($join_info, $where_type, $paramsStr)
+	{
+		if(preg_match("/\A\s*(?:(?:(LEADING|TRAILING|BOTH)\s+)?(?:(.+?)\s+)?FROM\s+)?(.+?)\s*\Z/is", $paramsStr, $matches))
+		{
+			switch(strtoupper($matches[1]))
+			{
+				case 'LEADING':
+					$function = 'ltrim';
+					break;
+				case 'TRAILING':
+					$function = 'rtrim';
+					break;
+				default:
+					$function = 'trim';
+					break;
+			}
+
+			$string = $this->_build_expression($matches[3], $join_info, $where_type);
+			if($string === null)
+				return false;
+			$params = array($string);
+
+			if(!empty($matches[2]))
+			{
+				$characters = $this->_build_expression($matches[2], $join_info, $where_type);
+				if($characters === null)
+					return false;
+				$params[] = $characters;
+			}
+
+			return array($function, $params);
+		}
+		else
+			return $this->_set_error('Error parsing trim() function parameters');
 	}
 
 

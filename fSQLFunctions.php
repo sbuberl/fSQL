@@ -2,21 +2,62 @@
 
 define('FSQL_FUNC_REGISTERED', 0, true);
 define('FSQL_FUNC_NORMAL', 1, true);
-define('FSQL_FUNC_AGGREGATE', 2, true);
+define('FSQL_FUNC_CUSTOM_PARSE', 2, true);
+define('FSQL_FUNC_BUILTIN_ID', 4, true);
+define('FSQL_FUNC_AGGREGATE', 8, true);
 
 class fSQLFunctions
 {
+
 	var $allowed = array('abs','acos','asin','atan2','atan','ceil','cos','crc32','exp','floor',
 	   'ltrim','md5','pi','pow','rand','rtrim','round','sha1','sin','soundex','sqrt','strcmp','tan');
-	var $aggregates = array('any','avg','count','every','max','min','sum');
-	var $custom = array('concat','concat_ws','curdate','curtime','database','dayofweek',
-	   'dayofyear','elt','from_unixtime','last_insert_id', 'left','locate','log','log2','log10','lpad',
-	   'mod','month','now','repeat','right','row_count','sign','substring_index','truncate','unix_timestamp',
-	   'weekday','year');
+	var $custom = array(
+		'any' => FSQL_FUNC_AGGREGATE,
+		'avg' => FSQL_FUNC_AGGREGATE,
+		'concat' => FSQL_FUNC_NORMAL,
+		'concat_ws' => FSQL_FUNC_NORMAL,
+		'count' => FSQL_FUNC_AGGREGATE,
+		'curdate' => FSQL_FUNC_NORMAL,
+		'curtime' => FSQL_FUNC_NORMAL,
+		'database' =>  FSQL_FUNC_NORMAL,
+		'dayofweek' => FSQL_FUNC_NORMAL,
+		'dayofyear' => FSQL_FUNC_NORMAL,
+		'elt' => FSQL_FUNC_NORMAL,
+		'every' => FSQL_FUNC_AGGREGATE,
+		'extract' => FSQL_FUNC_CUSTOM_PARSE,
+		'from_unixtime' => FSQL_FUNC_NORMAL,
+		'last_insert_id' => FSQL_FUNC_NORMAL,
+		'left' => FSQL_FUNC_NORMAL,
+		'locate' => FSQL_FUNC_NORMAL,
+		'log' => FSQL_FUNC_NORMAL,
+		'log2' => FSQL_FUNC_NORMAL,
+		'log10' => FSQL_FUNC_NORMAL,
+		'lpad' => FSQL_FUNC_NORMAL,
+		'max' => FSQL_FUNC_AGGREGATE,
+		'min' => FSQL_FUNC_AGGREGATE,
+		'mod' => FSQL_FUNC_NORMAL,
+		'month' => FSQL_FUNC_NORMAL,
+		'now' => FSQL_FUNC_NORMAL,
+		'overlay' => FSQL_FUNC_CUSTOM_PARSE,
+		'position' => FSQL_FUNC_CUSTOM_PARSE,
+		'repeat' => FSQL_FUNC_NORMAL,
+		'right' => FSQL_FUNC_NORMAL,
+		'row_count' => FSQL_FUNC_NORMAL,
+		'sign' => FSQL_FUNC_NORMAL,
+		'substring' => FSQL_FUNC_CUSTOM_PARSE,
+		'substring_index' => FSQL_FUNC_NORMAL,
+		'sum' => FSQL_FUNC_AGGREGATE,
+		'trim' => FSQL_FUNC_CUSTOM_PARSE,
+		'truncate' => FSQL_FUNC_NORMAL,
+		'unix_timestamp' => FSQL_FUNC_NORMAL,
+		'weekday' => FSQL_FUNC_NORMAL,
+		'year' => FSQL_FUNC_NORMAL
+	);
+
 	var $renamed = array('conv'=>'base_convert','ceiling' => 'ceil','degrees'=>'rad2deg','format'=>'number_format',
 	   'length'=>'strlen','lower'=>'strtolower','ln'=>'log','power'=>'pow','quote'=>'addslashes',
 	   'radians'=>'deg2rad','repeat'=>'str_repeat','replace'=>'strtr','reverse'=>'strrev',
-	   'rpad'=>'str_pad','sha' => 'sha1','some' => 'any','substring'=>'substr','upper'=>'strtoupper');
+	   'rpad'=>'str_pad','sha' => 'sha1','some' => 'any','substr'=>'substring','upper'=>'strtoupper');
 
 	function fSQLFunctions()
 	{
@@ -31,18 +72,14 @@ class fSQLFunctions
 	{
 		if(isset($this->renamed[$function])) {
 			$newName = $this->renamed[$function];
-			if(in_array($newName, $this->custom)){
-				$type = FSQL_FUNC_NORMAL;
-			} else if(in_array($newName, $this->aggregates)){
-				$type = FSQL_FUNC_AGGREGATE | FSQL_FUNC_NORMAL;
+			if(isset($this->custom[$newName])){
+				$type = $this->custom[$newName];
 			} else {
-				$type = FSQL_TYPE_REGISTERED;
+				$type = FSQL_FUNC_REGISTERED;
 			}
 			return array($newName, $type);
-		} else if(in_array($function, $this->aggregates)) {
-			return array($function, FSQL_FUNC_AGGREGATE | FSQL_FUNC_NORMAL);
-		} else if(in_array($function, $this->custom)) {
-			return array($function, FSQL_FUNC_NORMAL);
+		} else if(isset($this->custom[$function])) {
+			return array($function, $this->custom[$function]);
 		} else if(in_array($function, $this->allowed)) {
 			return array($function, FSQL_FUNC_REGISTERED);
 		} else {
@@ -271,6 +308,57 @@ class fSQLFunctions
 		return implode($delim, $array);
 	}
 
+		// not public
+	function ltrim($string, $charlist = ' ') {
+		return ($string !== null) ? ltrim($string, $charlist) : null;
+	}
+
+	function overlay($string, $other, $start = 1) {
+		if($string !== null && $other !== null) {
+			$start -= 1; // one-based not zero-based
+			if(func_num_args() === 4) {
+				$length = func_get_arg(3);
+				return substr_replace($string, $other, $start, $length);
+			}
+			else
+				return substr_replace($string, $other, $start);
+		}
+
+		return null;
+	}
+
+	function position($substring, $string) {
+		if($string !== null && $substring !== null) {
+			$pos = strpos($string, $substring);
+			if($pos !== false) { return $pos + 1; } else { return 0; }
+		}
+		else
+			return null;
+	}
+
+	// not public
+	function rtrim($string, $charlist = ' ') {
+		return ($string !== null) ? rtrim($string, $charlist) : null;
+	}
+
+	function substring($string, $pos) {
+		if($string !== null) {
+			$pos -= 1; // one-based not zero-based
+			if(func_num_args() === 3) {
+				$length = func_get_arg(2);
+				return substr($string, $pos, $length);
+			}
+			else
+				return substr($string, $pos);
+		}
+
+		return null;
+	}
+
+	function trim($string, $charlist = ' ') {
+		return ($string !== null) ? trim($string, $charlist) : null;
+	}
+
 	////Date/Time functions
 	function now()		{ return $this->from_unixtime(time()); }
 	function curdate()	{ return $this->from_unixtime(time(), "%Y-%m-%d"); }
@@ -285,6 +373,71 @@ class fSQLFunctions
 	{
 		if(!is_int($timestamp)) { $timestamp = $this->unix_timestamp($timestamp); }
 		return strftime($format, $timestamp);
+	}
+
+	function extract($field, $datetime)
+	{
+		if($datetime !== null && preg_match('/\A(((?:[1-9]\d)?\d{2})-(0\d|1[0-2])-([0-2]\d|3[0-1])\s*)?(\b([0-1]\d|2[0-3]):([0-5]\d):([0-5]\d)(?:\.(\d+))?(?:([\+\-]\d{2}):(\d{2}))?)?\Z/is', $datetime, $matches)) {
+			$hasDate = !empty($matches[1]);
+
+			if($hasDate) { // date or timestamp
+				$year = (int) $matches[2];
+				$month = (int) $matches[3];
+				$day = (int) $matches[4];
+			}
+
+			if(isset($matches[5])) { // time or timestamp
+				$hour = (int) $matches[6];
+				$minute = (int) $matches[7];
+				$second = (int) $matches[8];
+				if(isset($matches[9]))
+					$microsecond = (int) $matches[9];
+				else
+					$microsecond = 0;
+				if(isset($matches[10]))
+				{
+					$tz_hour = (int) $matches[10];
+					$tz_minute = (int) $matches[11];
+				}
+			} else if($hasDate) { // date only.  set time to midnight like standard
+				$hour = 0;
+				$minute = 0;
+				$second = 0;
+				$microsecond = 0;
+			}
+
+			if(!isset($tz_hour)) {
+				$tz = date('O');
+				$tz_hour = (int) substr($tz, 0, 3);
+				$tz_minute = (int) substr($tz, 3);
+			}
+
+			switch($field) {
+				case 'year':
+					if($hasDate)
+						return $year;
+				case 'month':
+					if($hasDate)
+						return $month;
+				case 'day':
+					if($hasDate)
+						return $day;
+				case 'hour':
+					return $hour;
+				case 'minute':
+					return $minute;
+				case 'second':
+					return $second;
+				case 'microsecond':
+					return $microsecond;
+				case 'timezone_hour':
+					return $tz_hour;
+				case 'timezone_minute':
+					return $tz_minute;
+			}
+
+			return null;
+		}
 	}
 }
 
