@@ -283,7 +283,8 @@ class fSQLTable
         if(!isset($this->columns[$column]) || !$this->columns[$column]['auto'])
             return false;
 
-        list($current, $always, $start, $increment, $min, $max, $canCycle) = $this->columns[$column]['restraint'];
+        $this->getColumns();  // refresh columns?
+        list($current, , $start, $increment, $min, $max, $canCycle) = $this->columns[$column]['restraint'];
 
         $cycled = false;
         if($increment > 0 && $current > $max)
@@ -307,6 +308,24 @@ class fSQLTable
         $this->setColumns($this->columns);
 
         return $current;
+    }
+
+    function restartIdentity()
+    {
+        $this->getColumns();
+        foreach(array_keys($this->columns) as $columnName) {
+            if($this->columns[$columnName]['auto']) {
+                $start = $this->columns[$columnName]['restraint'][2];
+
+                $this->columns[$columnName]['restraint'][0] = $start;
+
+                $this->setColumns($this->columns);
+
+                return $start;
+            }
+        }
+
+        return false;
     }
 
     function insertRow($data)

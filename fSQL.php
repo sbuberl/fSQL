@@ -2338,23 +2338,18 @@ EOC;
 
     function _query_truncate($query)
     {
-        if(preg_match("/\ATRUNCATE\s+TABLE\s+(.*)[;]?\Z/is", $query, $matches)) {
-            $tables = explode(",", $matches[1]);
-            foreach($tables as $tableFullName) {
-                if(preg_match("/`?(?:([A-Z][A-Z0-9\_]*)`?\.`?)?([A-Z][A-Z0-9\_]*)`?/is", $tableFullName, $matches)) {
-                    list(, $db_name, $table_name) = $matches;
+        if(preg_match("/\ATRUNCATE\s+TABLE\s+(?:`?([A-Z][A-Z0-9\_]*)`?\.)?`?([A-Z][A-Z0-9\_]*)`?(?:\s+(CONTINUE|RESTART)\s+IDENTITY)?\s*[;]?\Z/is", $query, $matches)) {
+            list(, $db_name, $table_name, ) = $matches;
+            $table =& $this->_findTable($db_name, $table_name);
+            if($table === false) {
+                return false;
+            } else if($table->isReadLocked()) {
+                return $this->_error_table_read_lock($table->fullName());
+            }
 
-                    $table =& $this->_findTable($db_name, $table_name);
-                    if($table === false) {
-                        return false;
-                    } else if($table->isReadLocked()) {
-                        return $this->_error_table_read_lock($table->fullName());
-                    }
-
-                    $table->truncate();
-                } else {
-                    return $this->_set_error("Parse error in table listing");
-                }
+            $table->truncate();
+            if(isset($matches[3]) && !strcasecmp($matches[3], 'RESTART')) {
+                $table->restartIdentity();
             }
         } else {
             return $this->_set_error("Invalid TRUNCATE query");
