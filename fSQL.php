@@ -29,6 +29,7 @@ if(!defined('FSQL_INCLUDE_PATH')) {
     define('FSQL_INCLUDE_PATH', dirname(__FILE__));
 }
 
+require_once FSQL_INCLUDE_PATH.'/fSQLUtilities.php';
 require_once FSQL_INCLUDE_PATH.'/fSQLDatabase.php';
 require_once FSQL_INCLUDE_PATH.'/fSQLFunctions.php';
 

@@ -5,126 +5,6 @@ function _fsql_abstract_method()
     trigger_error('This method is abstract. It should be overriden',E_USER_ERROR);
 }
 
-/* A reentrant read write lock for a file */
-class fSQLFileLock
-{
-    var $handle;
-    var $filepath;
-    var $lock;
-    var $rcount = 0;
-    var $wcount = 0;
-
-    function fSQLFileLock($filepath)
-    {
-        $this->filepath = $filepath;
-        $this->handle = null;
-        $this->lock = 0;
-    }
-
-    function getHandle()
-    {
-        return $this->handle;
-    }
-
-    function acquireRead()
-    {
-        if($this->lock !== 0 && $this->handle !== null) {  /* Already have at least a read lock */
-            $this->rcount++;
-            return true;
-        }
-        else if($this->lock === 0 && $this->handle === null) /* New lock */
-        {
-            $this->handle = fopen($this->filepath, 'rb');
-            if($this->handle)
-            {
-                flock($this->handle, LOCK_SH);
-                $this->lock = 1;
-                $this->rcount = 1;
-                return true;
-            }
-        }
-
-        return false;
-    }
-
-    function acquireWrite()
-    {
-        if($this->lock === 2 && $this->handle !== null)  /* Already have a write lock */
-        {
-            $this->wcount++;
-            return true;
-        }
-        else if($this->lock === 1 && $this->handle !== null)  /* Upgrade a lock*/
-        {
-            flock($this->handle, LOCK_EX);
-            $this->lock = 2;
-            $this->wcount++;
-            return true;
-        }
-        else if($this->lock === 0 && $this->handle === null) /* New lock */
-        {
-            touch($this->filepath); // make sure it exists
-            $this->handle = fopen($this->filepath, 'r+b');
-            if($this->handle)
-            {
-                flock($this->handle, LOCK_EX);
-                $this->lock = 2;
-                $this->wcount = 1;
-                return true;
-            }
-        }
-
-        return false;
-    }
-
-    function releaseRead()
-    {
-        if($this->lock !== 0 && $this->handle !== null)
-        {
-            $this->rcount--;
-
-            if($this->lock === 1 && $this->rcount === 0) /* Read lock now empty */
-            {
-                // no readers or writers left, release lock
-                flock($this->handle, LOCK_UN);
-                fclose($this->handle);
-                $this->handle = null;
-                $this->lock = 0;
-            }
-        }
-
-        return true;
-    }
-
-    function releaseWrite()
-    {
-        if($this->lock !== 0 && $this->handle !== null)
-        {
-            if($this->lock === 2) /* Write lock */
-            {
-                $this->wcount--;
-                if($this->wcount === 0) // no writers left.
-                {
-                    if($this->rcount > 0)  // only readers left.  downgrade lock.
-                    {
-                        flock($this->handle, LOCK_SH);
-                        $this->lock = 1;
-                    }
-                    else // no readers or writers left, release lock
-                    {
-                        flock($this->handle, LOCK_UN);
-                        fclose($this->handle);
-                        $this->handle = null;
-                        $this->lock = 0;
-                    }
-                }
-            }
-        }
-
-        return true;
-    }
-}
-
 class fSQLTableCursor
 {
     var $entries;
@@ -400,10 +280,6 @@ class fSQLTempTable extends fSQLTable
 
 class fSQLCachedTable extends fSQLTable
 {
-    var $columns_path;
-    var $data_path;
-    var $columns_load = null;
-    var $data_load = null;
     var $uncommited = false;
     var $columnsLockFile;
     var $columnsFile;
@@ -415,18 +291,22 @@ class fSQLCachedTable extends fSQLTable
     {
         parent::fSQLTable($database, $table_name);
         $path_to_db = $this->database->path();
-        $this->columns_path = $path_to_db.$table_name.'.columns';
-        $this->data_path = $path_to_db.$table_name.'.data';
-        $this->columnsLockFile = new fSQLFileLock($this->columns_path.'.lock.cgi');
-        $this->columnsFile = new fSQLFileLock($this->columns_path.'.cgi');
-        $this->dataLockFile = new fSQLFileLock($this->data_path.'.lock.cgi');
-        $this->dataFile = new fSQLFileLock($this->data_path.'.cgi');
+        $columns_path = $path_to_db.$table_name.'.columns';
+        $data_path = $path_to_db.$table_name.'.data';
+        $this->columnsLockFile = new fSQLMicrotimeLockFile($columns_path.'.lock.cgi');
+        $this->columnsFile = new fSQLFile($columns_path.'.cgi');
+        $this->dataLockFile = new fSQLMicrotimeLockFile($data_path.'.lock.cgi');
+        $this->dataFile = new fSQLFile($data_path.'.cgi');
     }
 
     function close()
     {
-        unset($this->columns_path, $this->data_path, $this->columns_load, $this->data_load,
-            $this->uncommited, $this->columnsLockFile, $this->dataLockFile, $this->dataFile, $this->lock);
+        $this->columnsFile->close();
+        $this->columnsLockFile->close();
+        $this->dataFile->close();
+        $this->dataLockFile->close();
+        unset($this->uncommited, $this->columnsFile, $this->columnsLockFile, $this->dataLockFile,
+            $this->dataFile, $this->lock);
     }
 
     function &create(&$database, $table_name, $columnDefs)
@@ -434,35 +314,24 @@ class fSQLCachedTable extends fSQLTable
         $table =& new fSQLCachedTable($database, $table_name);
         $table->columns = $columnDefs;
 
-        list($msec, $sec) = explode(' ', microtime());
-        $table->columns_load = $table->data_load = $sec.$msec;
-
         // create the columns lock
-        $table->columnsLockFile->acquireWrite();
-        $columnsLock = $table->columnsLockFile->getHandle();
-        ftruncate($columnsLock, 0);
-        fwrite($columnsLock, $table->columns_load);
+        $table->columnsLockFile->write();
+        $table->columnsLockFile->reset();
 
         // create the columns file
         $table->columnsFile->acquireWrite();
         $toprint = $table->_printColumns($columnDefs);
         fwrite($table->columnsFile->getHandle(), $toprint);
-
         $table->columnsFile->releaseWrite();
-        $table->columnsLockFile->releaseWrite();
 
         // create the data lock
-        $table->dataLockFile->acquireWrite();
-        $dataLock = $table->dataLockFile->getHandle();
-        ftruncate($dataLock, 0);
-        fwrite($dataLock, $table->data_load);
+        $table->dataLockFile->write();
+        $table->dataLockFile->reset();
 
         // create the data file
         $table->dataFile->acquireWrite();
         fwrite($table->dataFile->getHandle(), "0\r\n");
-
         $table->dataFile->releaseWrite();
-        $table->dataLockFile->releaseWrite();
 
         return $table;
     }
@@ -492,7 +361,7 @@ class fSQLCachedTable extends fSQLTable
 
     function exists()
     {
-        return file_exists($this->columns_path.'.cgi');
+        return file_exists($this->columnsFile->getPath());
     }
 
     function temporary()
@@ -502,28 +371,22 @@ class fSQLCachedTable extends fSQLTable
 
     function drop()
     {
-        unlink($this->columns_path.'.cgi');
-        unlink($this->columns_path.'.lock.cgi');
-        unlink($this->data_path.'.cgi');
-        unlink($this->data_path.'.lock.cgi');
+        $this->columnsFile->drop();
+        $this->columnsLockFile->drop();
+        $this->dataFile->drop();
+        $this->dataLockFile->drop();
         $this->close();
     }
 
     function truncate()
     {
-        list($msec, $sec) = explode(' ', microtime());
-        $this->data_load = $sec.$msec;
-
         $this->dataLockFile->acquireWrite();
-        $dataLock = $this->dataLockFile->getHandle();
-        ftruncate($dataLock, 0);
-        fwrite($dataLock, $this->data_load);
+        $this->dataLockFile->write();
 
         $this->dataFile->acquireWrite();
         $dataFile = $this->dataFile->getHandle();
         ftruncate($dataFile, 0);
         fwrite($dataFile, "0\r\n");
-
         $this->dataFile->releaseWrite();
         $this->dataLockFile->releaseWrite();
 
@@ -533,30 +396,27 @@ class fSQLCachedTable extends fSQLTable
     function copyTo($destination)
     {
         $destName = $destination.$this->name;
-        copy($this->columns_path.'.cgi', $destName.'.columns.cgi');
-        copy($this->columns_path.'.lock.cgi', $destName.'.columns.lock.cgi');
-        copy($this->data_path.'.cgi', $destName.'.data.cgi');
-        copy($this->data_path.'.lock.cgi', $destName.'.data.lock.cgi');
+        copy($this->columnsFile->getPath(), $destName.'.columns.cgi');
+        copy($this->columnsLockFile->getPath(), $destName.'.columns.lock.cgi');
+        copy($this->dataFile->getPath(), $destName.'.data.cgi');
+        copy($this->dataLockFile->getPath(), $destName.'.data.lock.cgi');
     }
 
     function copyFrom($source)
     {
         $sourceName = $source.$this->name;
-        copy($sourceName.'.columns.cgi', $this->columns_path.'.cgi');
-        copy($sourceName.'.columns.lock.cgi', $this->columns_path.'.lock.cgi');
-        copy($sourceName.'.data.cgi', $this->data_path.'.cgi');
-        copy($sourceName.'.data.lock.cgi', $this->data_path.'.lock.cgi');
+        copy($sourceName.'.columns.cgi', $this->columnsFile->getPath());
+        copy($sourceName.'.columns.lock.cgi', $this->columnsLockFile->getPath());
+        copy($sourceName.'.data.cgi', $this->dataFile->getPath());
+        copy($sourceName.'.data.lock.cgi', $this->dataLockFile->getPath());
     }
 
     function getColumns()
     {
         $this->columnsLockFile->acquireRead();
-        $lock = $this->columnsLockFile->getHandle();
-
-        $modified = fread($lock, 20);
-        if($this->columns_load === null || strcmp($this->columns_load, $modified) < 0)
+        if($this->columnsLockFile->wasModified())
         {
-            $this->columns_load = $modified;
+            $this->columnsLockFile->accept();
 
             $this->columnsFile->acquireRead();
             $columnsHandle = $this->columnsFile->getHandle();
@@ -642,14 +502,11 @@ class fSQLCachedTable extends fSQLTable
     function _loadEntries()
     {
         $this->dataLockFile->acquireRead();
-        $lock = $this->dataLockFile->getHandle();
-
-        $modified = fread($lock, 20);
-        if($this->data_load === null || strcmp($this->data_load, $modified) < 0)
+        if($this->dataLockFile->wasModified())
         {
-            $entries = null;
-            $this->data_load = $modified;
+            $this->dataLockFile->accept();
 
+            $entries = null;
             $this->dataFile->acquireRead();
             $dataHandle = $this->dataFile->getHandle();
 
@@ -698,7 +555,7 @@ class fSQLCachedTable extends fSQLTable
                             $entries[$row][$m] = null;
                         } else if(!empty($matches[2][$m])) {
                             $number = $matches[2][$m];
-                            if($strpos($number, '.') !== false) {
+                            if(strpos($number, '.') !== false) {
                                 $number = (float) $number;
                             } else {
                                 $number = (int) $number;
@@ -745,18 +602,10 @@ class fSQLCachedTable extends fSQLTable
     function setColumns($columnDefs)
     {
         $this->columnsLockFile->acquireWrite();
-        $lock = $this->columnsLockFile->getHandle();
-        $modified = fread($lock, 20);
 
         $this->columns = $columnDefs;
 
-        list($msec, $sec) = explode(' ', microtime());
-        $this->columns_load = $sec.$msec;
-        fseek($lock, 0, SEEK_SET);
-        fwrite($lock, $this->columns_load);
-
         $this->columnsFile->acquireWrite();
-
         $toprint = $this->_printColumns($columnDefs);
         $columnsHandle = $this->columnsFile->getHandle();
         ftruncate($columnsHandle, 0);
@@ -772,35 +621,22 @@ class fSQLCachedTable extends fSQLTable
             return;
 
         $this->dataLockFile->acquireWrite();
-        $lock = $this->dataLockFile->getHandle();
-        $modified = fread($lock, 20);
-
-        if($this->data_load === null || strcmp($this->data_load, $modified) >= 0)
-        {
-            $columnDefs = array_values($this->getColumns());
-            $toprint = count($this->entries)."\r\n";
-            foreach($this->entries as $number => $entry) {
-                $toprint .= $number.': ';
-                foreach($entry as $key => $value) {
-                    if($value === NULL) {
-                        $value = 'NULL';
-                    } else if($columnDefs[$key]['type'] === FSQL_TYPE_ENUM) {
-                        $value = (int) array_search($value, $columnDefs[$key]['restraint']);;
-                    } else if(is_string($value)) {
-                        $value = "'$value'";
-                    }
-                    $toprint .= $value.';';
+        $columnDefs = array_values($this->getColumns());
+        $toprint = count($this->entries)."\r\n";
+        foreach($this->entries as $number => $entry) {
+            $toprint .= $number.': ';
+            foreach($entry as $key => $value) {
+                if($value === NULL) {
+                    $value = 'NULL';
+                } else if($columnDefs[$key]['type'] === FSQL_TYPE_ENUM) {
+                    $value = (int) array_search($value, $columnDefs[$key]['restraint']);;
+                } else if(is_string($value)) {
+                    $value = "'$value'";
                 }
-                $toprint .= "\r\n";
+                $toprint .= $value.';';
             }
-        } else {
-            $toprint = "0\r\n";
+            $toprint .= "\r\n";
         }
-
-        list($msec, $sec) = explode(' ', microtime());
-        $this->data_load = $sec.$msec;
-        fseek($lock, 0, SEEK_SET);
-        fwrite($lock, $this->data_load);
 
         $this->dataFile->acquireWrite();
 
@@ -816,7 +652,7 @@ class fSQLCachedTable extends fSQLTable
 
     function rollback()
     {
-        $this->data_load = 0;
+        $this->dataLockFile->reset();
         $this->uncommited = false;
     }
 
@@ -955,8 +791,8 @@ class fSQLDatabase
         if($oldTable->exists()) {
             if(!$oldTable->temporary()) {
                 $newTable = $new_db->createTable($new_table_name,  $oldTable->getColumns());
-                copy($oldTable->data_path.'.cgi', $newTable->data_path.'.cgi');
-                copy($oldTable->data_path.'.lock.cgi', $newTable->data_path.'.lock.cgi');
+                copy($oldTable->dataFile->getPath(), $newTable->dataFile->getPath());
+                copy($oldTable->dataLockFile->getPath(), $newTable->dataLockFile->getPath());
                 $this->dropTable($old_table_name);
             } else {
                 $new_db->loadedTables[$new_table_name] =& $this->loadedTables[$old_table_name];
