@@ -360,6 +360,7 @@ class fSQLEnvironment
                 }
 
                 $new_columns = array();
+                $hasIdentity = false;
 
                 for($c = 0; $c < count($Columns[0]); $c++) {
                     //$column = str_replace("\"", "'", $column);
@@ -463,8 +464,13 @@ class fSQLEnvironment
                             $restraint = array(1, 0, 1, 1, 1, $intMax, 0);
                         }
 
-                        if($auto && ($type !== FSQL_TYPE_INTEGER && $type !== FSQL_TYPE_FLOAT)) {
-                            return $this->_set_error("Identity columns and autoincrement only allowed on numeric columns");
+                        if($auto) {
+                            if($type !== FSQL_TYPE_INTEGER && $type !== FSQL_TYPE_FLOAT) {
+                                return $this->_set_error("Identity columns and autoincrement only allowed on numeric columns");
+                            } else if($hasIdentity) {
+                                return $this->_set_error("A table can only have one identity column.");
+                            }
+                            $hasIdentity = true;
                         }
 
                         if($type === FSQL_TYPE_ENUM) {
@@ -735,6 +741,7 @@ class fSQLEnvironment
 
             ////Check for Auto_Increment
             if($columnDef['auto'] == 1) {
+                $identity =& $table->getIdentity();
                 if(empty($columnDef['restraint'])) {  // upgrade old AUTOINCREMENT column to IDENTITY
                     $always = false;
                     $increment = 1;
@@ -754,7 +761,7 @@ class fSQLEnvironment
                     $tableColumns[$col_name]['restraint'] = array($insert_id, $always, $min, $increment, $min, $max, $cycle);
                     $table->setColumns($tableColumns);
                 } else if(empty($data) || !strcasecmp($data, "AUTO") || !strcasecmp($data, "NULL")) {
-                    $insert_id = $table->nextValueFor($col_name);
+                    $insert_id = $identity->nextValueFor();
                     if($insert_id !== false)
                     {
                         $this->insert_id = $insert_id;
@@ -763,8 +770,7 @@ class fSQLEnvironment
                         return $this->_set_error('Error getting next value for identity column: '.$col_name);
                     }
                 } else {
-                    $always = $columnDef['restraint'][1];
-                    if($always) {
+                    if($identity->always) {
                         return $this->_set_error("Manual value inserted into an ALWAYS identity column");
                     }
                     $data = $this->_parse_value($columnDef, $data);
@@ -2081,13 +2087,12 @@ EOC;
                         }
 
                         $columnDef['default'] = $default;
+                        $tableObj->setColumns($columns);
                     } else if(preg_match("/\ADROP\s+IDENTITY/i", $the_rest, $defaults)) {
                         if(!$columnDef['auto']) {
                             return $this->_set_error("Column $columnName is not an identity column");
                         }
-                        $columnDef['auto'] = '0';
-                        $columnDef['restraint'] = array();
-
+                        $tableObj->dropIdentity();
                     } else {
                         $parsed = $this->_parse_sequence_options($the_rest, true);
                         if($parsed === false) {
@@ -2097,52 +2102,14 @@ EOC;
                                 return $this->_set_error("Column $columnName is not an identity column");
                             }
 
-                            list($current,$always,$start,$increment,$min,$max,$cycle) = $columnDef['restraint'];
-                            if(array_key_exists('INCREMENT', $parsed)) {
-                                $increment = (int) $parsed['INCREMENT'];
-                                if($increment === 0) {
-                                    return $this->_set_error('Increment of zero in identity column defintion is not allowed');
-                                }
+                            $identity =& $tableObj->getIdentity();
+                            $result = $identity->alter($parsed);
+                            if($result !== true) {
+                                $identity->load();  // refresh temp changes made
+                                return $this->_set_error($result);
                             }
-
-                            $intMax = defined('PHP_INT_MAX') ? PHP_INT_MAX : intval('420000000000000000000');
-                            $intMin = defined('PHP_INT_MIN') ? PHP_INT_MIN : ~$intMax;
-
-                            $climbing = $increment > 0;
-                            if(array_key_exists('MINVALUE', $parsed)) {
-                                $min = isset($parsed['MINVALUE']) ? (int) $parsed['MINVALUE'] : ($climbing ? 1 : $intMin);
-                            }
-                            if(array_key_exists('MAXVALUE', $parsed)) {
-                                $max = isset($parsed['MAXVALUE']) ? (int) $parsed['MAXVALUE'] : ($climbing ? $intMax : -1);
-                            }
-                            if(array_key_exists('CYCLE', $parsed)) {
-                                $cycle = isset($parsed['CYCLE']) ? (int) $parsed['CYCLE'] : 0;
-                            }
-                            if(array_key_exists('ALWAYS', $parsed)) {
-                                $always = (int) $parsed['ALWAYS'];
-                            }
-
-                            if($min > $max) {
-                                return $this->_set_error('Identity column minimum greater than maximum');
-                            }
-
-                            if(isset($parsed['RESTART'])) {
-                                $restart = $parsed['RESTART'];
-                                $current = $restart !== 'start' ? (int) $restart : $start;
-                                if($current < $min || $current > $max) {
-                                    return $this->_set_error('Identity column restart value not between min and max');
-                                }
-                            } else if($climbing) {
-                                $current = $min;
-                            } else {
-                                $current = $max;
-                            }
-
-                            $columnDef['restraint'] = array($current, $always, $start, $increment, $min, $max, $cycle);
                         }
                     }
-
-                    $tableObj->setColumns($columns);
 
                     return true;
                 } else if(preg_match("/\ADROP\s+PRIMARY\s+KEY/is", $specs[0][$i], $matches)) {
@@ -2350,7 +2317,10 @@ EOC;
 
             $table->truncate();
             if(isset($matches[3]) && !strcasecmp($matches[3], 'RESTART')) {
-                $table->restartIdentity();
+                $identity =& $table->getIdentity();
+                if($identity !== null) {
+                    $identity->restart();
+                }
             }
         } else {
             return $this->_set_error("Invalid TRUNCATE query");

@@ -69,6 +69,7 @@ class fSQLTable
     var $cursor = null;
     var $columns = null;
     var $entries = null;
+    var $identity = null;
 
     function fSQLTable(&$database, $name)
     {
@@ -78,7 +79,7 @@ class fSQLTable
 
     function close()
     {
-        unset($this->name, $this->database, $this->cursor, $this->columns, $this->entries);
+        unset($this->name, $this->database, $this->cursor, $this->columns, $this->entries, $this->identity);
     }
 
     function name()
@@ -158,54 +159,27 @@ class fSQLTable
         return $cursor;
     }
 
-    function nextValueFor($column)
-    {
-        if(!isset($this->columns[$column]) || !$this->columns[$column]['auto'])
-            return false;
-
-        $this->getColumns();  // refresh columns?
-        list($current, , $start, $increment, $min, $max, $canCycle) = $this->columns[$column]['restraint'];
-
-        $cycled = false;
-        if($increment > 0 && $current > $max)
-        {
-            $current = $min;
-            $this->columns[$column]['restraint'][0] = $min;
-            $cycled = true;
-        }
-        else if($increment < 0 && $current < $min)
-        {
-            $current = $max;
-            $this->columns[$column]['restraint'][0] = $max;
-            $cycled = true;
-        }
-
-        if($cycled && !$canCycle)
-            return false;
-
-        $this->columns[$column]['restraint'][0] += $increment;
-
-        $this->setColumns($this->columns);
-
-        return $current;
-    }
-
-    function restartIdentity()
-    {
-        $this->getColumns();
-        foreach(array_keys($this->columns) as $columnName) {
-            if($this->columns[$columnName]['auto']) {
-                $start = $this->columns[$columnName]['restraint'][2];
-
-                $this->columns[$columnName]['restraint'][0] = $start;
-
-                $this->setColumns($this->columns);
-
-                return $start;
+    function &getIdentity() {
+         if($this->identity === null) {
+            foreach($this->getColumns() as $columnName => $column) {
+                if($column['auto']) {
+                    $this->identity =& new fSQLIdentity($this, $columnName);
+                    $this->identity->load();
+                    break;
+                }
             }
         }
+        return $this->identity;
+    }
 
-        return false;
+    function dropIdentity() {
+        $columns = $this->getColumns();
+        $columnName = $this->identity->getColumnName();
+        $columns[$columnName]['auto'] ='0';
+        $columns[$columnName]['restraint'] = array();
+        $this->identity->close();
+        $this->identity = null;
+        $this->setColumns($columns);
     }
 
     function insertRow($data)
@@ -819,6 +793,196 @@ class fSQLDatabase
         } else {
             return false;
         }
+    }
+}
+
+class fSQLSequenceBase
+{
+    var $lockFile;
+    var $current;
+    var $start;
+    var $increment;
+    var $min;
+    var $max;
+    var $cycle;
+
+    function fSQLSequenceBase(&$lockFile)
+    {
+        $this->lockFile =& $lockFile;
+    }
+
+    function close()
+    {
+        unset($this->lockFile, $this->current, $this->start, $this->increment, $this->min,
+            $this->max, $this->cycle);
+    }
+
+    function load()
+    {
+        return false;
+    }
+
+    function save()
+    {
+        return false;
+    }
+
+    function _lockAndReload()
+    {
+        $this->lockFile->acquireWrite();
+        if($this->lockFile->wasModified()) {
+            $this->load();
+        }
+    }
+
+    function _saveAndUnlock()
+    {
+        $this->save();
+
+        $this->lockFile->releaseWrite();
+    }
+
+    function set($current, $start,$increment,$min,$max,$cycle)
+    {
+        $this->current = $current;
+        $this->start = $start;
+        $this->increment = $increment;
+        $this->min = $min;
+        $this->max = $max;
+        $this->cycle = $cycle;
+    }
+
+    function alter($updates) {
+        $this->_lockAndReload();
+
+        if(array_key_exists('INCREMENT', $updates)) {
+            $this->increment = (int) $updates['INCREMENT'];
+            if($this->increment === 0) {
+                $this->lockFile->releaseWrite();
+                return 'Increment of zero in identity column defintion is not allowed';
+            }
+        }
+
+        $intMax = defined('PHP_INT_MAX') ? PHP_INT_MAX : intval('420000000000000000000');
+        $intMin = defined('PHP_INT_MIN') ? PHP_INT_MIN : ~$intMax;
+
+        $climbing = $this->increment > 0;
+        if(array_key_exists('MINVALUE', $updates)) {
+            $this->min = isset($updates['MINVALUE']) ? (int) $updates['MINVALUE'] : ($climbing ? 1 : $intMin);
+        }
+        if(array_key_exists('MAXVALUE', $updates)) {
+            $this->max = isset($updates['MAXVALUE']) ? (int) $updates['MAXVALUE'] : ($climbing ? $intMax : -1);
+        }
+        if(array_key_exists('CYCLE', $updates)) {
+            $this->cycle = isset($updates['CYCLE']) ? (int) $updates['CYCLE'] : 0;
+        }
+
+        if($this->min > $this->max) {
+            $this->lockFile->releaseWrite();
+            return 'Identity column minimum greater than maximum';
+        }
+
+        if(isset($updates['RESTART'])) {
+            $restart = $updates['RESTART'];
+            $this->current = $restart !== 'start' ? (int) $restart : $this->start;
+            if($this->current < $this->min || $this->current > $this->max) {
+                $this->lockFile->releaseWrite();
+                return 'Identity column restart value not between min and max';
+            }
+        } else if($climbing) {
+            $current = $min;
+        } else {
+            $current = $max;
+        }
+
+        $this->_saveAndUnlock();
+
+        return true;
+    }
+
+    function nextValueFor()
+    {
+        $this->_lockAndReload();
+
+        $cycled = false;
+        if($this->increment > 0 && $this->current > $this->max) {
+            $this->current = $this->min;
+            $cycled = true;
+        } else if($this->increment < 0 && $this->current < $this->min) {
+            $this->current = $this->max;
+            $cycled = true;
+        }
+
+        if($cycled && !$this->cycle) {
+            $this->lockFile->releaseWrite();
+            return false;
+        }
+
+        $current = $this->current;
+        $this->current += $this->increment;
+
+        $this->_saveAndUnlock();
+
+        return $current;
+    }
+
+    function restart()
+    {
+        $this->_lockAndReload();
+
+        $this->current = $this->start;
+
+        $this->_saveAndUnlock();
+    }
+}
+
+class fSQLIdentity extends fSQLSequenceBase
+{
+    var $table;
+    var $columnName;
+    var $always;
+
+    function fSQLIdentity(&$table, $columnName)
+    {
+        parent::fSQLSequenceBase($table->columnsLockFile);
+        $this->table =& $table;
+        $this->columnName = $columnName;
+    }
+
+    function close()
+    {
+        parent::close();
+        unset($this->table, $this->columnName, $this->always);
+    }
+
+    function getColumnName()
+    {
+        return $this->columnName;
+    }
+
+    function load()
+    {
+        $columns = $this->table->getColumns();
+        $identity = $columns[$this->columnName]['restraint'];
+        list($current, $always, $start, $increment, $min, $max, $cycle) = $identity;
+        $this->always = $always;
+        $this->set($current, $start, $increment, $min, $max, $cycle);
+    }
+
+    function save()
+    {
+        $columns = $this->table->getColumns();
+        $columns[$this->columnName]['restraint'] = array($this->current, $this->always,
+            $this->start, $this->increment, $this->min, $this->max, $this->cycle);
+        $this->table->setColumns($columns);
+    }
+
+    function alter($updates) {
+        if(array_key_exists('ALWAYS', $updates)) {
+            $this->always = (int) $updates['ALWAYS'];
+        }
+
+        return parent::alter($updates);
     }
 }
 
