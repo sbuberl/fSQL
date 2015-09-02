@@ -327,6 +327,57 @@ class fSQLEnvironment
 
     function _query_create($query)
     {
+        if(preg_match("/\ACREATE(?:\s+TEMPORARY)?\s+TABLE\s+/is", $query)) {
+            return $this->_query_create_table($query);
+        } else if(preg_match("/\ACREATE\s+SEQUENCE\s+/is", $query)) {
+            return $this->_query_create_sequence($query);
+        } else {
+            return $this->_set_error('Invalid CREATE query');
+        }
+    }
+
+    function _query_create_sequence($query)
+    {
+        if(preg_match("/\ACREATE\s+SEQUENCE\s+(?:(IF\s+NOT\s+EXISTS)\s+)?(?:`?([^\W\d]\w*)`?\.)?`?([^\W\d]\w*)`?(.+?)\s*;/is", $query, $matches)) {
+            list(, $ifNotExists, $dbName, $sequenceName, $valuesList) = $matches;
+            $db =& $this->_get_database($dbName);
+            if($db === false) {
+                return false;
+            }
+
+            $sequences =& $db->getSequences();
+            $seqFileExists = $sequences->exists();
+            if($seqFileExists) {
+                $sequence =& $sequences->getSequence($sequenceName);
+                if($sequence !== false) {
+                    if(empty($ifNotExists)) {
+                        return $this->_set_error("Sequence {$db->name}.{$sequenceName} already exists");
+                    } else {
+                        return true;
+                    }
+                }
+            }
+
+            $parsed = $this->_parse_sequence_options($valuesList);
+            if($parsed === false) {
+                return false;
+            }
+
+            list($start, $increment, $min, $max, $cycle) = $this->_load_create_sequence($parsed);
+
+            if(!$seqFileExists) {
+                $sequences->create();
+            }
+            $sequences->addSequence($sequenceName, $start, $increment, $min, $max, $cycle);
+
+            return true;
+        } else {
+            return $this->_set_error('Invalid CREATE SEQUENCE query');
+        }
+    }
+
+    function _query_create_table($query)
+    {
         if(preg_match("/\ACREATE(?:\s+(TEMPORARY))?\s+TABLE\s+(?:(IF\s+NOT\s+EXISTS)\s+)?`?(?:([A-Z][A-Z0-9\_]*)`?\.`?)?([A-Z][A-Z0-9\_]*?)`?(?:\s*\((.+)\)|\s+LIKE\s+(?:([A-Z][A-Z0-9\_]*)\.)?([A-Z][A-Z0-9\_]*))/is", $query, $matches)) {
 
             list(, $temporary, $ifnotexists, $db_name, $table_name, $column_list) = $matches;
@@ -431,30 +482,10 @@ class fSQLEnvironment
                                 return false;
                             }
 
-                            $increment = isset($parsed['INCREMENT']) ? (int) $parsed['INCREMENT'] : 1;
-                            if($increment === 0)
-                                return $this->_set_error('Increment of zero in identity column defintion is not allowed');
+                            $restraint = $this->_load_create_sequence($parsed);
+                            $start = $restraint[0];
+                            array_unshift($restraint, $start, $always);
 
-                            $intMax = defined('PHP_INT_MAX') ? PHP_INT_MAX : intval('420000000000000000000');
-                            $intMin = defined('PHP_INT_MIN') ? PHP_INT_MIN : ~$intMax;
-
-                            $climbing = $increment > 0;
-                            $min = isset($parsed['MINVALUE']) ? (int) $parsed['MINVALUE'] : ($climbing ? 1 : $intMin);
-                            $max = isset($parsed['MAXVALUE']) ? (int) $parsed['MAXVALUE'] : ($climbing ? $intMax : -1);
-                            $cycle = isset($parsed['CYCLE']) ? (int) $parsed['CYCLE'] : 0;
-
-                            if(isset($parsed['START'])) {
-                                $start = (int) $parsed['START'];
-                                if($start < $min || $start > $max) {
-                                    return $this->_set_error('Identity column start value not inside valid range');
-                                }
-                            } else if($climbing) {
-                                $start = $min;
-                            } else {
-                                $start = $max;
-                            }
-
-                            $restraint = array($start, $always, $start, $increment, $min, $max, $cycle);
                             $null = 0;
                         }
                         else if(preg_match('/\s+AUTO_?INCREMENT\b/i', $options))
@@ -527,8 +558,36 @@ class fSQLEnvironment
 
             return true;
         } else {
-            return $this->_set_error('Invalid CREATE query');
+            return $this->_set_error('Invalid CREATE TABLE query');
         }
+    }
+
+    function _load_create_sequence($parsed)
+    {
+        $increment = isset($parsed['INCREMENT']) ? (int) $parsed['INCREMENT'] : 1;
+        if($increment === 0)
+            return $this->_set_error('Increment of zero in identity column defintion is not allowed');
+
+        $intMax = defined('PHP_INT_MAX') ? PHP_INT_MAX : intval('420000000000000000000');
+        $intMin = defined('PHP_INT_MIN') ? PHP_INT_MIN : ~$intMax;
+
+        $climbing = $increment > 0;
+        $min = isset($parsed['MINVALUE']) ? (int) $parsed['MINVALUE'] : ($climbing ? 1 : $intMin);
+        $max = isset($parsed['MAXVALUE']) ? (int) $parsed['MAXVALUE'] : ($climbing ? $intMax : -1);
+        $cycle = isset($parsed['CYCLE']) ? (int) $parsed['CYCLE'] : 0;
+
+        if(isset($parsed['START'])) {
+            $start = (int) $parsed['START'];
+            if($start < $min || $start > $max) {
+                return $this->_set_error('Identity column start value not inside valid range');
+            }
+        } else if($climbing) {
+            $start = $min;
+        } else {
+            $start = $max;
+        }
+
+        return array($start, $increment, $min, $max, $cycle);
     }
 
     function _parse_sequence_options($options, $isAlter = false)
@@ -612,6 +671,8 @@ class fSQLEnvironment
                     } else {
                         return $this->_set_error('Unknown option after NO: '.$word);
                     }
+                } else if($word === 'CYCLE') {
+                    $parsed[$word] = 1;
                 }
             }
         }
@@ -2278,7 +2339,7 @@ EOC;
                 }
             }
             return true;
-        } else if(preg_match("/\ADROP\s+DATABASE(?:\s+(IF EXISTS))?\s+`?([A-Z][A-Z0-9\_]*)`?s*[;]?\Z/is", $query, $matches)) {
+        } else if(preg_match("/\ADROP\s+DATABASE(?:\s+(IF EXISTS))?\s+`?([A-Z][A-Z0-9\_]*)`?\s*[;]?\Z/is", $query, $matches)) {
             $ifexists = !empty($matches[1]);
             $db_name = $matches[2];
 
@@ -2298,6 +2359,30 @@ EOC;
 
             unset($this->databases[$db_name]);
 
+            return true;
+        } else if(preg_match("/\ADROP\s+SEQUENCE(?:\s+(IF EXISTS))?\s+(?:`?([^\W\d]\w*)`?\.)?`?([^\W\d]\w*)`?\s*[;]?\Z/is", $query, $matches)) {
+            list(, $ifExists, $dbName, $sequenceName) = $matches;
+
+            $db =& $this->_get_database($dbName);
+            if($db === false) {
+                return false;
+            }
+
+            $sequences =& $db->getSequences();
+            $sequence = false;
+            if($sequences->exists()) {
+                $sequence =& $sequences->getSequence($sequenceName);
+            }
+
+            if($sequence === false) {
+                if(empty($ifExists)) {
+                    return $this->_set_error("Sequence {$db->name}.{$sequenceName} does not exist");
+                } else {
+                    return true;
+                }
+            }
+
+            $sequences->dropSequence($sequenceName);
             return true;
         } else {
             return $this->_set_error("Invalid DROP query");

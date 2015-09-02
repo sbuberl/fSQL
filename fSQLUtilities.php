@@ -27,6 +27,11 @@ class fSQLFile
         unset($this->filepath, $this->handle, $this->lock, $this->rcount, $this->wcount);
     }
 
+    function exists()
+    {
+        return file_exists($this->filepath);
+    }
+
     function drop()
     {
         // only allow drops if not locked

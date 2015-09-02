@@ -687,15 +687,18 @@ class fSQLDatabase
     var $name = null;
     var $path = null;
     var $loadedTables = array();
+    var $sequencesFile;
 
     function fSQLDatabase($name, $filePath)
     {
         $this->name = $name;
         $this->path = $filePath;
+        $this->sequencesFile =& new fSQLSequencesFile($this);
     }
 
     function close()
     {
+        $this->sequencesFile = null;
         foreach(array_keys($this->loadedTables) as $table_name) {
             $table =& $this->loadedTables[$table_name];
             $table->close();
@@ -703,7 +706,7 @@ class fSQLDatabase
             unset($table);
         }
 
-        unset($this->name, $this->path, $this->loadedTables);
+        unset($this->name, $this->path, $this->loadedTables, $this->sequencesFile);
     }
 
     function name()
@@ -739,6 +742,11 @@ class fSQLDatabase
         }
 
         return $this->loadedTables[$table_name];
+    }
+
+    function &getSequences()
+    {
+        return $this->sequencesFile;
     }
 
     function listTables()
@@ -983,6 +991,166 @@ class fSQLIdentity extends fSQLSequenceBase
         }
 
         return parent::alter($updates);
+    }
+}
+
+class fSQLSequence extends fSQLSequenceBase
+{
+    var $name;
+    var $file;
+
+    function fSQLSequence($name, &$file)
+    {
+        parent::fSQLSequenceBase($file->lockFile);
+        $this->name = $name;
+        $this->file =& $file;
+    }
+
+    function close()
+    {
+        parent::close();
+        unset($this->name, $this->file);
+    }
+
+    function load()
+    {
+        $this->file->reload();
+    }
+
+    function save()
+    {
+        $this->file->save();
+    }
+}
+
+class fSQLSequencesFile
+{
+    var $database;
+    var $sequences;
+    var $file;
+    var $lockFile;
+
+    function fSQLSequencesFile(&$database)
+    {
+        $this->database =& $database;
+        $path = $database->path().'sequences';
+        $this->sequences = array();
+        $this->file = new fSQLFile($path.'.cgi');
+        $this->lockFile = new fSQLMicrotimeLockFile($path.'.lock.cgi');
+    }
+
+    function close()
+    {
+        $this->file->close();
+        $this->lockFile->close();
+        unset($this->database, $this->sequences, $this->file, $this->fileLock);
+    }
+
+    function create()
+    {
+        $this->lockFile->write();
+        $this->lockFile->reset();
+
+        $this->file->acquireWrite();
+        fwrite($this->file->getHandle(), "");
+        $this->file->releaseWrite();
+
+        return true;
+    }
+
+    function exists()
+    {
+        return $this->file->exists();
+    }
+
+    function names()
+    {
+        return $this->names;
+    }
+
+    function addSequence($name, $start, $increment, $min, $max, $cycle)
+    {
+        $this->lockFile->acquireWrite();
+        $this->file->acquireWrite();
+
+        $this->reload();
+
+        $sequence =& new fSQLSequence($name, $this);
+        $sequence->set($start,$start,$increment,$min,$max,$cycle);
+        $this->sequences[$name] =& $sequence;
+
+        $fileHandle = $this->file->getHandle();
+        fseek($fileHandle, 0, SEEK_END);
+        fprintf($fileHandle, "%s: %d;%d;%d;%d;%d;%d\r\n", $name, $start,
+            $start,$increment,$min,$max,$cycle);
+
+        $this->file->releaseWrite();
+        $this->lockFile->releaseWrite();
+    }
+
+    function &getSequence($name)
+    {
+        $this->lockFile->acquireRead();
+        $this->reload();
+        $sequence = false;
+        if(isset($this->sequences[$name])) {
+            $sequence =& $this->sequences[$name];
+        }
+        $this->lockFile->releaseRead();
+        return $sequence;
+    }
+
+    function dropSequence($name)
+    {
+        $this->lockFile->acquireWrite();
+        $this->reload();
+        if(isset($this->sequences[$name])) {
+            $this->sequences[$name]->close();
+            $this->sequences[$name] = null;
+            unset($this->sequences[$name]);
+
+        }
+
+        $this->save();
+        $this->lockFile->releaseWrite();
+    }
+
+    function reload()
+    {
+        $this->lockFile->acquireRead();
+        if($this->lockFile->wasModified()) {
+            $this->lockFile->accept();
+
+            $this->file->acquireRead();
+            $fileHandle = $this->file->getHandle();
+            while(!feof($fileHandle)) {
+                fscanf($fileHandle, "%[^:]: %d;%d;%d;%d;%d;%d\r\n", $name, $current,
+                    $start,$increment,$min,$max,$cycle);
+                if(!isset($this->sequences[$name])) {
+                    $this->sequences[$name] =& new fSQLSequence($name, $this);
+                }
+                $this->sequences[$name]->set($current,$start,$increment,$min,$max,$cycle);
+            }
+
+            $this->file->acquireRead();
+        }
+        $this->lockFile->releaseRead();
+    }
+
+    function save()
+    {
+        $this->lockFile->acquireWrite();
+        $this->file->acquireWrite();
+
+        $fileHandle = $this->file->getHandle();
+        ftruncate($fileHandle, 0);
+        foreach($this->sequences as $name => $sequence) {
+            fprintf($fileHandle, "%s: %d;%d;%d;%d;%d;%d\r\n", $name, $sequence->current,
+                $sequence->start,$sequence->increment,$sequence->min,$sequence->max,$sequence->cycle);
+        }
+
+        $this->file->releaseWrite();
+        $this->lockFile->releaseWrite();
     }
 }
 
