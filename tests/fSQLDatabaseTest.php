@@ -17,14 +17,9 @@ class fSQLDatabaseTest extends fSQLBaseTest
 
     function setUp()
     {
+        parent::setUp();
         $this->subDir = parent::$tempDir.'sub/';
-        mkdir(parent::$tempDir);
         mkdir($this->subDir);
-    }
-
-    function tearDown()
-    {
-        parent::deleteDir(parent::$tempDir);
     }
 
     function testConstructor()
@@ -167,14 +162,14 @@ class fSQLDatabaseTest extends fSQLBaseTest
         $oldTable =& $db->getTable($from);
         $this->assertFalse($oldTable->exists());
     }
-    
+
     function testDropTableDoesntExist()
     {
         $db =& new fSQLDatabase('shazam', parent::$tempDir);
         $passed = $db->dropTable('answer42');
         $this->assertFalse($passed);
     }
-    
+
     function testDropTable()
     {
         $name = 'blah';
@@ -185,7 +180,7 @@ class fSQLDatabaseTest extends fSQLBaseTest
         $table =& $db->getTable($name);
         $this->assertFalse($table->exists());
     }
-    
+
     function testDropTableTemp()
     {
         $name = 'blah';

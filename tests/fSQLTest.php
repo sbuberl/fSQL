@@ -6,18 +6,9 @@ class fSQLTest extends fSQLBaseTest
 {
     var $fsql;
 
-    static function setUpBeforeClass()
-    {
-        mkdir(self::$tempDir);
-    }
-
-    static function tearDownAfterClass()
-    {
-        self::deleteDir(self::$tempDir);
-    }
-
     function setUp()
     {
+        parent::setUp();
         $this->fsql =& new fSQLEnvironment();
     }
 

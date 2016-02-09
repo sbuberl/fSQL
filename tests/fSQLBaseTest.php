@@ -6,6 +6,14 @@ class fSQLBaseTest extends PHPUnit_Framework_TestCase
 {
     static $tempDir = ".tmp/";
 
+    function setUp()
+    {
+        if(file_exists(self::$tempDir)) {
+          self::deleteDir(self::$tempDir);
+        }
+        mkdir(self::$tempDir);
+    }
+
     public static function deleteDir($dirPath) {
         if(! is_dir($dirPath)) {
             throw new InvalidArgumentException("$dirPath must be a directory");
