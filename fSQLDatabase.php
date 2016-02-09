@@ -867,7 +867,7 @@ class fSQLSequenceBase
             $this->increment = (int) $updates['INCREMENT'];
             if($this->increment === 0) {
                 $this->lockFile->releaseWrite();
-                return 'Increment of zero in identity column defintion is not allowed';
+                return 'Increment of zero in sequence/identity defintion is not allowed';
             }
         }
 
@@ -887,7 +887,7 @@ class fSQLSequenceBase
 
         if($this->min > $this->max) {
             $this->lockFile->releaseWrite();
-            return 'Identity column minimum greater than maximum';
+            return 'Sequence/identity minimum is greater than maximum';
         }
 
         if(isset($updates['RESTART'])) {
@@ -895,12 +895,12 @@ class fSQLSequenceBase
             $this->current = $restart !== 'start' ? (int) $restart : $this->start;
             if($this->current < $this->min || $this->current > $this->max) {
                 $this->lockFile->releaseWrite();
-                return 'Identity column restart value not between min and max';
+                return 'Sequence/identity restart value not between min and max';
             }
         } else if($climbing) {
-            $current = $min;
+            $this->current = $this->min;
         } else {
-            $current = $max;
+            $this->current = $this->max;
         }
 
         $this->_saveAndUnlock();
@@ -1012,6 +1012,11 @@ class fSQLSequence extends fSQLSequenceBase
         unset($this->name, $this->file);
     }
 
+    function name()
+    {
+        return $this->name;
+    }
+
     function load()
     {
         $this->file->reload();
@@ -1043,7 +1048,7 @@ class fSQLSequencesFile
     {
         $this->file->close();
         $this->lockFile->close();
-        unset($this->database, $this->sequences, $this->file, $this->fileLock);
+        unset($this->database, $this->sequences, $this->file, $this->lockFile);
     }
 
     function create()
@@ -1061,11 +1066,6 @@ class fSQLSequencesFile
     function exists()
     {
         return $this->file->exists();
-    }
-
-    function names()
-    {
-        return $this->names;
     }
 
     function addSequence($name, $start, $increment, $min, $max, $cycle)
@@ -1108,7 +1108,6 @@ class fSQLSequencesFile
             $this->sequences[$name]->close();
             $this->sequences[$name] = null;
             unset($this->sequences[$name]);
-
         }
 
         $this->save();
