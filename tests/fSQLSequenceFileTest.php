@@ -7,8 +7,8 @@ class fSQLSequenceFileTest extends fSQLBaseTest
     function setUp()
     {
         parent::setUp();
-        $this->database =& new fSQLDatabase('db1', parent::$tempDir);
-        $this->sequences =& new fSQLSequencesFile($this->database);
+        $this->database = new fSQLDatabase('db1', parent::$tempDir);
+        $this->sequences = new fSQLSequencesFile($this->database);
     }
 
     function tearDown()
@@ -64,7 +64,7 @@ class fSQLSequenceFileTest extends fSQLBaseTest
     function testGetEmpty()
     {
         $this->sequences->create();
-        $sequence =& $this->sequences->getSequence('seq12');
+        $sequence = $this->sequences->getSequence('seq12');
         $this->assertFalse($sequence);
     }
 
@@ -75,7 +75,7 @@ class fSQLSequenceFileTest extends fSQLBaseTest
 
         $this->sequences->dropSequence('seq12474');
 
-        $sequence =& $this->sequences->getSequence('seq12474');
+        $sequence = $this->sequences->getSequence('seq12474');
         $this->assertFalse($sequence);
     }
 }

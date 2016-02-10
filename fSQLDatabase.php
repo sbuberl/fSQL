@@ -287,7 +287,7 @@ class fSQLCachedTable extends fSQLTable
             $this->dataFile, $this->lock);
     }
 
-    function &create(&$database, $table_name, $columnDefs)
+    static function &create(&$database, $table_name, $columnDefs)
     {
         $table =& new fSQLCachedTable($database, $table_name);
         $table->columns = $columnDefs;

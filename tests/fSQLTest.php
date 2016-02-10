@@ -9,7 +9,7 @@ class fSQLTest extends fSQLBaseTest
     function setUp()
     {
         parent::setUp();
-        $this->fsql =& new fSQLEnvironment();
+        $this->fsql = new fSQLEnvironment();
     }
 
     function tearDown()

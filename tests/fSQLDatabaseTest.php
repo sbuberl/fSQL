@@ -26,7 +26,7 @@ class fSQLDatabaseTest extends fSQLBaseTest
     {
         $name = 'shazam';
         $path = 'blah/blah';
-        $db =& new fSQLDatabase($name, $path);
+        $db = new fSQLDatabase($name, $path);
 
         $this->assertEquals($name, $db->name());
         $this->assertEquals($path, $db->path());
@@ -34,7 +34,7 @@ class fSQLDatabaseTest extends fSQLBaseTest
 
     function testClose()
     {
-        $db =& new fSQLDatabase('db1', parent::$tempDir);
+        $db = new fSQLDatabase('db1', parent::$tempDir);
         $db->createTable('customers', self::$columns, true);
         $db->close();
         $this->assertEmpty(get_object_vars($db));
@@ -43,8 +43,8 @@ class fSQLDatabaseTest extends fSQLBaseTest
     function testCreateTable()
     {
         $name = "customers";
-        $db =& new fSQLDatabase('db1', parent::$tempDir);
-        $table =& $db->createTable($name, self::$columns, false);
+        $db = new fSQLDatabase('db1', parent::$tempDir);
+        $table = $db->createTable($name, self::$columns, false);
         $this->assertInstanceOf('fSQLCachedTable', $table);
         $this->assertEquals($name, $table->name());
     }
@@ -52,8 +52,8 @@ class fSQLDatabaseTest extends fSQLBaseTest
     function testCreateTableTemp()
     {
         $name = "customers";
-        $db =& new fSQLDatabase('db1', parent::$tempDir);
-        $table =& $db->createTable($name, self::$columns, true);
+        $db = new fSQLDatabase('db1', parent::$tempDir);
+        $table = $db->createTable($name, self::$columns, true);
         $this->assertInstanceOf('fSQLTempTable', $table);
         $this->assertEquals($name, $table->name());
     }
@@ -62,7 +62,7 @@ class fSQLDatabaseTest extends fSQLBaseTest
     {
         $name = 'shazam';
         $path = 'blah/blah';
-        $db =& new fSQLDatabase($name, $path);
+        $db = new fSQLDatabase($name, $path);
 
         $tables = $db->listTables();
         $this->assertEmpty($tables);
@@ -70,7 +70,7 @@ class fSQLDatabaseTest extends fSQLBaseTest
 
     function testGetSequences()
     {
-        $db =& new fSQLDatabase('shazam', parent::$tempDir);
+        $db = new fSQLDatabase('shazam', parent::$tempDir);
         $sequences = $db->getSequences();
         $this->assertNotNull($sequences);
         $this->assertInstanceOf('fSQLSequencesFile', $sequences);
@@ -79,7 +79,7 @@ class fSQLDatabaseTest extends fSQLBaseTest
     // skips temp tables like mySQL does
     function testListTables()
     {
-        $db =& new fSQLDatabase('shazam', parent::$tempDir);
+        $db = new fSQLDatabase('shazam', parent::$tempDir);
         $db->createTable('temp1', self::$columns, true);
         $db->createTable('temp2', self::$columns, true);
         $db->createTable('real1', self::$columns, false);
@@ -91,8 +91,8 @@ class fSQLDatabaseTest extends fSQLBaseTest
 
     function testGetTableEmpty()
     {
-        $db =& new fSQLDatabase('shazam', parent::$tempDir);
-        $table =& $db->getTable('myTable');
+        $db = new fSQLDatabase('shazam', parent::$tempDir);
+        $table = $db->getTable('myTable');
         $this->assertInstanceOf('fSQLCachedTable', $table);
         $this->assertEquals('myTable', $table->name());
     }
@@ -100,10 +100,10 @@ class fSQLDatabaseTest extends fSQLBaseTest
     function testGetTableTemp()
     {
         $name = 'temp1';
-        $db =& new fSQLDatabase('shazam', parent::$tempDir);
+        $db = new fSQLDatabase('shazam', parent::$tempDir);
         $db->createTable($name, self::$columns, true);
 
-        $table =& $db->getTable($name);
+        $table = $db->getTable($name);
         $this->assertInstanceOf('fSQLTempTable', $table);
         $this->assertEquals($name, $table->name());
     }
@@ -111,18 +111,18 @@ class fSQLDatabaseTest extends fSQLBaseTest
     function testGetTable()
     {
         $name = 'table1';
-        $db =& new fSQLDatabase('shazam', parent::$tempDir);
+        $db = new fSQLDatabase('shazam', parent::$tempDir);
         $db->createTable($name, self::$columns, false);
         $db->createTable('table2', self::$columns, false);
 
-        $table =& $db->getTable($name);
+        $table = $db->getTable($name);
         $this->assertInstanceOf('fSQLCachedTable', $table);
         $this->assertEquals($name, $table->name());
     }
 
     function testRenameDoesntExist()
     {
-        $db =& new fSQLDatabase('shazam', parent::$tempDir);
+        $db = new fSQLDatabase('shazam', parent::$tempDir);
         $passed = $db->renameTable('answer42', 'else', $this);
         $this->assertFalse($passed);
     }
@@ -131,13 +131,13 @@ class fSQLDatabaseTest extends fSQLBaseTest
     {
         $from = 'blah';
         $to = 'else';
-        $db =& new fSQLDatabase('shazam', parent::$tempDir);
+        $db = new fSQLDatabase('shazam', parent::$tempDir);
         $db->createTable($from, self::$columns, false);
         $passed = $db->renameTable($from, $to, $db);
         $this->assertTrue($passed);
-        $newTable =& $db->getTable($to);
+        $newTable = $db->getTable($to);
         $this->assertTrue($newTable->exists());
-        $oldTable =& $db->getTable($from);
+        $oldTable = $db->getTable($from);
         $this->assertFalse($oldTable->exists());
     }
 
@@ -145,13 +145,13 @@ class fSQLDatabaseTest extends fSQLBaseTest
     {
         $from = 'blah';
         $to = 'else';
-        $db =& new fSQLDatabase('shazam', parent::$tempDir);
+        $db = new fSQLDatabase('shazam', parent::$tempDir);
         $db->createTable($from, self::$columns, true);
         $passed = $db->renameTable($from, $to, $db);
         $this->assertTrue($passed);
-        $newTable =& $db->getTable($to);
+        $newTable = $db->getTable($to);
         $this->assertTrue($newTable->exists());
-        $oldTable =& $db->getTable($from);
+        $oldTable = $db->getTable($from);
         $this->assertFalse($oldTable->exists());
     }
 
@@ -159,21 +159,21 @@ class fSQLDatabaseTest extends fSQLBaseTest
     {
         $from = 'temp1';
         $to = 'something';
-        $db =& new fSQLDatabase('shazam', parent::$tempDir);
+        $db = new fSQLDatabase('shazam', parent::$tempDir);
         $db->createTable($from, self::$columns, true);
 
-        $db2 =& new fSQLDatabase('other', $this->subDir);
+        $db2 = new fSQLDatabase('other', $this->subDir);
         $passed = $db->renameTable($from, $to, $db2);
         $this->assertTrue($passed);
-        $newTable =& $db2->getTable($to);
+        $newTable = $db2->getTable($to);
         $this->assertTrue($newTable->exists());
-        $oldTable =& $db->getTable($from);
+        $oldTable = $db->getTable($from);
         $this->assertFalse($oldTable->exists());
     }
 
     function testDropTableDoesntExist()
     {
-        $db =& new fSQLDatabase('shazam', parent::$tempDir);
+        $db = new fSQLDatabase('shazam', parent::$tempDir);
         $passed = $db->dropTable('answer42');
         $this->assertFalse($passed);
     }
@@ -181,22 +181,22 @@ class fSQLDatabaseTest extends fSQLBaseTest
     function testDropTable()
     {
         $name = 'blah';
-        $db =& new fSQLDatabase('shazam', parent::$tempDir);
+        $db = new fSQLDatabase('shazam', parent::$tempDir);
         $db->createTable($name, self::$columns, false);
         $passed = $db->dropTable($name);
         $this->assertTrue($passed);
-        $table =& $db->getTable($name);
+        $table = $db->getTable($name);
         $this->assertFalse($table->exists());
     }
 
     function testDropTableTemp()
     {
         $name = 'blah';
-        $db =& new fSQLDatabase('shazam', parent::$tempDir);
+        $db = new fSQLDatabase('shazam', parent::$tempDir);
         $db->createTable($name, self::$columns, true);
         $passed = $db->dropTable($name);
         $this->assertTrue($passed);
-        $table =& $db->getTable($name);
+        $table = $db->getTable($name);
         $this->assertFalse($table->exists());
     }
 }

@@ -7,8 +7,8 @@ class fSQLSequenceTest extends fSQLBaseTest
     function setUp()
     {
         parent::setUp();
-        $this->database =& new fSQLDatabase('db1', parent::$tempDir);
-        $this->sequences =& new fSQLSequencesFile($this->database);
+        $this->database = new fSQLDatabase('db1', parent::$tempDir);
+        $this->sequences = new fSQLSequencesFile($this->database);
         $this->sequences->create();
     }
 
@@ -20,14 +20,14 @@ class fSQLSequenceTest extends fSQLBaseTest
     function testConstructor()
     {
         $name = 'shazam';
-        $sequence =& new fSQLSequence($name, $this->sequences);
+        $sequence = new fSQLSequence($name, $this->sequences);
 
         $this->assertEquals($name, $sequence->name());
     }
 
     function testClose()
     {
-        $sequence =& new fSQLSequence($name, $this->sequences);
+        $sequence = new fSQLSequence('shazam', $this->sequences);
         $sequence->close();
         $this->assertEmpty(get_object_vars($sequence));
     }
@@ -39,7 +39,7 @@ class fSQLSequenceTest extends fSQLBaseTest
         $increment = -6;
         $min = -1000;
         $max = 0;
-        $sequence =& new fSQLSequence($name, $this->sequences);
+        $sequence = new fSQLSequence('ids', $this->sequences);
         $sequence->set($current, $start, $increment, $min, $max, false);
 
         $this->assertEquals($sequence->current, $current);
@@ -52,7 +52,7 @@ class fSQLSequenceTest extends fSQLBaseTest
 
     function testAlterErrors()
     {
-        $sequence =& new fSQLSequence($name, $this->sequences);
+        $sequence = new fSQLSequence('ids', $this->sequences);
         $sequence->set(12, 1, 2, 1, 1000, false);
 
         $result = $sequence->alter(array('INCREMENT' => 0));
@@ -67,7 +67,7 @@ class fSQLSequenceTest extends fSQLBaseTest
 
     function testAlterNothingInc()
     {
-        $sequence =& new fSQLSequence($name, $this->sequences);
+        $sequence = new fSQLSequence('ids', $this->sequences);
         $sequence->set(12, 3, 2, 1, 1000, false);
 
         $alterValues = array();
@@ -78,7 +78,7 @@ class fSQLSequenceTest extends fSQLBaseTest
 
     function testAlterNothingDec()
     {
-        $sequence =& new fSQLSequence($name, $this->sequences);
+        $sequence = new fSQLSequence('ids', $this->sequences);
         $sequence->set(12, 100, -4, 1, 200, false);
 
         $alterValues = array();
@@ -89,7 +89,7 @@ class fSQLSequenceTest extends fSQLBaseTest
 
     function testAlterAll()
     {
-        $sequence =& new fSQLSequence($name, $this->sequences);
+        $sequence = new fSQLSequence('ids', $this->sequences);
         $sequence->set(13, 1, 2, 1, 1000, false);
 
         $alterValues = array('RESTART' => 100, 'INCREMENT' => -5, 'MINVALUE' => 9, 'MAXVALUE' => 200, 'CYCLE' => 1);
@@ -104,7 +104,7 @@ class fSQLSequenceTest extends fSQLBaseTest
 
     function testAlterStart()
     {
-        $sequence =& new fSQLSequence($name, $this->sequences);
+        $sequence = new fSQLSequence('ids', $this->sequences);
         $sequence->set(13, 3, 2, 1, 1000, false);
 
         $alterValues = array('RESTART' => 'start');
@@ -117,7 +117,7 @@ class fSQLSequenceTest extends fSQLBaseTest
     {
         $current = 12;
         $increment = 2;
-        $sequence =& new fSQLSequence($name, $this->sequences);
+        $sequence = new fSQLSequence('ids', $this->sequences);
         $sequence->set($current, 1, $increment, 1, 1000, false);
 
         $next = $sequence->nextValueFor();
@@ -131,7 +131,7 @@ class fSQLSequenceTest extends fSQLBaseTest
     {
         $current = -100;
         $increment = -5;
-        $sequence =& new fSQLSequence($name, $this->sequences);
+        $sequence = new fSQLSequence('ids', $this->sequences);
         $sequence->set($current, -15, $increment, -1000, 0, false);
 
         $next = $sequence->nextValueFor();
@@ -143,7 +143,7 @@ class fSQLSequenceTest extends fSQLBaseTest
 
     function testNextValueForCycleInc()
     {
-        $sequence =& new fSQLSequence($name, $this->sequences);
+        $sequence = new fSQLSequence('ids', $this->sequences);
         $sequence->set(1, 1, 2, 1, 3, true);
 
         $this->assertEquals($sequence->nextValueFor(), 1);
@@ -153,7 +153,7 @@ class fSQLSequenceTest extends fSQLBaseTest
 
     function testNextValueForCycleDec()
     {
-        $sequence =& new fSQLSequence($name, $this->sequences);
+        $sequence = new fSQLSequence('ids', $this->sequences);
         $sequence->set(-1, -1, -2, -3, -1, true);
 
         $this->assertEquals($sequence->nextValueFor(), -1);
@@ -163,7 +163,7 @@ class fSQLSequenceTest extends fSQLBaseTest
 
     function testNextValueForBadCycle()
     {
-        $sequence =& new fSQLSequence($name, $this->sequences);
+        $sequence = new fSQLSequence('ids', $this->sequences);
         $sequence->set(1, 1, 2, 1, 3, false);
 
         $this->assertEquals($sequence->nextValueFor(), 1);
@@ -175,7 +175,7 @@ class fSQLSequenceTest extends fSQLBaseTest
     {
         $current = 9;
         $start = 3;
-        $sequence =& new fSQLSequence($name, $this->sequences);
+        $sequence = new fSQLSequence('ids', $this->sequences);
         $sequence->set($current, $start, 1, 1, 1000, false);
 
         $sequence->restart();
