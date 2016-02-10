@@ -173,13 +173,16 @@ class fSQLTable
     }
 
     function dropIdentity() {
-        $columns = $this->getColumns();
-        $columnName = $this->identity->getColumnName();
-        $columns[$columnName]['auto'] ='0';
-        $columns[$columnName]['restraint'] = array();
-        $this->identity->close();
-        $this->identity = null;
-        $this->setColumns($columns);
+        $this->getIdentity();
+        if($this->identity !== null) {
+            $columns = $this->getColumns();
+            $columnName = $this->identity->getColumnName();
+            $columns[$columnName]['auto'] ='0';
+            $columns[$columnName]['restraint'] = array();
+            $this->identity->close();
+            $this->identity = null;
+            $this->setColumns($columns);
+        }
     }
 
     function insertRow($data)
@@ -240,7 +243,7 @@ class fSQLTempTable extends fSQLTable
 
     function truncate()
     {
-        $this->enries = array();
+        $this->entries = array();
     }
 
     /* Unecessary for temporary tables */
@@ -275,6 +278,7 @@ class fSQLCachedTable extends fSQLTable
 
     function close()
     {
+        parent::close();
         $this->columnsFile->close();
         $this->columnsLockFile->close();
         $this->dataFile->close();
@@ -603,7 +607,7 @@ class fSQLCachedTable extends fSQLTable
                 if($value === NULL) {
                     $value = 'NULL';
                 } else if($columnDefs[$key]['type'] === FSQL_TYPE_ENUM) {
-                    $value = (int) array_search($value, $columnDefs[$key]['restraint']);;
+                    $value = (int) array_search($value, $columnDefs[$key]['restraint']);
                 } else if(is_string($value)) {
                     $value = "'$value'";
                 }
