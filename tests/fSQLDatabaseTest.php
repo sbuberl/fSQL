@@ -68,6 +68,14 @@ class fSQLDatabaseTest extends fSQLBaseTest
         $this->assertEmpty($tables);
     }
 
+    function testGetSequences()
+    {
+        $db =& new fSQLDatabase('shazam', parent::$tempDir);
+        $sequences = $db->getSequences();
+        $this->assertNotNull($sequences);
+        $this->assertInstanceOf('fSQLSequencesFile', $sequences);
+    }
+
     // skips temp tables like mySQL does
     function testListTables()
     {
