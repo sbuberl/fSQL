@@ -2,7 +2,7 @@
 
 require_once dirname(__FILE__) . '/../fSQL.php';
 
-class fSQLBaseTest extends PHPUnit_Framework_TestCase
+abstract class fSQLBaseTest extends PHPUnit_Framework_TestCase
 {
     static $tempDir = ".tmp/";
 
@@ -12,10 +12,6 @@ class fSQLBaseTest extends PHPUnit_Framework_TestCase
           self::deleteDir(self::$tempDir);
         }
         mkdir(self::$tempDir);
-    }
-
-    function testHack()
-    {
     }
 
     public static function deleteDir($dirPath) {
