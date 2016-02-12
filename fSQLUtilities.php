@@ -3,20 +3,20 @@
 /* A reentrant read write lock for a file */
 class fSQLFile
 {
-    var $handle;
-    var $filepath;
-    var $lock;
-    var $rcount = 0;
-    var $wcount = 0;
+    protected $handle;
+    private $filepath;
+    private $lock;
+    private $rcount = 0;
+    private $wcount = 0;
 
-    function fSQLFile($filepath)
+    function __construct($filepath)
     {
         $this->filepath = $filepath;
         $this->handle = null;
         $this->lock = 0;
     }
 
-    function close()
+    function __destruct()
     {
         // should be unlocked before reaches here, but just in case,
         // release all locks and close file
@@ -24,7 +24,6 @@ class fSQLFile
             // flock($this->handle, LOCK_UN);
             fclose($this->handle);
         }
-        unset($this->filepath, $this->handle, $this->lock, $this->rcount, $this->wcount);
     }
 
     function exists()
@@ -38,7 +37,6 @@ class fSQLFile
         if($this->handle === null)
         {
             unlink($this->filepath);
-            $this->close();
             return true;
         }
         else
@@ -156,18 +154,17 @@ class fSQLFile
 
 class fSQLMicrotimeLockFile extends fSQLFile
 {
-    var $loadTime = null;
-    var $lastReadStamp = null;
+    private $loadTime = null;
+    private $lastReadStamp = null;
+
+    function __destruct()
+    {
+        parent::__destruct();
+    }
 
     function accept()
     {
         $this->loadTime = $this->lastReadStamp;
-    }
-
-    function close()
-    {
-        unset($this->loadTime, $this->lastReadStamp);
-        parent::close();
     }
 
     function reset()

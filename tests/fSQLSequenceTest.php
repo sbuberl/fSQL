@@ -14,7 +14,6 @@ class fSQLSequenceTest extends fSQLBaseTest
 
     function tearDown()
     {
-        $this->sequences->close();
     }
 
     function testConstructor()
@@ -23,13 +22,6 @@ class fSQLSequenceTest extends fSQLBaseTest
         $sequence = new fSQLSequence($name, $this->sequences);
 
         $this->assertEquals($name, $sequence->name());
-    }
-
-    function testClose()
-    {
-        $sequence = new fSQLSequence('shazam', $this->sequences);
-        $sequence->close();
-        $this->assertEmpty(get_object_vars($sequence));
     }
 
     function testSet()

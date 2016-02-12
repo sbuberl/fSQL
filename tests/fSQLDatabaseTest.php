@@ -32,14 +32,6 @@ class fSQLDatabaseTest extends fSQLBaseTest
         $this->assertEquals($path, $db->path());
     }
 
-    function testClose()
-    {
-        $db = new fSQLDatabase('db1', parent::$tempDir);
-        $db->createTable('customers', self::$columns, true);
-        $db->close();
-        $this->assertEmpty(get_object_vars($db));
-    }
-
     function testCreateTable()
     {
         $name = "customers";

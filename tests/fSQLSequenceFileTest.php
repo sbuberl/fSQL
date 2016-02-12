@@ -11,23 +11,10 @@ class fSQLSequenceFileTest extends fSQLBaseTest
         $this->sequences = new fSQLSequencesFile($this->database);
     }
 
-    function tearDown()
-    {
-        if($this->sequences !== null)
-            $this->sequences->close();
-    }
-
     function testConstructor()
     {
         $this->assertEquals($this->sequences->database->name(), $this->database->name());
         $this->assertEmpty($this->sequences->sequences);
-    }
-
-    function testClose()
-    {
-        $this->sequences->close();
-        $this->assertEmpty(get_object_vars($this->sequences));
-        $this->sequences = null;
     }
 
     function testCreate()

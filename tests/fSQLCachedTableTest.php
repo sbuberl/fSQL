@@ -38,13 +38,6 @@ class fSQLCachedTablest extends fSQLBaseTest
         $this->assertEquals($this->db, $table->database());
     }
 
-    function testClose()
-    {
-        $table = new fSQLCachedTable($this->db, 'table123');
-        $table->close();
-        $this->assertEmpty(get_object_vars($table));
-    }
-
     function testCreate()
     {
         $tableName = 'blah';
@@ -165,10 +158,10 @@ class fSQLCachedTablest extends fSQLBaseTest
 
     function testDrop()
     {
-        $table = fSQLCachedTable::create($this->db, 'blah', self::$columns);
+        $tableName = 'blah';
+        $table = fSQLCachedTable::create($this->db, $tableName, self::$columns);
         $dataFile = $table->dataFile->getPath();
         $table->drop();
-        $this->assertEmpty(get_object_vars($table));
         $this->assertFalse(file_exists($dataFile));
     }
 
@@ -214,7 +207,7 @@ class fSQLCachedTablest extends fSQLBaseTest
         $this->assertNull($table->getIdentity());
 
         $columns = $table->getColumns();
-        $this->assertEmpty($columns[0][0]['restraint']);
+        $this->assertEmpty($columns['id']['restraint']);
     }
 }
 

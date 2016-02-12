@@ -1,22 +1,20 @@
 <?php
 
-function _fsql_abstract_method()
-{
-    trigger_error('This method is abstract. It should be overriden',E_USER_ERROR);
-}
-
 class fSQLTableCursor
 {
-    var $entries;
-    var $num_rows;
-    var $pos;
+    private $entries;
+    private $num_rows;
+    private $pos;
 
-    function close() {
-        unset($this->entries, $this->num_rows, $this->pos);
+    function __construct(&$entries)
+    {
+        $this->entries = &$entries;
+        $this->first();
     }
 
     function first()
     {
+        $this->num_rows = count($this->entries);
         $this->pos = 0;
         return $this->pos;
     }
@@ -62,24 +60,19 @@ class fSQLTableCursor
     }
 }
 
-class fSQLTable
+abstract class fSQLTable
 {
-    var $name;
-    var $database;
-    var $cursor = null;
-    var $columns = null;
-    var $entries = null;
-    var $identity = null;
+    protected $name;
+    protected $database;
+    protected $cursor = null;
+    protected $columns = null;
+    protected $entries = null;
+    protected $identity = null;
 
-    function fSQLTable(&$database, $name)
+    function __construct(fSQLDatabase $database, $name)
     {
         $this->name = $name;
-        $this->database =& $database;
-    }
-
-    function close()
-    {
-        unset($this->name, $this->database, $this->cursor, $this->columns, $this->entries, $this->identity);
+        $this->database = $database;
     }
 
     function name()
@@ -92,30 +85,18 @@ class fSQLTable
         return $this->database->name(). '.' . $this->name;
     }
 
-    function &database()
+    function database()
     {
         return $this->database;
     }
 
-    function exists()
-    {
-        _fsql_abstract_method();
-    }
+    abstract function exists();
 
-    function temporary()
-    {
-        _fsql_abstract_method();
-    }
+    abstract function temporary();
 
-    function drop()
-    {
-        _fsql_abstract_method();
-    }
+    abstract function drop();
 
-    function truncate()
-    {
-        _fsql_abstract_method();
-    }
+    abstract function truncate();
 
     function getColumnNames()
     {
@@ -137,33 +118,25 @@ class fSQLTable
         return $this->entries;
     }
 
-    function &getCursor()
+    function getCursor()
     {
         if($this->cursor === null)
-            $this->cursor =& new fSQLTableCursor;
+            $this->cursor = new fSQLTableCursor($this->entries);
 
-        $this->cursor->entries =& $this->entries;
-        $this->cursor->num_rows = count($this->entries);
-        $this->cursor->pos = 0;
-
+        $this->cursor->first();
         return $this->cursor;
     }
 
     function newCursor()
     {
-        $cursor =& new fSQLTableCursor;
-        $cursor->entries =& $this->entries;
-        $cursor->num_rows = count($this->entries);
-        $cursor->pos = 0;
-
-        return $cursor;
+        return new fSQLTableCursor($this->entries);
     }
 
-    function &getIdentity() {
+    function getIdentity() {
          if($this->identity === null) {
             foreach($this->getColumns() as $columnName => $column) {
                 if($column['auto']) {
-                    $this->identity =& new fSQLIdentity($this, $columnName);
+                    $this->identity = new fSQLIdentity($this, $columnName);
                     $this->identity->load();
                     break;
                 }
@@ -179,7 +152,6 @@ class fSQLTable
             $columnName = $this->identity->getColumnName();
             $columns[$columnName]['auto'] ='0';
             $columns[$columnName]['restraint'] = array();
-            $this->identity->close();
             $this->identity = null;
             $this->setColumns($columns);
         }
@@ -201,27 +173,21 @@ class fSQLTable
         unset($this->entries[$row]);
     }
 
-    function commit()
-    {
-        _fsql_abstract_method();
-    }
+    abstract function commit();
 
-    function rollback()
-    {
-        _fsql_abstract_method();
-    }
+    abstract function rollback();
 
-    function isReadLocked() { _fsql_abstract_method(); }
-    function readLock() { _fsql_abstract_method(); }
-    function writeLock() { _fsql_abstract_method(); }
-    function unlock() { _fsql_abstract_method(); }
+    abstract function isReadLocked();
+    abstract function readLock();
+    abstract function writeLock();
+    abstract function unlock();
 }
 
 class fSQLTempTable extends fSQLTable
 {
-    function fSQLTempTable(&$database, $tableName, $columnDefs)
+    function fSQLTempTable(fSQLDatabase $database, $tableName, $columnDefs)
     {
-        parent::fSQLTable($database, $tableName);
+        parent::__construct($database, $tableName);
         $this->columns = $columnDefs;
         $this->entries = array();
     }
@@ -238,7 +204,6 @@ class fSQLTempTable extends fSQLTable
 
     function drop()
     {
-        $this->close();
     }
 
     function truncate()
@@ -257,16 +222,16 @@ class fSQLTempTable extends fSQLTable
 
 class fSQLCachedTable extends fSQLTable
 {
-    var $uncommited = false;
-    var $columnsLockFile;
-    var $columnsFile;
-    var $dataLockFile;
-    var $dataFile;
-    var $lock = null;
+    private $uncommited = false;
+    public $columnsLockFile;
+    public $columnsFile;
+    public $dataLockFile;
+    public $dataFile;
+    private $lock = null;
 
-    function fSQLCachedTable(&$database, $table_name)
+    function fSQLCachedTable(fSQLDatabase $database, $table_name)
     {
-        parent::fSQLTable($database, $table_name);
+        parent::__construct($database, $table_name);
         $path_to_db = $this->database->path();
         $columns_path = $path_to_db.$table_name.'.columns';
         $data_path = $path_to_db.$table_name.'.data';
@@ -276,20 +241,9 @@ class fSQLCachedTable extends fSQLTable
         $this->dataFile = new fSQLFile($data_path.'.cgi');
     }
 
-    function close()
+    static function create($database, $table_name, $columnDefs)
     {
-        parent::close();
-        $this->columnsFile->close();
-        $this->columnsLockFile->close();
-        $this->dataFile->close();
-        $this->dataLockFile->close();
-        unset($this->uncommited, $this->columnsFile, $this->columnsLockFile, $this->dataLockFile,
-            $this->dataFile, $this->lock);
-    }
-
-    static function &create(&$database, $table_name, $columnDefs)
-    {
-        $table =& new fSQLCachedTable($database, $table_name);
+        $table = new fSQLCachedTable($database, $table_name);
         $table->columns = $columnDefs;
 
         // create the columns lock
@@ -298,7 +252,7 @@ class fSQLCachedTable extends fSQLTable
 
         // create the columns file
         $table->columnsFile->acquireWrite();
-        $toprint = $table->_printColumns($columnDefs);
+        $toprint = $table->printColumns($columnDefs);
         fwrite($table->columnsFile->getHandle(), $toprint);
         $table->columnsFile->releaseWrite();
 
@@ -314,7 +268,7 @@ class fSQLCachedTable extends fSQLTable
         return $table;
     }
 
-    function _printColumns($columnDefs)
+    private function printColumns($columnDefs)
     {
         $toprint = count($columnDefs)."\r\n";
         foreach($columnDefs as $name => $column) {
@@ -353,7 +307,6 @@ class fSQLCachedTable extends fSQLTable
         $this->columnsLockFile->drop();
         $this->dataFile->drop();
         $this->dataLockFile->drop();
-        $this->close();
     }
 
     function truncate()
@@ -454,30 +407,30 @@ class fSQLCachedTable extends fSQLTable
 
         $this->columnsLockFile->releaseRead();
 
-        return $this->columns;
+        return parent::getColumns();
     }
 
     function getEntries()
     {
-        $this->_loadEntries();
-        return $this->entries;
+        $this->loadEntries();
+        return parent::getEntries();
     }
 
-    function &getCursor()
+    function getCursor()
     {
-        $this->_loadEntries();
+        $this->loadEntries();
 
         return parent::getCursor();
     }
 
     function newCursor()
     {
-        $this->_loadEntries();
+        $this->loadEntries();
 
         return parent::newCursor();
     }
 
-    function _loadEntries()
+    private function loadEntries()
     {
         $this->dataLockFile->acquireRead();
         if($this->dataLockFile->wasModified())
@@ -539,7 +492,7 @@ class fSQLCachedTable extends fSQLTable
                                 $number = (int) $number;
                             }
                             $entries[$row][$m] = $number;
-                        } else if($columnDefs['type'] === FSQL_TYPE_ENUM) {
+                        } else if($columnDefs[$m]['type'] === FSQL_TYPE_ENUM) {
                             $index = (int) $matches[2][$m];
                             $entries[$row][$m] = $index > 0 ? $columnDefs[$m]['restraint'][$index] : "";
                         } else {
@@ -560,19 +513,19 @@ class fSQLCachedTable extends fSQLTable
     }
 
     function insertRow($data) {
-        $this->_loadEntries();
+        $this->loadEntries();
         parent::insertRow($data);
         $this->uncommited = true;
     }
 
     function updateRow($row, $data) {
-        $this->_loadEntries();
+        $this->loadEntries();
         parent::updateRow($row, $data);
         $this->uncommited = true;
     }
 
     function deleteRow($row) {
-        $this->_loadEntries();
+        $this->loadEntries();
         parent::deleteRow($row);
         $this->uncommited = true;
     }
@@ -581,10 +534,10 @@ class fSQLCachedTable extends fSQLTable
     {
         $this->columnsLockFile->acquireWrite();
 
-        $this->columns = $columnDefs;
+        parent::setColumns($columnDefs);
 
         $this->columnsFile->acquireWrite();
-        $toprint = $this->_printColumns($columnDefs);
+        $toprint = $this->printColumns($columnDefs);
         $columnsHandle = $this->columnsFile->getHandle();
         ftruncate($columnsHandle, 0);
         fwrite($columnsHandle, $toprint);
@@ -688,29 +641,16 @@ class fSQLCachedTable extends fSQLTable
 
 class fSQLDatabase
 {
-    var $name = null;
-    var $path = null;
-    var $loadedTables = array();
-    var $sequencesFile;
+    private $name = null;
+    private $path = null;
+    private $loadedTables = array();
+    private $sequencesFile;
 
     function fSQLDatabase($name, $filePath)
     {
         $this->name = $name;
         $this->path = $filePath;
-        $this->sequencesFile =& new fSQLSequencesFile($this);
-    }
-
-    function close()
-    {
-        $this->sequencesFile = null;
-        foreach(array_keys($this->loadedTables) as $table_name) {
-            $table =& $this->loadedTables[$table_name];
-            $table->close();
-            $table = null;
-            unset($table);
-        }
-
-        unset($this->name, $this->path, $this->loadedTables, $this->sequencesFile);
+        $this->sequencesFile = new fSQLSequencesFile($this);
     }
 
     function name()
@@ -723,32 +663,31 @@ class fSQLDatabase
         return $this->path;
     }
 
-    function &createTable($table_name, $columns, $temporary = false)
+    function createTable($table_name, $columns, $temporary = false)
     {
         $table = false;
 
         if(!$temporary) {
-            $table =& fSQLCachedTable::create($this, $table_name, $columns);
+            $table = fSQLCachedTable::create($this, $table_name, $columns);
         } else {
-            $table =& new fSQLTempTable($this, $table_name, $columns);
-            $this->loadedTables[$table_name] =& $table;
+            $table = new fSQLTempTable($this, $table_name, $columns);
+            $this->loadedTables[$table_name] = $table;
         }
 
         return $table;
     }
 
-    function &getTable($table_name)
+    function getTable($table_name)
     {
         if(!isset($this->loadedTables[$table_name])) {
-            $table =& new fSQLCachedTable($this, $table_name);
-            $this->loadedTables[$table_name] =& $table;
-            unset($table);
+            $table = new fSQLCachedTable($this, $table_name);
+            $this->loadedTables[$table_name] = $table;
         }
 
         return $this->loadedTables[$table_name];
     }
 
-    function &getSequences()
+    function getSequences()
     {
         return $this->sequencesFile;
     }
@@ -771,9 +710,9 @@ class fSQLDatabase
         return $tables;
     }
 
-    function renameTable($old_table_name, $new_table_name, &$new_db)
+    function renameTable($old_table_name, $new_table_name, $new_db)
     {
-        $oldTable =& $this->getTable($old_table_name);
+        $oldTable = $this->getTable($old_table_name);
         if($oldTable->exists()) {
             if(!$oldTable->temporary()) {
                 $newTable = $new_db->createTable($new_table_name,  $oldTable->getColumns());
@@ -781,7 +720,7 @@ class fSQLDatabase
                 copy($oldTable->dataLockFile->getPath(), $newTable->dataLockFile->getPath());
                 $this->dropTable($old_table_name);
             } else {
-                $new_db->loadedTables[$new_table_name] =& $this->loadedTables[$old_table_name];
+                $new_db->loadedTables[$new_table_name] = $this->loadedTables[$old_table_name];
                 unset($this->loadedTables[$old_table_name]);
             }
 
@@ -793,14 +732,10 @@ class fSQLDatabase
 
     function dropTable($table_name)
     {
-        $table =& $this->getTable($table_name);
+        $table = $this->getTable($table_name);
         if($table->exists()) {
             $table->drop();
-
-            $table = null;
             unset($this->loadedTables[$table_name]);
-            unset($table);
-
             return true;
         } else {
             return false;
@@ -808,38 +743,26 @@ class fSQLDatabase
     }
 }
 
-class fSQLSequenceBase
+abstract class fSQLSequenceBase
 {
-    var $lockFile;
-    var $current;
-    var $start;
-    var $increment;
-    var $min;
-    var $max;
-    var $cycle;
+    private $lockFile;
+    public $current;
+    public $start;
+    public $increment;
+    public $min;
+    public $max;
+    public $cycle;
 
-    function fSQLSequenceBase(&$lockFile)
+    function fSQLSequenceBase(fSQLMicrotimeLockFile $lockFile)
     {
-        $this->lockFile =& $lockFile;
+        $this->lockFile = $lockFile;
     }
 
-    function close()
-    {
-        unset($this->lockFile, $this->current, $this->start, $this->increment, $this->min,
-            $this->max, $this->cycle);
-    }
+    abstract function load();
 
-    function load()
-    {
-        return false;
-    }
+    abstract function save();
 
-    function save()
-    {
-        return false;
-    }
-
-    function _lockAndReload()
+    private function lockAndReload()
     {
         $this->lockFile->acquireWrite();
         if($this->lockFile->wasModified()) {
@@ -847,7 +770,7 @@ class fSQLSequenceBase
         }
     }
 
-    function _saveAndUnlock()
+    private function saveAndUnlock()
     {
         $this->save();
 
@@ -865,7 +788,7 @@ class fSQLSequenceBase
     }
 
     function alter($updates) {
-        $this->_lockAndReload();
+        $this->lockAndReload();
 
         if(array_key_exists('INCREMENT', $updates)) {
             $this->increment = (int) $updates['INCREMENT'];
@@ -907,14 +830,14 @@ class fSQLSequenceBase
             $this->current = $this->max;
         }
 
-        $this->_saveAndUnlock();
+        $this->saveAndUnlock();
 
         return true;
     }
 
     function nextValueFor()
     {
-        $this->_lockAndReload();
+        $this->lockAndReload();
 
         $cycled = false;
         if($this->increment > 0 && $this->current > $this->max) {
@@ -933,38 +856,32 @@ class fSQLSequenceBase
         $current = $this->current;
         $this->current += $this->increment;
 
-        $this->_saveAndUnlock();
+        $this->saveAndUnlock();
 
         return $current;
     }
 
     function restart()
     {
-        $this->_lockAndReload();
+        $this->lockAndReload();
 
         $this->current = $this->start;
 
-        $this->_saveAndUnlock();
+        $this->saveAndUnlock();
     }
 }
 
 class fSQLIdentity extends fSQLSequenceBase
 {
-    var $table;
-    var $columnName;
-    var $always;
+    private $table;
+    private $columnName;
+    private $always;
 
-    function fSQLIdentity(&$table, $columnName)
+    function fSQLIdentity(fSQLTable $table, $columnName)
     {
-        parent::fSQLSequenceBase($table->columnsLockFile);
-        $this->table =& $table;
+        parent::__construct($table->columnsLockFile);
+        $this->table = $table;
         $this->columnName = $columnName;
-    }
-
-    function close()
-    {
-        parent::close();
-        unset($this->table, $this->columnName, $this->always);
     }
 
     function getColumnName()
@@ -1000,20 +917,14 @@ class fSQLIdentity extends fSQLSequenceBase
 
 class fSQLSequence extends fSQLSequenceBase
 {
-    var $name;
-    var $file;
+    private $name;
+    private $file;
 
-    function fSQLSequence($name, &$file)
+    function fSQLSequence($name, fSQLSequencesFile $file)
     {
-        parent::fSQLSequenceBase($file->lockFile);
+        parent::__construct($file->lockFile);
         $this->name = $name;
-        $this->file =& $file;
-    }
-
-    function close()
-    {
-        parent::close();
-        unset($this->name, $this->file);
+        $this->file = $file;
     }
 
     function name()
@@ -1039,20 +950,13 @@ class fSQLSequencesFile
     var $file;
     var $lockFile;
 
-    function fSQLSequencesFile(&$database)
+    function fSQLSequencesFile(fSQLDatabase $database)
     {
-        $this->database =& $database;
+        $this->database = $database;
         $path = $database->path().'sequences';
         $this->sequences = array();
         $this->file = new fSQLFile($path.'.cgi');
         $this->lockFile = new fSQLMicrotimeLockFile($path.'.lock.cgi');
-    }
-
-    function close()
-    {
-        $this->file->close();
-        $this->lockFile->close();
-        unset($this->database, $this->sequences, $this->file, $this->lockFile);
     }
 
     function create()
@@ -1079,9 +983,9 @@ class fSQLSequencesFile
 
         $this->reload();
 
-        $sequence =& new fSQLSequence($name, $this);
+        $sequence = new fSQLSequence($name, $this);
         $sequence->set($start,$start,$increment,$min,$max,$cycle);
-        $this->sequences[$name] =& $sequence;
+        $this->sequences[$name] = $sequence;
 
         $fileHandle = $this->file->getHandle();
         fseek($fileHandle, 0, SEEK_END);
@@ -1092,13 +996,13 @@ class fSQLSequencesFile
         $this->lockFile->releaseWrite();
     }
 
-    function &getSequence($name)
+    function getSequence($name)
     {
         $this->lockFile->acquireRead();
         $this->reload();
         $sequence = false;
         if(isset($this->sequences[$name])) {
-            $sequence =& $this->sequences[$name];
+            $sequence = $this->sequences[$name];
         }
         $this->lockFile->releaseRead();
         return $sequence;
@@ -1109,8 +1013,6 @@ class fSQLSequencesFile
         $this->lockFile->acquireWrite();
         $this->reload();
         if(isset($this->sequences[$name])) {
-            $this->sequences[$name]->close();
-            $this->sequences[$name] = null;
             unset($this->sequences[$name]);
         }
 
@@ -1130,12 +1032,12 @@ class fSQLSequencesFile
                 fscanf($fileHandle, "%[^:]: %d;%d;%d;%d;%d;%d\r\n", $name, $current,
                     $start,$increment,$min,$max,$cycle);
                 if(!isset($this->sequences[$name])) {
-                    $this->sequences[$name] =& new fSQLSequence($name, $this);
+                    $this->sequences[$name] = new fSQLSequence($name, $this);
                 }
                 $this->sequences[$name]->set($current,$start,$increment,$min,$max,$cycle);
             }
 
-            $this->file->acquireRead();
+            $this->file->releaseRead();
         }
         $this->lockFile->releaseRead();
     }

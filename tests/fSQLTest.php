@@ -14,7 +14,6 @@ class fSQLTest extends fSQLBaseTest
 
     function tearDown()
     {
-        $this->fsql->close();
         unset($this->fsql);
     }
 
@@ -28,8 +27,8 @@ class fSQLTest extends fSQLBaseTest
         $passed = $this->fsql->define_db($db2Name, "./");
         $this->assertTrue($passed);
 
-        $this->assertTrue(isset($this->fsql->databases[$dbName]));
-        $this->assertTrue(isset($this->fsql->databases[$db2Name]));
+        $this->assertTrue($this->fsql->get_database($dbName) !== false);
+        $this->assertTrue($this->fsql->get_database($db2Name) !== false);
     }
 
     function testSelectDB()
@@ -44,13 +43,14 @@ class fSQLTest extends fSQLBaseTest
 
         $db1Passed = $this->fsql->select_db($dbName);
         $this->assertTrue($db1Passed);
-        $this->assertNotNull($this->fsql->currentDB);
-        $this->assertEquals($this->fsql->currentDB->name(), $dbName);
+        $currentDb = $this->fsql->current_db();
+        $this->assertNotNull($currentDb);
+        $this->assertEquals($currentDb->name(), $dbName);
 
         $fakePassed = $this->fsql->select_db($fakeDb);
         $this->assertFalse($fakePassed);
         $this->assertEquals(trim($this->fsql->error()), "No database called {$fakeDb} found");
-        $this->assertEquals($this->fsql->currentDB->name(), $dbName);
+        $this->assertEquals($this->fsql->current_db()->name(), $dbName);
     }
 }
 

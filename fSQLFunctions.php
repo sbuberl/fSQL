@@ -1,17 +1,17 @@
 <?php
 
-define('FSQL_FUNC_REGISTERED', 0, true);
-define('FSQL_FUNC_NORMAL', 1, true);
-define('FSQL_FUNC_CUSTOM_PARSE', 2, true);
-define('FSQL_FUNC_BUILTIN_ID', 4, true);
-define('FSQL_FUNC_AGGREGATE', 8, true);
+define('FSQL_FUNC_REGISTERED', 0);
+define('FSQL_FUNC_NORMAL', 1);
+define('FSQL_FUNC_CUSTOM_PARSE', 2);
+define('FSQL_FUNC_BUILTIN_ID', 4);
+define('FSQL_FUNC_AGGREGATE', 8);
 
 class fSQLFunctions
 {
-
-    var $allowed = array('abs','acos','asin','atan2','atan','ceil','cos','crc32','exp','floor',
+    private $allowed = array('abs','acos','asin','atan2','atan','ceil','cos','crc32','exp','floor',
        'ltrim','md5','pi','pow','rand','rtrim','round','sha1','sin','soundex','sqrt','strcmp','tan');
-    var $custom = array(
+
+    private $custom = array(
         'any' => FSQL_FUNC_AGGREGATE,
         'avg' => FSQL_FUNC_AGGREGATE,
         'concat' => FSQL_FUNC_NORMAL,
@@ -54,18 +54,13 @@ class fSQLFunctions
         'year' => FSQL_FUNC_NORMAL
     );
 
-    var $renamed = array('conv'=>'base_convert','ceiling' => 'ceil','degrees'=>'rad2deg','format'=>'number_format',
+    private $renamed = array('conv'=>'base_convert','ceiling' => 'ceil','degrees'=>'rad2deg','format'=>'number_format',
        'length'=>'strlen','lower'=>'strtolower','ln'=>'log','power'=>'pow','quote'=>'addslashes',
        'radians'=>'deg2rad','repeat'=>'str_repeat','replace'=>'strtr','reverse'=>'strrev',
        'rpad'=>'str_pad','sha' => 'sha1','some' => 'any','substr'=>'substring','upper'=>'strtoupper');
 
-    function fSQLFunctions()
+    function __construct()
     {
-    }
-
-    function close()
-    {
-        unset($this->allowed, $this->aggregates, $this->custom, $this->renamed);
     }
 
     function lookup($function)
