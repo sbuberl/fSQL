@@ -409,7 +409,7 @@ class fSQLEnvironment
                         $keycolumns = explode(",", $Columns[3][$c]);
                         foreach($keycolumns as $keycolumn)
                         {
-                            $new_columns[trim($keycolumn)]['key'] = $keytype{0};
+                            $new_columns[trim($keycolumn)]['key'] = $keytype[0];
                         }
                     }
                     else
@@ -808,7 +808,7 @@ class fSQLEnvironment
                         return $this->set_error('Error getting next value for identity column: '.$col_name);
                     }
                 } else {
-                    if($identity->always) {
+                    if($identity->getAlways()) {
                         return $this->set_error("Manual value inserted into an ALWAYS identity column");
                     }
                     $data = $this->parse_value($columnDef, $data);

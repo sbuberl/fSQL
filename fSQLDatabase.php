@@ -607,8 +607,8 @@ class fSQLCachedTable extends fSQLTable
 
     function writeLock()
     {
-        $success = $this->columnsLockFile->acquireRead() && $this->columnsFile->acquireRead()
-            && $this->dataLockFile->acquireRead() && $this->dataFile->acquireRead();
+        $success = $this->columnsLockFile->acquireWrite() && $this->columnsFile->acquireWrite()
+            && $this->dataLockFile->acquireWrite() && $this->dataFile->acquireWrite();
         if($success) {
             $this->lock = 'w';
             return true;
@@ -777,7 +777,7 @@ abstract class fSQLSequenceBase
         $this->lockFile->releaseWrite();
     }
 
-    function set($current, $start,$increment,$min,$max,$cycle)
+    function set($current,$start,$increment,$min,$max,$cycle)
     {
         $this->current = $current;
         $this->start = $start;
@@ -824,10 +824,6 @@ abstract class fSQLSequenceBase
                 $this->lockFile->releaseWrite();
                 return 'Sequence/identity restart value not between min and max';
             }
-        } else if($climbing) {
-            $this->current = $this->min;
-        } else {
-            $this->current = $this->max;
         }
 
         $this->saveAndUnlock();
@@ -887,6 +883,12 @@ class fSQLIdentity extends fSQLSequenceBase
     function getColumnName()
     {
         return $this->columnName;
+    }
+
+    function getAlways()
+    {
+        $this->load();
+        return $this->always;
     }
 
     function load()
