@@ -14,6 +14,10 @@ class fSQLBaseTest extends PHPUnit_Framework_TestCase
         mkdir(self::$tempDir);
     }
 
+    function testHack()
+    {
+    }
+
     public static function deleteDir($dirPath) {
         if(! is_dir($dirPath)) {
             throw new InvalidArgumentException("$dirPath must be a directory");
