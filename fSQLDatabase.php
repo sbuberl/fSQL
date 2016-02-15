@@ -752,10 +752,16 @@ abstract class fSQLSequenceBase
     public $min;
     public $max;
     public $cycle;
+    protected $lastValue = null;
 
     function fSQLSequenceBase(fSQLMicrotimeLockFile $lockFile)
     {
         $this->lockFile = $lockFile;
+    }
+
+    function lastValue()
+    {
+        return $this->lastValue;
     }
 
     abstract function load();
@@ -850,6 +856,7 @@ abstract class fSQLSequenceBase
         }
 
         $current = $this->current;
+        $this->lastValue = $current;
         $this->current += $this->increment;
 
         $this->saveAndUnlock();

@@ -19,6 +19,7 @@ class fSQLFunctions
         'count' => FSQL_FUNC_AGGREGATE,
         'curdate' => FSQL_FUNC_NORMAL,
         'curtime' => FSQL_FUNC_NORMAL,
+        'currval' => FSQL_FUNC_NORMAL,
         'database' =>  FSQL_FUNC_NORMAL,
         'dayofweek' => FSQL_FUNC_NORMAL,
         'dayofyear' => FSQL_FUNC_NORMAL,
@@ -37,6 +38,7 @@ class fSQLFunctions
         'min' => FSQL_FUNC_AGGREGATE,
         'mod' => FSQL_FUNC_NORMAL,
         'month' => FSQL_FUNC_NORMAL,
+        'nextval' => FSQL_FUNC_NORMAL,
         'now' => FSQL_FUNC_NORMAL,
         'overlay' => FSQL_FUNC_CUSTOM_PARSE,
         'position' => FSQL_FUNC_CUSTOM_PARSE,
@@ -59,8 +61,11 @@ class fSQLFunctions
        'radians'=>'deg2rad','repeat'=>'str_repeat','replace'=>'strtr','reverse'=>'strrev',
        'rpad'=>'str_pad','sha' => 'sha1','some' => 'any','substr'=>'substring','upper'=>'strtoupper');
 
-    function __construct()
+    private $environment;
+
+    function __construct(fSQLEnvironment $fsql)
     {
+        $this->environment = $fsql;
     }
 
     function lookup($function)
@@ -93,7 +98,7 @@ class fSQLFunctions
         return preg_replace("/^'(.+)'$/s", "\\1", $string);
     }
 
-        // operators
+    // operators
 
     function not($x)
     {
@@ -143,17 +148,34 @@ class fSQLFunctions
     //////Misc Functions
     function database()
     {
-        return $this->currentDB->name;
+        return $this->environment->current_db()->name();
     }
 
     function last_insert_id()
     {
-        return $this->insert_id;
+        return $this->environment->insert_id();
     }
 
     function row_count()
     {
-        return $this->affected;
+        return $this->environment->affected_rows();
+    }
+
+    /////Sequence Functions
+    function currval($sequenceName)
+    {
+        $db = $this->environment->current_db();
+        $sequences = $db->getSequences();
+        $sequence = $sequences->getSequence($sequenceName);
+        return $sequence->lastValue();
+    }
+
+    function nextval($sequenceName)
+    {
+        $db = $this->environment->current_db();
+        $sequences = $db->getSequences();
+        $sequence = $sequences->getSequence($sequenceName);
+        return $sequence->nextValueFor();
     }
 
     /////Math Functions

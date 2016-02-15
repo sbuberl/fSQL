@@ -51,7 +51,7 @@ class fSQLEnvironment
 
     function __construct()
     {
-        $this->functions = new fSQLFunctions();
+        $this->functions = new fSQLFunctions($this);
     }
 
     function __destruct()

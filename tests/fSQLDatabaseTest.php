@@ -13,7 +13,7 @@ class fSQLDatabaseTest extends fSQLBaseTest
         'size' => array('type' => 'e', 'auto' => '0', 'default' => 0.0, 'key' => 'n', 'null' => '1', 'restraint' => array('small', 'medium', 'large'))
     );
 
-    var $subDir;
+    private $subDir;
 
     function setUp()
     {
