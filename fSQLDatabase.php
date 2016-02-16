@@ -1056,6 +1056,8 @@ class fSQLSequencesFile
         $this->lockFile->acquireWrite();
         $this->file->acquireWrite();
 
+        $this->lockFile->write();
+
         $fileHandle = $this->file->getHandle();
         ftruncate($fileHandle, 0);
         foreach($this->sequences as $name => $sequence) {
