@@ -631,7 +631,7 @@ class fSQLEnvironment
                         if(!isset($parsed[$original])) {
                             $parsed[$original] = $number[0];
                         } else {
-                            return $this->set_error($original.' already set for this identity column.');
+                            return $this->set_error($original.' already set for this identity/sequence.');
                         }
                     } else {
                         return $this->set_error('Could not parse number after '.$original);
@@ -2072,6 +2072,59 @@ EOC;
 
     private function query_alter($query)
     {
+        if(preg_match("/\AALTER\s+(TABLE|SEQUENCE)\s+/is", $query, $matches)) {
+            if(!strcasecmp($matches[1], 'TABLE')) {
+                return $this->query_alter_table($query);
+            } else {
+                return $this->query_alter_sequence($query);
+            }
+        } else {
+            return $this->set_error('Invalid ALTER query');
+        }
+    }
+
+    private function query_alter_sequence($query)
+    {
+        if(preg_match("/\AALTER\s+SEQUENCE\s+(?:(IF\s+EXISTS)\s+)?(?:`?([^\W\d]\w*)`?\.)?`?([^\W\d]\w*)`?\s+(.+?)\s*[;]?\Z/is", $query, $matches)) {
+            list(, $ifExists, $dbName, $sequenceName, $valuesList) = $matches;
+            $db = $this->get_database($dbName);
+            if($db === false) {
+                return false;
+            }
+
+            $sequences = $db->getSequences();
+            if(!$sequences->exists()) {
+                $sequences->create();
+            }
+
+            $sequence = $sequences->getSequence($sequenceName);
+            if($sequence === false) {
+                if(empty($ifExists)) {
+                    return $this->set_error("Sequence {$db->name()}.{$sequenceName} does not exist");
+                } else {
+                    return true;
+                }
+            }
+
+            $parsed = $this->parse_sequence_options($valuesList, true);
+            if($parsed === false) {
+                return false;
+            }
+
+            $result = $sequence->alter($parsed);
+            if($result !== true) {
+                $sequence->load();  // refresh temp changes made
+                return $this->set_error($result);
+            }
+
+            return true;
+        } else {
+            return $this->set_error('Invalid ALTER SEQUENCE query');
+        }
+    }
+
+    private function query_alter_table($query)
+    {
         if(preg_match("/\AALTER\s+TABLE\s+`?(?:([A-Z][A-Z0-9\_]*)`?\.`?)?([A-Z][A-Z0-9\_]*)`?\s+(.*)/is", $query, $matches)) {
             list(, $db_name, $table_name, $changes) = $matches;
 
@@ -2184,11 +2237,11 @@ EOC;
                     return $db->renameTable($table_name, $new_table_name, $new_db);
                 }
                 else {
-                    return $this->set_error("Invalid ALTER query");
+                    return $this->set_error("Invalid ALTER TABLE query");
                 }
             }
         } else {
-            return $this->set_error("Invalid ALTER query");
+            return $this->set_error("Invalid ALTER TABLE query");
         }
     }
 
