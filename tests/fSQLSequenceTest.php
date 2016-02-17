@@ -4,7 +4,7 @@ require_once dirname(__FILE__) . '/fSQLSequenceBaseTest.php';
 
 class fSQLSequenceTest extends fSQLSequenceBaseTest
 {
-    function setUp()
+    public function setUp()
     {
         parent::setUp();
         $database = new fSQLDatabase('db1', parent::$tempDir);
@@ -13,10 +13,8 @@ class fSQLSequenceTest extends fSQLSequenceBaseTest
         $this->sequence = new fSQLSequence('ids', $sequences);
     }
 
-    function testName()
+    public function testName()
     {
         $this->assertEquals('ids', $this->sequence->name());
     }
 }
-
-?>

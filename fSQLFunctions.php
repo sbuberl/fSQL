@@ -63,12 +63,12 @@ class fSQLFunctions
 
     private $environment;
 
-    function __construct(fSQLEnvironment $fsql)
+    public function __construct(fSQLEnvironment $fsql)
     {
         $this->environment = $fsql;
     }
 
-    function lookup($function)
+    public function lookup($function)
     {
         if(isset($this->renamed[$function])) {
             $newName = $this->renamed[$function];
@@ -87,36 +87,36 @@ class fSQLFunctions
         }
     }
 
-    function register($sqlName, $phpName)
+    public function register($sqlName, $phpName)
     {
         $this->renamed_func[$sqlName] = $phpName;
         return true;
     }
 
-    function _trimQuotes($string)
+    private function trimQuotes($string)
     {
         return preg_replace("/^'(.+)'$/s", "\\1", $string);
     }
 
     // operators
 
-    function not($x)
+    public function not($x)
     {
         $c = ~$x & 3;
         return (($c << 1) ^ ($c >> 1)) & 3;
     }
 
-    function isTrue($expr)
+    public function isTrue($expr)
     {
         return !in_array($expr, array(0, 0.0, '', null), true);
     }
 
-    function isFalse($expr)
+    public function isFalse($expr)
     {
         return in_array($expr, array(0, 0.0, ''), true);
     }
 
-    function like($left, $right)
+    public function like($left, $right)
     {
         if($left !== null && $right !== null)
         {
@@ -127,7 +127,7 @@ class fSQLFunctions
             return FSQL_UNKNOWN;
     }
 
-    function in($needle, $haystack)
+    public function in($needle, $haystack)
     {
         if($needle !== null)
         {
@@ -137,7 +137,7 @@ class fSQLFunctions
             return FSQL_UNKNOWN;
     }
 
-    function regexp($left, $right)
+    public function regexp($left, $right)
     {
         if($left !== null && $right !== null)
             return (preg_match('/'.$right.'/i', $left)) ? FSQL_TRUE : FSQL_FALSE;
@@ -146,23 +146,23 @@ class fSQLFunctions
     }
 
     //////Misc Functions
-    function database()
+    public function database()
     {
         return $this->environment->current_db()->name();
     }
 
-    function last_insert_id()
+    public function last_insert_id()
     {
         return $this->environment->insert_id();
     }
 
-    function row_count()
+    public function row_count()
     {
         return $this->environment->affected_rows();
     }
 
     /////Sequence Functions
-    function currval($sequenceName)
+    public function currval($sequenceName)
     {
         $db = $this->environment->current_db();
         $sequences = $db->getSequences();
@@ -170,7 +170,7 @@ class fSQLFunctions
         return $sequence->lastValue();
     }
 
-    function nextval($sequenceName)
+    public function nextval($sequenceName)
     {
         $db = $this->environment->current_db();
         $sequences = $db->getSequences();
@@ -179,35 +179,35 @@ class fSQLFunctions
     }
 
     /////Math Functions
-    function log($arg1, $arg2 = null) {
-        $arg1 = $this->_trimQuotes($arg1);
+    public function log($arg1, $arg2 = null) {
+        $arg1 = $this->trimQuotes($arg1);
         if($arg2) {
-            $arg2 = $this->_trimQuotes($arg2);
+            $arg2 = $this->trimQuotes($arg2);
         }
         if(($arg1 < 0 || $arg1 == 1) && !$arg2) { return null; }
         if(!$arg2) { return log($arg1); } else { return log($arg2) / log($arg1); }
     }
-    function log2($arg)
+    public function log2($arg)
     {
-        $arg = $this->_trimQuotes($arg);
+        $arg = $this->trimQuotes($arg);
         return $this->log(2, $arg);
     }
-    function log10($arg) {
-        $arg = $this->_trimQuotes($arg);
+    public function log10($arg) {
+        $arg = $this->trimQuotes($arg);
         return $this->log(10, $arg);
     }
-    function mod($one, $two) {
-        $one = $this->_trimQuotes($one);
-        $two = $this->_trimQuotes($two);
+    public function mod($one, $two) {
+        $one = $this->trimQuotes($one);
+        $two = $this->trimQuotes($two);
         return $one % $two;
     }
-    function sign($number) {
-        $number = $this->_trimQuotes($number);
+    public function sign($number) {
+        $number = $this->trimQuotes($number);
         if($number > 0) { return 1; } else if($number == 0) { return 0; } else { return -1; }
     }
-    function truncate($number, $places) {
-        $number = $this->_trimQuotes($number);
-        $places = round($this->_trimQuotes($number));
+    public function truncate($number, $places) {
+        $number = $this->trimQuotes($number);
+        $places = round($this->trimQuotes($number));
         list($integer, $decimals) = explode(".", $number);
         if($places == 0) { return $integer; }
         else if($places > 0) { return $integer.'.'.substr($decimals,0,$places); }
@@ -215,7 +215,7 @@ class fSQLFunctions
     }
 
      ///// Aggregate Functions
-    function any($data, $column, $flag) {
+    public function any($data, $column, $flag) {
         if ($flag === "constant")
             return $this->isTrue($data);
         foreach($data as $entry){
@@ -225,12 +225,12 @@ class fSQLFunctions
         return false;
     }
 
-    function avg($data, $column, $flag) {
+    public function avg($data, $column, $flag) {
         $sum = $this->sum($data, $column, $flag);
         return $sum !== null ? $sum / count($data) : null;
     }
 
-    function count($data, $column, $flag) {
+    public function count($data, $column, $flag) {
         if($column == '*') { return count($data); }
         else if($flag === "constant") { return (int) ($column !== null); }
         else {
@@ -242,7 +242,7 @@ class fSQLFunctions
         }
     }
 
-    function every($data, $column, $flag) {
+    public function every($data, $column, $flag) {
         if ($flag === "constant")
             return $this->isTrue($data);
         foreach($data as $entry){
@@ -252,7 +252,7 @@ class fSQLFunctions
         return true;
     }
 
-    function max($data, $column, $flag) {
+    public function max($data, $column, $flag) {
         $max = null;
         if ($flag === "constant")
             $max = $column;
@@ -266,7 +266,7 @@ class fSQLFunctions
         return $max;
     }
 
-    function min($data, $column, $flag) {
+    public function min($data, $column, $flag) {
         $min = null;
         if ($flag === "constant")
             $min = $column;
@@ -280,7 +280,7 @@ class fSQLFunctions
         return $min;
     }
 
-    function sum($data, $column, $flag) {
+    public function sum($data, $column, $flag) {
         $i = null;
 
         if ($flag === "constant" && $column !== null)
@@ -296,7 +296,7 @@ class fSQLFunctions
     }
 
      /////String Functions
-    function concat_ws($string) {
+    public function concat_ws($string) {
         $numargs = func_num_args();
         if($numargs > 2) {
             for($i = 1; $i < $numargs; $i++) { $return[] = func_get_arg($i);  }
@@ -304,21 +304,21 @@ class fSQLFunctions
         }
         else { return null; }
     }
-    function concat() { return call_user_func_array(array($this,'concat_ws'), array("",func_get_args())); }
-    function elt() {
+    public function concat() { return call_user_func_array(array($this,'concat_ws'), array("",func_get_args())); }
+    public function elt() {
         $return = func_get_arg(0);
         if(func_num_args() > 1 && $return >= 1 && $return <= func_num_args()) {    return func_get_arg($return);  }
         else { return null; }
     }
-    function locate($string, $find, $start = null) {
+    public function locate($string, $find, $start = null) {
         if($start) { $string = substr($string, $start); }
         $pos = strpos($string, $find);
         if($pos === false) { return 0; } else { return $pos; }
     }
-    function lpad($string, $length, $pad) { return str_pad($string, $length, $pad, STR_PAD_LEFT); }
-    function left($string, $end)    { return substr($string, 0, $end); }
-    function right($string,$end)    { return substr($string, -$end); }
-    function substring_index($string, $delim, $count) {
+    public function lpad($string, $length, $pad) { return str_pad($string, $length, $pad, STR_PAD_LEFT); }
+    public function left($string, $end)    { return substr($string, 0, $end); }
+    public function right($string,$end)    { return substr($string, -$end); }
+    public function substring_index($string, $delim, $count) {
         $parts = explode($delim, $string);
         if($count < 0) {   for($i = $count; $i > 0; $i++) { $part = count($parts) + $i; $array[] = $parts[$part]; }  }
         else { for($i = 0; $i < $count; $i++) { $array[] = $parts[$i]; }  }
@@ -326,11 +326,11 @@ class fSQLFunctions
     }
 
         // not public
-    function ltrim($string, $charlist = ' ') {
+    public function ltrim($string, $charlist = ' ') {
         return ($string !== null) ? ltrim($string, $charlist) : null;
     }
 
-    function overlay($string, $other, $start = 1) {
+    public function overlay($string, $other, $start = 1) {
         if($string !== null && $other !== null) {
             $start -= 1; // one-based not zero-based
             if(func_num_args() === 4) {
@@ -344,7 +344,7 @@ class fSQLFunctions
         return null;
     }
 
-    function position($substring, $string) {
+    public function position($substring, $string) {
         if($string !== null && $substring !== null) {
             $pos = strpos($string, $substring);
             if($pos !== false) { return $pos + 1; } else { return 0; }
@@ -354,11 +354,11 @@ class fSQLFunctions
     }
 
     // not public
-    function rtrim($string, $charlist = ' ') {
+    public function rtrim($string, $charlist = ' ') {
         return ($string !== null) ? rtrim($string, $charlist) : null;
     }
 
-    function substring($string, $pos) {
+    public function substring($string, $pos) {
         if($string !== null) {
             $pos -= 1; // one-based not zero-based
             if(func_num_args() === 3) {
@@ -372,27 +372,27 @@ class fSQLFunctions
         return null;
     }
 
-    function trim($string, $charlist = ' ') {
+    public function trim($string, $charlist = ' ') {
         return ($string !== null) ? trim($string, $charlist) : null;
     }
 
     ////Date/Time functions
-    function now()        { return $this->from_unixtime(time()); }
-    function curdate()    { return $this->from_unixtime(time(), "%Y-%m-%d"); }
-    function curtime()     { return $this->from_unixtime(time(), "%H:%M:%S"); }
-    function dayofweek($date)     { return $this->from_unixtime($date, "%w"); }
-    function weekday($date)        { return $this->from_unixtime($date, "%u"); }
-    function dayofyear($date)        { return round($this->from_unixtime($date, "%j")); }
-    function unix_timestamp($date = null) {
+    public function now()        { return $this->from_unixtime(time()); }
+    public function curdate()    { return $this->from_unixtime(time(), "%Y-%m-%d"); }
+    public function curtime()     { return $this->from_unixtime(time(), "%H:%M:%S"); }
+    public function dayofweek($date)     { return $this->from_unixtime($date, "%w"); }
+    public function weekday($date)        { return $this->from_unixtime($date, "%u"); }
+    public function dayofyear($date)        { return round($this->from_unixtime($date, "%j")); }
+    public function unix_timestamp($date = null) {
         if(!$date) { return null; } else { return strtotime(str_replace("-","/",$date)); }
     }
-    function from_unixtime($timestamp, $format = "%Y-%m-%d %H:%M:%S")
+    public function from_unixtime($timestamp, $format = "%Y-%m-%d %H:%M:%S")
     {
         if(!is_int($timestamp)) { $timestamp = $this->unix_timestamp($timestamp); }
         return strftime($format, $timestamp);
     }
 
-    function extract($field, $datetime)
+    public function extract($field, $datetime)
     {
         if($datetime !== null && preg_match('/\A(((?:[1-9]\d)?\d{2})-(0\d|1[0-2])-([0-2]\d|3[0-1])\s*)?(\b([0-1]\d|2[0-3]):([0-5]\d):([0-5]\d)(?:\.(\d+))?(?:([\+\-]\d{2}):(\d{2}))?)?\Z/is', $datetime, $matches)) {
             $hasDate = !empty($matches[1]);
@@ -457,5 +457,3 @@ class fSQLFunctions
         }
     }
 }
-
-?>

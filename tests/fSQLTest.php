@@ -6,18 +6,18 @@ class fSQLTest extends fSQLBaseTest
 {
     var $fsql;
 
-    function setUp()
+    public function setUp()
     {
         parent::setUp();
         $this->fsql = new fSQLEnvironment();
     }
 
-    function tearDown()
+    public function tearDown()
     {
         unset($this->fsql);
     }
 
-    function testDefineDB()
+    public function testDefineDB()
     {
         $dbName = "db1";
         $passed = $this->fsql->define_db($dbName, parent::$tempDir);
@@ -31,7 +31,7 @@ class fSQLTest extends fSQLBaseTest
         $this->assertTrue($this->fsql->get_database($db2Name) !== false);
     }
 
-    function testSelectDB()
+    public function testSelectDB()
     {
         $dbName = "db";
         $this->fsql->define_db($dbName, parent::$tempDir);
@@ -53,5 +53,3 @@ class fSQLTest extends fSQLBaseTest
         $this->assertEquals($this->fsql->current_db()->name(), $dbName);
     }
 }
-
-?>

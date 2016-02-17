@@ -15,14 +15,14 @@ class fSQLDatabaseTest extends fSQLBaseTest
 
     private $subDir;
 
-    function setUp()
+    public function setUp()
     {
         parent::setUp();
         $this->subDir = parent::$tempDir.'sub/';
         mkdir($this->subDir);
     }
 
-    function testConstructor()
+    public function testConstructor()
     {
         $name = 'shazam';
         $path = 'blah/blah';
@@ -32,7 +32,7 @@ class fSQLDatabaseTest extends fSQLBaseTest
         $this->assertEquals($path, $db->path());
     }
 
-    function testCreateTable()
+    public function testCreateTable()
     {
         $name = "customers";
         $db = new fSQLDatabase('db1', parent::$tempDir);
@@ -41,7 +41,7 @@ class fSQLDatabaseTest extends fSQLBaseTest
         $this->assertEquals($name, $table->name());
     }
 
-    function testCreateTableTemp()
+    public function testCreateTableTemp()
     {
         $name = "customers";
         $db = new fSQLDatabase('db1', parent::$tempDir);
@@ -50,7 +50,7 @@ class fSQLDatabaseTest extends fSQLBaseTest
         $this->assertEquals($name, $table->name());
     }
 
-    function testListTablesNone()
+    public function testListTablesNone()
     {
         $name = 'shazam';
         $path = 'blah/blah';
@@ -60,7 +60,7 @@ class fSQLDatabaseTest extends fSQLBaseTest
         $this->assertEmpty($tables);
     }
 
-    function testGetSequences()
+    public function testGetSequences()
     {
         $db = new fSQLDatabase('shazam', parent::$tempDir);
         $sequences = $db->getSequences();
@@ -69,7 +69,7 @@ class fSQLDatabaseTest extends fSQLBaseTest
     }
 
     // skips temp tables like mySQL does
-    function testListTables()
+    public function testListTables()
     {
         $db = new fSQLDatabase('shazam', parent::$tempDir);
         $db->createTable('temp1', self::$columns, true);
@@ -81,7 +81,7 @@ class fSQLDatabaseTest extends fSQLBaseTest
         $this->assertEquals(array('real1', 'real2'), $tables);
     }
 
-    function testGetTableEmpty()
+    public function testGetTableEmpty()
     {
         $db = new fSQLDatabase('shazam', parent::$tempDir);
         $table = $db->getTable('myTable');
@@ -89,7 +89,7 @@ class fSQLDatabaseTest extends fSQLBaseTest
         $this->assertEquals('myTable', $table->name());
     }
 
-    function testGetTableTemp()
+    public function testGetTableTemp()
     {
         $name = 'temp1';
         $db = new fSQLDatabase('shazam', parent::$tempDir);
@@ -100,7 +100,7 @@ class fSQLDatabaseTest extends fSQLBaseTest
         $this->assertEquals($name, $table->name());
     }
 
-    function testGetTable()
+    public function testGetTable()
     {
         $name = 'table1';
         $db = new fSQLDatabase('shazam', parent::$tempDir);
@@ -112,14 +112,14 @@ class fSQLDatabaseTest extends fSQLBaseTest
         $this->assertEquals($name, $table->name());
     }
 
-    function testRenameDoesntExist()
+    public function testRenameDoesntExist()
     {
         $db = new fSQLDatabase('shazam', parent::$tempDir);
         $passed = $db->renameTable('answer42', 'else', $this);
         $this->assertFalse($passed);
     }
 
-    function testRename()
+    public function testRename()
     {
         $from = 'blah';
         $to = 'else';
@@ -133,7 +133,7 @@ class fSQLDatabaseTest extends fSQLBaseTest
         $this->assertFalse($oldTable->exists());
     }
 
-    function testRenameTemp()
+    public function testRenameTemp()
     {
         $from = 'blah';
         $to = 'else';
@@ -147,7 +147,7 @@ class fSQLDatabaseTest extends fSQLBaseTest
         $this->assertFalse($oldTable->exists());
     }
 
-    function testRenameToOtherDB()
+    public function testRenameToOtherDB()
     {
         $from = 'temp1';
         $to = 'something';
@@ -163,14 +163,14 @@ class fSQLDatabaseTest extends fSQLBaseTest
         $this->assertFalse($oldTable->exists());
     }
 
-    function testDropTableDoesntExist()
+    public function testDropTableDoesntExist()
     {
         $db = new fSQLDatabase('shazam', parent::$tempDir);
         $passed = $db->dropTable('answer42');
         $this->assertFalse($passed);
     }
 
-    function testDropTable()
+    public function testDropTable()
     {
         $name = 'blah';
         $db = new fSQLDatabase('shazam', parent::$tempDir);
@@ -181,7 +181,7 @@ class fSQLDatabaseTest extends fSQLBaseTest
         $this->assertFalse($table->exists());
     }
 
-    function testDropTableTemp()
+    public function testDropTableTemp()
     {
         $name = 'blah';
         $db = new fSQLDatabase('shazam', parent::$tempDir);
@@ -192,5 +192,3 @@ class fSQLDatabaseTest extends fSQLBaseTest
         $this->assertFalse($table->exists());
     }
 }
-
-?>

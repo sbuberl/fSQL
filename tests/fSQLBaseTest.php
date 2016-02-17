@@ -6,7 +6,7 @@ abstract class fSQLBaseTest extends PHPUnit_Framework_TestCase
 {
     static $tempDir = ".tmp/";
 
-    function setUp()
+    public function setUp()
     {
         if(file_exists(self::$tempDir)) {
           self::deleteDir(self::$tempDir);
@@ -32,5 +32,3 @@ abstract class fSQLBaseTest extends PHPUnit_Framework_TestCase
         rmdir($dirPath);
     }
 }
-
-?>

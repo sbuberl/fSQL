@@ -9,14 +9,14 @@ class fSQLFile
     private $rcount = 0;
     private $wcount = 0;
 
-    function __construct($filepath)
+    public function __construct($filepath)
     {
         $this->filepath = $filepath;
         $this->handle = null;
         $this->lock = 0;
     }
 
-    function __destruct()
+    public function __destruct()
     {
         // should be unlocked before reaches here, but just in case,
         // release all locks and close file
@@ -26,12 +26,12 @@ class fSQLFile
         }
     }
 
-    function exists()
+    public function exists()
     {
         return file_exists($this->filepath);
     }
 
-    function drop()
+    public function drop()
     {
         // only allow drops if not locked
         if($this->handle === null)
@@ -43,17 +43,17 @@ class fSQLFile
             return false;
     }
 
-    function getHandle()
+    public function getHandle()
     {
         return $this->handle;
     }
 
-    function getPath()
+    public function getPath()
     {
         return $this->filepath;
     }
 
-    function acquireRead()
+    public function acquireRead()
     {
         if($this->lock !== 0 && $this->handle !== null) {  /* Already have at least a read lock */
             $this->rcount++;
@@ -74,7 +74,7 @@ class fSQLFile
         return false;
     }
 
-    function acquireWrite()
+    public function acquireWrite()
     {
         if($this->lock === 2 && $this->handle !== null)  /* Already have a write lock */
         {
@@ -104,7 +104,7 @@ class fSQLFile
         return false;
     }
 
-    function releaseRead()
+    public function releaseRead()
     {
         if($this->lock !== 0 && $this->handle !== null)
         {
@@ -123,7 +123,7 @@ class fSQLFile
         return true;
     }
 
-    function releaseWrite()
+    public function releaseWrite()
     {
         if($this->lock !== 0 && $this->handle !== null)
         {
@@ -157,24 +157,24 @@ class fSQLMicrotimeLockFile extends fSQLFile
     private $loadTime = null;
     private $lastReadStamp = null;
 
-    function __destruct()
+    public function __destruct()
     {
         parent::__destruct();
     }
 
-    function accept()
+    public function accept()
     {
         $this->loadTime = $this->lastReadStamp;
     }
 
-    function reset()
+    public function reset()
     {
         $this->loadTime = null;
         $this->lastReadStamp = null;
         return true;
     }
 
-    function wasModified()
+    public function wasModified()
     {
         $this->acquireRead();
 
@@ -186,7 +186,7 @@ class fSQLMicrotimeLockFile extends fSQLFile
         return $modified;
     }
 
-    function wasNotModified()
+    public function wasNotModified()
     {
         $this->acquireRead();
 
@@ -198,7 +198,7 @@ class fSQLMicrotimeLockFile extends fSQLFile
         return $modified;
     }
 
-    function write()
+    public function write()
     {
         $this->acquireWrite();
 
@@ -210,5 +210,3 @@ class fSQLMicrotimeLockFile extends fSQLFile
         $this->releaseWrite();
     }
 }
-
-?>

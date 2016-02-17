@@ -6,7 +6,7 @@ abstract class fSQLSequenceBaseTest extends fSQLBaseTest
 {
     protected $sequence;
 
-     function testSet()
+     public function testSet()
     {
         $current = -14;
         $start = -2;
@@ -24,7 +24,7 @@ abstract class fSQLSequenceBaseTest extends fSQLBaseTest
         $this->assertFalse($this->sequence->cycle);
     }
 
-    function testAlterErrors()
+    public function testAlterErrors()
     {
         $this->sequence->set(12, 1, 2, 1, 1000, false);
         $this->sequence->save();
@@ -39,7 +39,7 @@ abstract class fSQLSequenceBaseTest extends fSQLBaseTest
         $this->assertEquals($result, 'Sequence/identity restart value not between min and max');
     }
 
-    function testAlterAll()
+    public function testAlterAll()
     {
         $this->sequence->set(13, 1, 2, 1, 1000, false);
         $this->sequence->save();
@@ -54,7 +54,7 @@ abstract class fSQLSequenceBaseTest extends fSQLBaseTest
         $this->assertEquals($this->sequence->cycle, $alterValues['CYCLE']);
     }
 
-    function testAlterStart()
+    public function testAlterStart()
     {
         $this->sequence->set(13, 3, 2, 1, 1000, false);
         $this->sequence->save();
@@ -65,7 +65,7 @@ abstract class fSQLSequenceBaseTest extends fSQLBaseTest
         $this->assertEquals($this->sequence->current, 3);
     }
 
-    function testNextValueForInc()
+    public function testNextValueForInc()
     {
         $current = 12;
         $increment = 2;
@@ -79,7 +79,7 @@ abstract class fSQLSequenceBaseTest extends fSQLBaseTest
         $this->assertEquals($next, $current + $increment);
     }
 
-    function testNextValueForDec()
+    public function testNextValueForDec()
     {
         $current = -100;
         $increment = -5;
@@ -92,7 +92,7 @@ abstract class fSQLSequenceBaseTest extends fSQLBaseTest
         $this->assertEquals($next, $current + $increment);
     }
 
-    function testNextValueForCycleInc()
+    public function testNextValueForCycleInc()
     {
         $this->sequence->set(1, 1, 2, 1, 3, true);
         $this->sequence->save();
@@ -102,7 +102,7 @@ abstract class fSQLSequenceBaseTest extends fSQLBaseTest
         $this->assertEquals($this->sequence->nextValueFor(), 1);
     }
 
-    function testNextValueForCycleDec()
+    public function testNextValueForCycleDec()
     {
         $this->sequence->set(-1, -1, -2, -3, -1, true);
         $this->sequence->save();
@@ -112,7 +112,7 @@ abstract class fSQLSequenceBaseTest extends fSQLBaseTest
         $this->assertEquals($this->sequence->nextValueFor(), -1);
     }
 
-    function testNextValueForBadCycle()
+    public function testNextValueForBadCycle()
     {
         $this->sequence->set(1, 1, 2, 1, 3, false);
         $this->sequence->save();
@@ -122,7 +122,7 @@ abstract class fSQLSequenceBaseTest extends fSQLBaseTest
         $this->assertFalse($this->sequence->nextValueFor());
     }
 
-    function testRestart()
+    public function testRestart()
     {
         $current = 9;
         $start = 3;
@@ -134,5 +134,3 @@ abstract class fSQLSequenceBaseTest extends fSQLBaseTest
         $this->assertEquals($this->sequence->current, $start);
     }
 }
-
-?>

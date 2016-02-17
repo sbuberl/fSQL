@@ -7,7 +7,7 @@ class fSQLAlterSequenceTest extends fSQLBaseTest
     private $fsql;
     private $sequences;
 
-    function setUp()
+    public function setUp()
     {
         parent::setUp();
         $this->fsql = new fSQLEnvironment();
@@ -16,7 +16,7 @@ class fSQLAlterSequenceTest extends fSQLBaseTest
         $this->sequences = new fSQLSequencesFile($this->fsql->current_db());
     }
 
-    function testWrongDB()
+    public function testWrongDB()
     {
         $dbName = "wrongDB";
         $result = $this->fsql->query("ALTER SEQUENCE $dbName.userids MINVALUE=11;");
@@ -24,7 +24,7 @@ class fSQLAlterSequenceTest extends fSQLBaseTest
         $this->assertEquals("Database $dbName not found", trim($this->fsql->error()));
     }
 
-    function testNotFoundError()
+    public function testNotFoundError()
     {
         $fullName = "db1.userids";
         $result = $this->fsql->query("ALTER SEQUENCE $fullName MINVALUE=12;");
@@ -32,14 +32,14 @@ class fSQLAlterSequenceTest extends fSQLBaseTest
         $this->assertEquals("Sequence $fullName does not exist", trim($this->fsql->error()));
     }
 
-    function testNotFoundIgnore()
+    public function testNotFoundIgnore()
     {
         $result = $this->fsql->query("ALTER SEQUENCE IF EXISTS db1.userids MINVALUE=13;");
         $this->assertTrue($result);
         $this->assertFalse($this->sequences->getSequence('userids'));
     }
 
-    function testParseParamsError()
+    public function testParseParamsError()
     {
         $this->sequences->addSequence("userids", 1, 1, 1, 10000, false);
 
@@ -48,7 +48,7 @@ class fSQLAlterSequenceTest extends fSQLBaseTest
         $this->assertEquals("MINVALUE already set for this identity/sequence.", trim($this->fsql->error()));
     }
 
-    function testSuccess()
+    public function testSuccess()
     {
         $this->sequences->addSequence("userids", 1, 1, 1, 10000, false);
 
@@ -60,5 +60,3 @@ class fSQLAlterSequenceTest extends fSQLBaseTest
         $this->assertEquals(50, $sequence->nextValueFor());
     }
 }
-
-?>

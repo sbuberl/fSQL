@@ -4,20 +4,20 @@ require_once dirname(__FILE__) . '/fSQLBaseTest.php';
 
 class fSQLSequenceFileTest extends fSQLBaseTest
 {
-    function setUp()
+    public function setUp()
     {
         parent::setUp();
         $this->database = new fSQLDatabase('db1', parent::$tempDir);
         $this->sequences = new fSQLSequencesFile($this->database);
     }
 
-    function testConstructor()
+    public function testConstructor()
     {
         $this->assertEquals($this->sequences->database->name(), $this->database->name());
         $this->assertEmpty($this->sequences->sequences);
     }
 
-    function testCreate()
+    public function testCreate()
     {
         $result = $this->sequences->create();
         $this->assertTrue($result);
@@ -25,7 +25,7 @@ class fSQLSequenceFileTest extends fSQLBaseTest
         $this->assertTrue($this->sequences->file->exists());
     }
 
-    function testExists()
+    public function testExists()
     {
         $this->assertFalse($this->sequences->exists());
 
@@ -33,7 +33,7 @@ class fSQLSequenceFileTest extends fSQLBaseTest
         $this->assertTrue($this->sequences->exists());
     }
 
-    function testAddThenGet()
+    public function testAddThenGet()
     {
         $this->sequences->create();
         $this->sequences->addSequence('seq12', 3, 2, 0, 100, true);
@@ -48,14 +48,14 @@ class fSQLSequenceFileTest extends fSQLBaseTest
         $this->assertTrue($sequence->cycle);
     }
 
-    function testGetEmpty()
+    public function testGetEmpty()
     {
         $this->sequences->create();
         $sequence = $this->sequences->getSequence('seq12');
         $this->assertFalse($sequence);
     }
 
-    function testAddThenDrop()
+    public function testAddThenDrop()
     {
         $this->sequences->create();
         $this->sequences->addSequence('seq12474', 5, 1, 5, 1000, false);
@@ -66,5 +66,3 @@ class fSQLSequenceFileTest extends fSQLBaseTest
         $this->assertFalse($sequence);
     }
 }
-
-?>

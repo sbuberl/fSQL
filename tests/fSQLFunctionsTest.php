@@ -7,7 +7,7 @@ class fSQLFunctionsTest extends fSQLBaseTest
     private $fsql;
     private $functions;
 
-    function setUp()
+    public function setUp()
     {
         parent::setUp();
         $this->fsql = new fSQLEnvironment();
@@ -16,7 +16,7 @@ class fSQLFunctionsTest extends fSQLBaseTest
         $this->functions = new fSQLFunctions($this->fsql);
     }
 
-    function testNextval()
+    public function testNextval()
     {
         $name = "counter";
         $db = $this->fsql->current_db();
@@ -28,7 +28,7 @@ class fSQLFunctionsTest extends fSQLBaseTest
         $this->assertEquals(5, $this->functions->nextval($name));
     }
 
-    function testCurval()
+    public function testCurval()
     {
         $name = "counter";
         $db = $this->fsql->current_db();
@@ -43,5 +43,3 @@ class fSQLFunctionsTest extends fSQLBaseTest
         $this->assertEquals(-5, $this->functions->currval($name));
     }
 }
-
-?>

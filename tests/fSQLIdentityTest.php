@@ -13,7 +13,7 @@ class fSQLIdentityTest extends fSQLSequenceBaseTest
         'size' => array('type' => 'e', 'auto' => 0, 'default' => 0, 'key' => 'n', 'null' => 1, 'restraint' => array('small', 'medium', 'large'))
     );
 
-    function setUp()
+    public function setUp()
     {
         parent::setUp();
         $database = new fSQLDatabase('db1', parent::$tempDir);
@@ -21,22 +21,20 @@ class fSQLIdentityTest extends fSQLSequenceBaseTest
         $this->sequence = new fSQLIdentity($table, 'id');
     }
 
-    function testGetColumnName()
+    public function testGetColumnName()
     {
         $this->assertEquals('id', $this->sequence->getColumnName());
     }
 
-    function testGetAlways()
+    public function testGetAlways()
     {
         $this->assertEquals(0, $this->sequence->getAlways());
     }
 
-    function testAlterAlways()
+    public function testAlterAlways()
     {
         $this->sequence->alter(array('ALWAYS' => 1));
 
         $this->assertEquals(0, $this->sequence->getAlways());
     }
 }
-
-?>

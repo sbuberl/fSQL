@@ -49,17 +49,17 @@ class fSQLEnvironment
     private $auto = 1;
     private $functions;
 
-    function __construct()
+    public function __construct()
     {
         $this->functions = new fSQLFunctions($this);
     }
 
-    function __destruct()
+    public function __destruct()
     {
         $this->unlock_tables();
     }
 
-    function define_db($name, $path)
+    public function define_db($name, $path)
     {
         $path = realpath($path);
         if($path === false || !is_dir($path)) {
@@ -84,7 +84,7 @@ class fSQLEnvironment
         }
     }
 
-    function select_db($name)
+    public function select_db($name)
     {
         if(isset($this->databases[$name])) {
             $this->currentDB = $this->databases[$name];
@@ -94,17 +94,17 @@ class fSQLEnvironment
         }
     }
 
-    function current_db()
+    public function current_db()
     {
         return $this->currentDB;
     }
 
-    function error()
+    public function error()
     {
         return $this->error_msg;
     }
 
-    function register_function($sqlName, $phpName)
+    public function register_function($sqlName, $phpName)
     {
         return $this->functions->register($sqlName, $phpName);
     }
@@ -125,7 +125,7 @@ class fSQLEnvironment
         return $this->set_error("Table {$tableFullName} is locked for reading only");
     }
 
-    function get_database($db_name)
+    public function get_database($db_name)
     {
         $db = false;
 
@@ -147,7 +147,7 @@ class fSQLEnvironment
         return $db;
     }
 
-    function find_table($dbName, $tableName)
+    public function find_table($dbName, $tableName)
     {
         $table = false;
 
@@ -163,7 +163,7 @@ class fSQLEnvironment
         return $table;
     }
 
-    function lookup_function($function)
+    public function lookup_function($function)
     {
         $match = $this->functions->lookup($function);
         if($match === false) {
@@ -172,22 +172,22 @@ class fSQLEnvironment
         return $match;
     }
 
-    function escape_string($string)
+    public function escape_string($string)
     {
         return str_replace(array("\\", "\0", "\n", "\r", "\t", "'"), array("\\\\", "\\0", "\\n", "\\", "\\t", "\\'"), $string);
     }
 
-    function affected_rows()
+    public function affected_rows()
     {
         return $this->affected;
     }
 
-    function insert_id()
+    public function insert_id()
     {
         return $this->insert_id;
     }
 
-    function num_rows($id)
+    public function num_rows($id)
     {
         if(isset($this->data[$id])) {
             return count($this->data[$id]);
@@ -196,7 +196,7 @@ class fSQLEnvironment
         }
     }
 
-    function query_count()
+    public function query_count()
     {
         return $this->query_count;
     }
@@ -233,7 +233,7 @@ class fSQLEnvironment
         $this->updatedTables = array();
     }
 
-    function query($query)
+    public function query($query)
     {
         $query = trim($query);
         list($function, ) = explode(" ", $query);
@@ -2646,7 +2646,7 @@ EOC;
         }
     }
 
-    function create_result_set($columns, $data)
+    public function create_result_set($columns, $data)
     {
         $rs_id = !empty($this->data) ? max(array_keys($this->data)) + 1 : 1;
         $this->Columns[$rs_id] = $columns;
@@ -2925,7 +2925,7 @@ EOC;
         return $new_join_data;
     }
 
-    function fetch_array($id, $type = 1)
+    public function fetch_array($id, $type = 1)
     {
         if(!$id || !isset($this->cursors[$id]) || !isset($this->data[$id][$this->cursors[$id][0]]))
             return false;
@@ -2943,17 +2943,17 @@ EOC;
         else{ return array_merge($entry, array_combine($columnNames, $entry)); }
     }
 
-    function fetch_assoc($results) { return $this->fetch_array($results, FSQL_ASSOC); }
-    function fetch_row    ($results) { return $this->fetch_array($results, FSQL_NUM); }
-    function fetch_both    ($results) { return $this->fetch_array($results, FSQL_BOTH); }
+    public function fetch_assoc($results) { return $this->fetch_array($results, FSQL_ASSOC); }
+    public function fetch_row    ($results) { return $this->fetch_array($results, FSQL_NUM); }
+    public function fetch_both    ($results) { return $this->fetch_array($results, FSQL_BOTH); }
 
-    function fetch_single($results, $column = 0) {
+    public function fetch_single($results, $column = 0) {
         $type = is_numeric($column) ? FSQL_NUM : FSQL_ASSOC;
         $row = $this->fetch_array($results, $type);
         return $row !== false ? $row[$column] : false;
     }
 
-    function fetch_object($results)
+    public function fetch_object($results)
     {
         $row = $this->fetch_array($results, FSQL_ASSOC);
 
@@ -2968,7 +2968,7 @@ EOC;
         return $obj;
     }
 
-    function data_seek($id, $i)
+    public function data_seek($id, $i)
     {
         if(!$id || !isset($this->cursors[$id][0])) {
             return $this->set_error("Bad results id passed in");
@@ -2978,7 +2978,7 @@ EOC;
         }
     }
 
-    function num_fields($id)
+    public function num_fields($id)
     {
         if(!$id || !isset($this->Columns[$id])) {
             return $this->set_error("Bad results id passed in");
@@ -2987,7 +2987,7 @@ EOC;
         }
     }
 
-    function fetch_field($id, $i = null)
+    public function fetch_field($id, $i = null)
     {
         if(!$id || !isset($this->Columns[$id]) || !isset($this->cursors[$id][1])) {
             return $this->set_error("Bad results id passed in");
@@ -3004,7 +3004,7 @@ EOC;
         }
     }
 
-    function free_result($id)
+    public function free_result($id)
     {
         unset($this->Columns[$id], $this->data[$id], $this->cursors[$id]);
     }
@@ -3024,5 +3024,3 @@ EOC;
         }
     }
 }
-
-?>
