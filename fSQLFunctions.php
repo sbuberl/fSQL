@@ -89,7 +89,7 @@ class fSQLFunctions
 
     public function register($sqlName, $phpName)
     {
-        $this->renamed_func[$sqlName] = $phpName;
+        $this->renamed[$sqlName] = $phpName;
         return true;
     }
 
@@ -207,7 +207,7 @@ class fSQLFunctions
     }
     public function truncate($number, $places) {
         $number = $this->trimQuotes($number);
-        $places = round($this->trimQuotes($number));
+        $places = round($this->trimQuotes($places));
         list($integer, $decimals) = explode(".", $number);
         if($places == 0) { return $integer; }
         else if($places > 0) { return $integer.'.'.substr($decimals,0,$places); }

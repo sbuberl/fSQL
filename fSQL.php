@@ -42,6 +42,7 @@ class fSQLEnvironment
     private $error_msg = null;
     private $query_count = 0;
     private $cursors = array();
+    private $columns = array();
     private $data = array();
     private $join_lambdas = array();
     private $affected = 0;
@@ -2649,7 +2650,7 @@ EOC;
     public function create_result_set($columns, $data)
     {
         $rs_id = !empty($this->data) ? max(array_keys($this->data)) + 1 : 1;
-        $this->Columns[$rs_id] = $columns;
+        $this->columns[$rs_id] = $columns;
         $this->cursors[$rs_id] = array(0, 0);
         $this->data[$rs_id] = $data;
         return $rs_id;
@@ -2934,7 +2935,7 @@ EOC;
         if(!$entry)
             return false;
 
-        $columnNames = $this->Columns[$id];
+        $columnNames = $this->columns[$id];
 
         $this->cursors[$id][0]++;
 
@@ -2980,33 +2981,33 @@ EOC;
 
     public function num_fields($id)
     {
-        if(!$id || !isset($this->Columns[$id])) {
+        if(!$id || !isset($this->columns[$id])) {
             return $this->set_error("Bad results id passed in");
         } else {
-            return count($this->Columns[$id]);
+            return count($this->columns[$id]);
         }
     }
 
     public function fetch_field($id, $i = null)
     {
-        if(!$id || !isset($this->Columns[$id]) || !isset($this->cursors[$id][1])) {
+        if(!$id || !isset($this->columns[$id]) || !isset($this->cursors[$id][1])) {
             return $this->set_error("Bad results id passed in");
         } else {
             if($i === null)
                 $i = 0;
 
-            if(!isset($this->Columns[$id][$i]))
+            if(!isset($this->columns[$id][$i]))
                 return false;
 
             $field = new stdClass();
-            $field->name = $this->Columns[$id][$i];
+            $field->name = $this->columns[$id][$i];
             return $field;
         }
     }
 
     public function free_result($id)
     {
-        unset($this->Columns[$id], $this->data[$id], $this->cursors[$id]);
+        unset($this->columns[$id], $this->data[$id], $this->cursors[$id]);
     }
 
     private function typecode_to_name($type)

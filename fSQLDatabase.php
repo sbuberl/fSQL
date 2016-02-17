@@ -90,13 +90,13 @@ abstract class fSQLTable
         return $this->database;
     }
 
-    abstract function exists();
+    public abstract function exists();
 
-    abstract function temporary();
+    public abstract function temporary();
 
-    abstract function drop();
+    public abstract function drop();
 
-    abstract function truncate();
+    public abstract function truncate();
 
     public function getColumnNames()
     {
@@ -173,19 +173,19 @@ abstract class fSQLTable
         unset($this->entries[$row]);
     }
 
-    abstract function commit();
+    public abstract function commit();
 
-    abstract function rollback();
+    public abstract function rollback();
 
-    abstract function isReadLocked();
-    abstract function readLock();
-    abstract function writeLock();
-    abstract function unlock();
+    public abstract function isReadLocked();
+    public abstract function readLock();
+    public abstract function writeLock();
+    public abstract function unlock();
 }
 
 class fSQLTempTable extends fSQLTable
 {
-    public function fSQLTempTable(fSQLDatabase $database, $tableName, $columnDefs)
+    public function __construct(fSQLDatabase $database, $tableName, $columnDefs)
     {
         parent::__construct($database, $tableName);
         $this->columns = $columnDefs;
@@ -229,7 +229,7 @@ class fSQLCachedTable extends fSQLTable
     public $dataFile;
     private $lock = null;
 
-    public function fSQLCachedTable(fSQLDatabase $database, $table_name)
+    public function __construct(fSQLDatabase $database, $table_name)
     {
         parent::__construct($database, $table_name);
         $path_to_db = $this->database->path();
@@ -241,7 +241,7 @@ class fSQLCachedTable extends fSQLTable
         $this->dataFile = new fSQLFile($data_path.'.cgi');
     }
 
-    static function create($database, $table_name, $columnDefs)
+    public static function create($database, $table_name, $columnDefs)
     {
         $table = new fSQLCachedTable($database, $table_name);
         $table->columns = $columnDefs;
@@ -646,7 +646,7 @@ class fSQLDatabase
     private $loadedTables = array();
     private $sequencesFile;
 
-    public function fSQLDatabase($name, $filePath)
+    public function __construct($name, $filePath)
     {
         $this->name = $name;
         $this->path = $filePath;
@@ -665,16 +665,12 @@ class fSQLDatabase
 
     public function createTable($table_name, $columns, $temporary = false)
     {
-        $table = false;
-
         if(!$temporary) {
-            $table = fSQLCachedTable::create($this, $table_name, $columns);
-        } else {
+            return fSQLCachedTable::create($this, $table_name, $columns);
             $table = new fSQLTempTable($this, $table_name, $columns);
             $this->loadedTables[$table_name] = $table;
+            return $table;
         }
-
-        return $table;
     }
 
     public function getTable($table_name)
@@ -754,7 +750,7 @@ abstract class fSQLSequenceBase
     public $cycle;
     protected $lastValue = null;
 
-    public function fSQLSequenceBase(fSQLMicrotimeLockFile $lockFile)
+    public function __construct(fSQLMicrotimeLockFile $lockFile)
     {
         $this->lockFile = $lockFile;
     }
@@ -764,9 +760,9 @@ abstract class fSQLSequenceBase
         return $this->lastValue;
     }
 
-    abstract function load();
+    public abstract function load();
 
-    abstract function save();
+    public abstract function save();
 
     private function lockAndReload()
     {
@@ -880,7 +876,7 @@ class fSQLIdentity extends fSQLSequenceBase
     private $columnName;
     private $always;
 
-    public function fSQLIdentity(fSQLTable $table, $columnName)
+    public function __construct(fSQLTable $table, $columnName)
     {
         parent::__construct($table->columnsLockFile);
         $this->table = $table;
@@ -929,7 +925,7 @@ class fSQLSequence extends fSQLSequenceBase
     private $name;
     private $file;
 
-    public function fSQLSequence($name, fSQLSequencesFile $file)
+    public function __construct($name, fSQLSequencesFile $file)
     {
         parent::__construct($file->lockFile);
         $this->name = $name;
@@ -954,12 +950,12 @@ class fSQLSequence extends fSQLSequenceBase
 
 class fSQLSequencesFile
 {
-    var $database;
-    var $sequences;
-    var $file;
-    var $lockFile;
+    private $database;
+    private $sequences;
+    private $file;
+    public $lockFile;
 
-    public function fSQLSequencesFile(fSQLDatabase $database)
+    public function __construct(fSQLDatabase $database)
     {
         $this->database = $database;
         $path = $database->path().'sequences';
