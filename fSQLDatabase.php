@@ -667,6 +667,7 @@ class fSQLDatabase
     {
         if(!$temporary) {
             return fSQLCachedTable::create($this, $table_name, $columns);
+        } else {
             $table = new fSQLTempTable($this, $table_name, $columns);
             $this->loadedTables[$table_name] = $table;
             return $table;
@@ -976,9 +977,19 @@ class fSQLSequencesFile
         return true;
     }
 
+    public function database()
+    {
+        return $this->database;
+    }
+
     public function exists()
     {
         return $this->file->exists();
+    }
+
+    public function isEmpty()
+    {
+        return empty($this->sequences);
     }
 
     public function addSequence($name, $start, $increment, $min, $max, $cycle)

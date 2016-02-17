@@ -13,8 +13,8 @@ class fSQLSequenceFileTest extends fSQLBaseTest
 
     public function testConstructor()
     {
-        $this->assertEquals($this->sequences->database->name(), $this->database->name());
-        $this->assertEmpty($this->sequences->sequences);
+        $this->assertEquals($this->sequences->database()->name(), $this->database->name());
+        $this->assertTrue($this->sequences->isEmpty());
     }
 
     public function testCreate()
@@ -22,7 +22,7 @@ class fSQLSequenceFileTest extends fSQLBaseTest
         $result = $this->sequences->create();
         $this->assertTrue($result);
         $this->assertTrue($this->sequences->lockFile->exists());
-        $this->assertTrue($this->sequences->file->exists());
+        $this->assertTrue($this->sequences->exists());
     }
 
     public function testExists()
