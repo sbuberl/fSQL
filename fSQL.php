@@ -2343,7 +2343,7 @@ EOC;
 
     private function query_drop($query)
     {
-        if(preg_match("/\ADROP(?:\s+(TEMPORARY))?\s+TABLE(?:\s+(IF EXISTS))?\s+(.*)\s*[;]?\Z/is", $query, $matches)) {
+        if(preg_match("/\ADROP(?:\s+(TEMPORARY))?\s+TABLE(?:\s+(IF\s+EXISTS))?\s+(.*)\s*[;]?\Z/is", $query, $matches)) {
             $temporary = !empty($matches[1]);
             $ifexists = !empty($matches[2]);
             $tables = explode(",", $matches[3]);
@@ -2371,7 +2371,7 @@ EOC;
                 }
             }
             return true;
-        } else if(preg_match("/\ADROP\s+DATABASE(?:\s+(IF EXISTS))?\s+`?([A-Z][A-Z0-9\_]*)`?\s*[;]?\Z/is", $query, $matches)) {
+        } else if(preg_match("/\ADROP\s+DATABASE(?:\s+(IF\s+EXISTS))?\s+`?([A-Z][A-Z0-9\_]*)`?\s*[;]?\Z/is", $query, $matches)) {
             $ifexists = !empty($matches[1]);
             $db_name = $matches[2];
 
@@ -2384,17 +2384,11 @@ EOC;
             }
 
             $db = $this->databases[$db_name];
-
-            $tables = $db->listTables();
-
-            foreach($tables as $table) {
-                $db->dropTable($table_name);
-            }
-
+            $db->drop();
             unset($this->databases[$db_name]);
 
             return true;
-        } else if(preg_match("/\ADROP\s+SEQUENCE(?:\s+(IF EXISTS))?\s+(?:`?([^\W\d]\w*)`?\.)?`?([^\W\d]\w*)`?\s*[;]?\Z/is", $query, $matches)) {
+        } else if(preg_match("/\ADROP\s+SEQUENCE(?:\s+(IF\s+EXISTS))?\s+(?:`?([^\W\d]\w*)`?\.)?`?([^\W\d]\w*)`?\s*[;]?\Z/is", $query, $matches)) {
             list(, $ifExists, $dbName, $sequenceName) = $matches;
 
             $db = $this->get_database($dbName);

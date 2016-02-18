@@ -81,6 +81,20 @@ class fSQLDatabaseTest extends fSQLBaseTest
         $this->assertEquals(array('real1', 'real2'), $tables);
     }
 
+    public function testDrop()
+    {
+        $db = new fSQLDatabase('shazam', parent::$tempDir);
+        $table = $db->createTable('blah', self::$columns, false);
+        $sequences = $db->getSequences();
+        $sequences->create();
+        $this->assertNotEmpty($db->listTables());
+        $this->assertTrue($sequences->exists());
+
+        $db->drop();
+        $this->assertFalse($sequences->exists());
+        $this->assertEmpty($db->listTables());
+    }
+
     public function testGetTableEmpty()
     {
         $db = new fSQLDatabase('shazam', parent::$tempDir);

@@ -663,6 +663,19 @@ class fSQLDatabase
         return $this->path;
     }
 
+    public function drop()
+    {
+        $tables = $this->listTables();
+
+        foreach($tables as $table) {
+            $this->dropTable($table);
+        }
+
+        if($this->sequencesFile->exists()) {
+            $this->sequencesFile->drop();
+        }
+    }
+
     public function createTable($table_name, $columns, $temporary = false)
     {
         if(!$temporary) {
@@ -990,6 +1003,12 @@ class fSQLSequencesFile
     public function isEmpty()
     {
         return empty($this->sequences);
+    }
+
+    public function drop()
+    {
+        $this->lockFile->drop();
+        $this->file->drop();
     }
 
     public function addSequence($name, $start, $increment, $min, $max, $cycle)

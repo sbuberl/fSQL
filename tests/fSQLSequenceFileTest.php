@@ -25,6 +25,15 @@ class fSQLSequenceFileTest extends fSQLBaseTest
         $this->assertTrue($this->sequences->exists());
     }
 
+    public function testDrop()
+    {
+        $result = $this->sequences->create();
+        $this->assertTrue($this->sequences->exists());
+
+        $this->sequences->drop();
+        $this->assertFalse($this->sequences->exists());
+    }
+
     public function testExists()
     {
         $this->assertFalse($this->sequences->exists());
