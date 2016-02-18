@@ -2,7 +2,7 @@
 
 require_once dirname(__FILE__) . '/fSQLBaseTest.php';
 
-class fSQLAlterSequenceTest extends fSQLBaseTest
+class AlterSequenceTest extends fSQLBaseTest
 {
     private $fsql;
     private $sequences;

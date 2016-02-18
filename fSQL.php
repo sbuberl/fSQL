@@ -321,7 +321,8 @@ class fSQLEnvironment
 
     private function query_create_sequence($query)
     {
-        if(preg_match("/\ACREATE\s+SEQUENCE\s+(?:(IF\s+NOT\s+EXISTS)\s+)?(?:`?([^\W\d]\w*)`?\.)?`?([^\W\d]\w*)`?(.+?)\s*;/is", $query, $matches)) {
+
+        if(preg_match("/\ACREATE\s+SEQUENCE\s+(?:(IF\s+NOT\s+EXISTS)\s+)?(?:`?([^\W\d]\w*)`?\.)?`?([^\W\d]\w*)`?(.+?)\s*[;]?\Z/is", $query, $matches)) {
             list(, $ifNotExists, $dbName, $sequenceName, $valuesList) = $matches;
             $db = $this->get_database($dbName);
             if($db === false) {
@@ -334,7 +335,7 @@ class fSQLEnvironment
                 $sequence = $sequences->getSequence($sequenceName);
                 if($sequence !== false) {
                     if(empty($ifNotExists)) {
-                        return $this->set_error("Sequence {$db->name}.{$sequenceName} already exists");
+                        return $this->set_error("Sequence {$db->name()}.{$sequenceName} already exists");
                     } else {
                         return true;
                     }
@@ -2138,7 +2139,7 @@ EOC;
 
             $columns =  $tableObj->getColumns();
 
-            preg_match_all("/(?:ADD|ALTER|CHANGE|DROP|RENAME).*?(?:,|\Z)/is", trim($changes), $specs);
+            preg_match_all("/(?:ADD|ALTER|DROP|RENAME).*?(?:,|\Z)/is", trim($changes), $specs);
             for($i = 0; $i < count($specs[0]); $i++) {
                 if(preg_match("/\AADD\s+(?:CONSTRAINT\s+`?[A-Z][A-Z0-9\_]*`?\s+)?PRIMARY\s+KEY\s*\((.+?)\)/is", $specs[0][$i], $matches)) {
                     $columnDef =& $columns[$matches[1]];
@@ -2374,10 +2375,12 @@ EOC;
             $ifexists = !empty($matches[1]);
             $db_name = $matches[2];
 
-            if(!$ifexists && !isset($this->databases[$db_name])) {
-                return $this->set_error("Database '{$db_name}' does not exist");
-            } else if(!isset($this->databases[$db_name])) {
-                return true;
+            if(!isset($this->databases[$db_name])) {
+                if(!$ifexists) {
+                    return $this->set_error("Database '{$db_name}' does not exist");
+                } else {
+                    return true;
+                }
             }
 
             $db = $this->databases[$db_name];
