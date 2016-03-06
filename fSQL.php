@@ -1212,7 +1212,7 @@ EOC;
         $selectedInfo = array();
         $the_rest = $matches[3];
         $stop = false;
-        while(!$stop && preg_match("/((?:\A|\s*)(?:(-?\d+(?:\.\d+)?)|('.*?(?<!\\\\)')|(?:(`?([^\W\d]\w*)`?\s*\(.*?\)))|(?:(?:(?:`?([^\W\d]\w*)`?\.)?(`?([^\W\d]\w*)`?|\*))))(?:(?:\s+(?:AS\s+)?`?([^\W\d]\w*)`?))?\s*)(?:\Z|(from|where|having|(?:group|order)?\s+by|limit)|,)/is", $the_rest, $colmatches))
+        while(!$stop && preg_match("/((?:\A|\s*)(?:(-?\d+(?:\.\d+)?)|('.*?(?<!\\\\)')|(?:(`?([^\W\d]\w*)`?\s*\(.*?\)))|(?:(?:(?:`?([^\W\d]\w*)`?\.)?(`?([^\W\d]\w*)`?|\*))))(?:(?:\s+(?:AS\s+)?`?([^\W\d]\w*)`?))?\s*)(?:\Z|(from|where|having|(?:group|order)?\s+by|offset|fetch|limit)|,)/is", $the_rest, $colmatches))
         {
             $stop = !empty($colmatches[10]);
             $idx = !$stop ? 0 : 1;
@@ -1253,7 +1253,7 @@ EOC;
         $data = array();
         $joins = array();
         $joined_info = array( 'tables' => array(), 'offsets' => array(), 'columns' =>array() );
-        if(preg_match('/\Afrom\s+(.+?)(\s+(?:where|having|(:group|order)?\s+by|limit)\s+(?:.+))?\s*\Z/is', $the_rest, $from_matches))
+        if(preg_match('/\Afrom\s+(.+?)(\s+(?:where|having|(:group|order)?\s+by|offset|fetch|limit)\s+(?:.+))?\s*\Z/is', $the_rest, $from_matches))
         {
             $isTableless = false;
             $tables = array();
@@ -1394,14 +1394,14 @@ EOC;
         $limit = null;
         $singleRow = false;
 
-        if(preg_match('/\s+WHERE\s+((?:.+?)(?:(?:(?:(?:\s+)(?:AND|OR)(?:\s+))?(?:.+?)?)*?)?)(\s+(?:HAVING|(?:GROUP|ORDER)\s+BY|LIMIT|FETCH).*)?\Z/is', $the_rest, $additional)) {
+        if(preg_match('/\s+WHERE\s+((?:.+?)(?:(?:(?:(?:\s+)(?:AND|OR)(?:\s+))?(?:.+?)?)*?)?)(\s+(?:HAVING|(?:GROUP|ORDER)\s+BY|LIMIT|OFFET|FETCH).*)?\Z/is', $the_rest, $additional)) {
             $the_rest = isset($additional[2]) ? $additional[2] : '';
             $where = $this->build_where($additional[1], $joined_info);
             if(!$where)
                 return $this->set_error('Invalid WHERE clause: ' . $this->error_msg);
         }
 
-        if(preg_match('/\s+GROUP\s+BY\s+(.*?)(\s+(?:HAVING|ORDER\s+BY|LIMIT).*)?\Z/is', $the_rest, $additional)) {
+        if(preg_match('/\s+GROUP\s+BY\s+(.*?)(\s+(?:HAVING|ORDER\s+BY|OFFSET|FETCH|LIMIT).*)?\Z/is', $the_rest, $additional)) {
             $the_rest = isset($additional[2]) ? $additional[2] : '';
             $GROUPBY = explode(',', $additional[1]);
             $joined_info['group_columns'] = array();
@@ -1429,7 +1429,7 @@ EOC;
             }
         }
 
-        if(preg_match('/\s+HAVING\s+((?:.+?)(?:(?:(?:(?:\s+)(?:AND|OR)(?:\s+))?(?:.+?)?)*?)?)(?:\s+(?:ORDER\s+BY|LIMIT).*)?\Z/is', $the_rest, $additional)) {
+        if(preg_match('/\s+HAVING\s+((?:.+?)(?:(?:(?:(?:\s+)(?:AND|OR)(?:\s+))?(?:.+?)?)*?)?)(?:\s+(?:ORDER\s+BY|OFFSET|FETCH|LIMIT).*)?\Z/is', $the_rest, $additional)) {
             $the_rest = isset($additional[2]) ? $additional[2] : '';
             if(!isset($joined_info['group_columns'])) { // no GROUP BY
                 $joined_info['group_columns'] = array();
@@ -1443,7 +1443,7 @@ EOC;
             }
         }
 
-        if(preg_match('/\s+ORDER\s+BY\s+(.*?)(\s+(?:LIMIT).*)?\Z/is', $the_rest, $additional)) {
+        if(preg_match('/\s+ORDER\s+BY\s+(.*?)(\s+(?:OFFSET|FETCH|LIMIT).*)?\Z/is', $the_rest, $additional)) {
             $the_rest = isset($additional[2]) ? $additional[2] : '';
             $ORDERBY = explode(',', $additional[1]);
             foreach($ORDERBY as $order_item) {
@@ -1460,19 +1460,40 @@ EOC;
             }
         }
 
-        if(preg_match('/\s+LIMIT\s+(?:(?:(\d+)\s*,\s*(\-1|\d+))|(?:(\d+)\s+OFFSET\s+(\d+))|(\d+))/is', $the_rest, $additional)) {
-            // LIMIT length
-            if(isset($additional[5])) {
-                $limit_stop = $additional[5]; $limit_start = 0;
-            }
-            // LIMIT length OFFSET offset (mySQL, Postgres, SQLite)
-            else if(isset($additional[3]))
-                list(, $limit_stop, $limit_start) = $additional;
-            // LIMIT offset, length (mySQL, SQLite)
-            else
-                list(, $limit_start, $limit_stop) = $additional;
+        $limit_start = null;
+        if(preg_match('/\s+OFFSET\s+(\d+)\s+ROWS?\b/is', $the_rest, $additional)) {
+            $limit_start = (int) $additional[1];
+        }
 
-            $limit = array((int) $limit_start, (int) $limit_stop);
+        if(preg_match('/\s+FETCH\s+(?:FIRST|NEXT)\s+(?:(\d+)\s+)?ROWS?\s+ONLY\b/is', $the_rest, $additional)) {
+            $limit_stop = isset($additional[1]) ? (int) $additional[1] : 1;
+            if($limit_start === null)
+                $limit_start = 0;
+            $limit = array($limit_start, $limit_stop);
+        }
+        else if($limit_start !== null) {
+            // OFFSET without FETCH FIRST
+            $limit = array($limit_start, NULL);
+        }
+
+        if(preg_match('/\s+LIMIT\s+(?:(?:(\d+)\s*,\s*(\-1|\d+))|(?:(\d+)\s+OFFSET\s+(\d+))|(\d+))/is', $the_rest, $additional)) {
+            if($limit === null) {
+                if(isset($additional[5])) {
+                    // LIMIT length
+                    $limit_stop = $additional[5]; $limit_start = 0;
+                } else if(isset($additional[3])) {
+                    // LIMIT length OFFSET offset (mySQL, Postgres, SQLite)
+                    $limit_stop = $additional[3];
+                    $limit_start = $additional[4];
+                } else {
+                    // LIMIT offset, length (mySQL, SQLite)
+                    list(, $limit_start, $limit_stop) = $additional;
+                }
+
+                $limit = array((int) $limit_start, (int) $limit_stop);
+            } else {
+                return $this->set_error('LIMIT forbidden when FETCH FIRST or OFFSET already specified');
+            }
         }
 
         if(!$isGrouping && $oneAggregate)
@@ -1646,7 +1667,12 @@ EOT;
         }
 
         if($limit !== null) {
-            $final_set = array_slice($final_set, $limit[0], $limit[1]);
+            $stop = $limit[1];
+            if($stop !== NULL) {
+                $final_set = array_slice($final_set, $limit[0], $stop);
+            } else {
+                $final_set = array_slice($final_set, $limit[0]);
+            }
         }
 
         if(!empty($final_set) && $has_random && preg_match("/\s+RANDOM(?:\((\d+)\)?)?\s+/is", $select, $additional)) {
