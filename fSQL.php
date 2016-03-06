@@ -2923,6 +2923,29 @@ EOC;
         return $new_join_data;
     }
 
+    function fetch_all($id, $type = 1)
+	{
+        if($id && isset($this->cursors[$id]) && isset($this->data[$id])) {
+            $data = $this->data[$id];
+            if($type === FSQL_NUM) {
+                return $data;
+            }
+
+            $result_array = array();
+            $columns = $this->columns[$id];
+            if($type === FSQL_ASSOC) {
+                foreach($data as $entry)
+                    $result_array[] = array_combine($columns, $entry);
+            } else {
+                foreach($data as $entry)
+                    $result_array[] = array_merge($entry, array_combine($columns, $entry));
+            }
+            return $result_array;
+        } else {
+            return $this->set_error('Bad results id passed in');
+        }
+	}
+
     public function fetch_array($id, $type = 1)
     {
         if(!$id || !isset($this->cursors[$id]) || !isset($this->data[$id][$this->cursors[$id][0]]))
