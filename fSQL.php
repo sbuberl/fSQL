@@ -1504,14 +1504,14 @@ EOC;
                             if($index === false) {
                                 return false;
                             }
-                            $select_line .= "\$entry[$index], ";
+                            $select_line .= "\$this->trim_quotes(\$entry[$index]), ";
                             $selected_columns[] = $select_alias;
                         }
 
                         if(!in_array($index, $group_array)) {
                             return $this->set_error("Selected column '{$joined_info['columns'][$index]}' is not a grouped column");
                         }
-                        $select_line .= "\$group[0][$index], ";
+                        $select_line .= "\$this->trim_quotes(\$group[0][$index]), ";
                         $selected_columns[] = $select_alias;
                         break;
                     case 'number':
@@ -1587,7 +1587,7 @@ EOT;
                             $column_names = array_keys($table_columns);
                             foreach($column_names as $index => $column_name) {
                                 $select_value = $start_index + $index;
-                                $select_line .= "\$entry[$select_value], ";
+                                $select_line .= "\$this->trim_quotes(\$entry[$select_value]), ";
                                 $selected_columns[] = $column_name;
                             }
                         }
@@ -1602,7 +1602,7 @@ EOT;
                         if($index === false) {
                             return false;
                         }
-                        $select_line .= "\$entry[$index], ";
+                        $select_line .= "\$this->trim_quotes(\$entry[$index]), ";
                         $selected_columns[] = $select_alias;
                     }
                     break;
@@ -1662,6 +1662,11 @@ EOT;
         }
 
         return $this->create_result_set($selected_columns, $final_set);
+    }
+
+    private function trim_quotes($string)
+    {
+        return preg_replace("/^'(.+)'$/s", "\\1", $string);
     }
 
     private function find_column($column, $table_name, $joined_info, $where) {
