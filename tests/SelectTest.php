@@ -24,6 +24,8 @@ class SelectTest extends fSQLBaseTest
         array(8, 'douglas', 'adams', 'london'),
         array(9, 'bill', 'johnson', 'derry'),
         array(10, 'jon', 'doe', 'new york'),
+        array(11, 'homer', null, 'boston'),
+        array(12, null, 'king', 'tokyo'),
     );
 
     public function setUp()
@@ -32,6 +34,55 @@ class SelectTest extends fSQLBaseTest
         $this->fsql = new fSQLEnvironment();
         $this->fsql->define_db('db1', parent::$tempDir);
         $this->fsql->select_db('db1');
+    }
+
+    private function isArrayKeySorted($array, $options)
+    {
+        $i = 0;
+        $total_elements = count($array);
+        $current_option = current($options);
+        $current_key = key($options);
+
+        list($key, $ascending, $nulls_first) = $current_option;
+
+        while($total_elements > 1) {
+            if($array[$i][$key] === null && $array[$i+1][$key] !== null && !$nulls_first) {
+                return false;
+            } else if($array[$i][$key] !== null && $array[$i+1][$key] === null && $nulls_first) {
+                return false;
+            } else if($ascending && $array[$i][$key] > $array[$i+1][$key]) {
+                return false;
+            } else if(!$ascending && $array[$i][$key] < $array[$i+1][$key]) {
+                return false;
+            } else if($array[$i][$key] == $array[$i+1][$key]) {
+                $new_option = next($options);
+                while($new_option !== false)
+                {
+                    list($new_key, $new_ascending, $new_nulls_first) = $new_option;
+                    if($array[$i][$new_key] === null || $array[$i+1][$new_key] === null) {
+                        if($array[$i+1][$new_key] !== null && !$new_nulls_first) {
+                            return false;
+                        } else if($array[$i+1][$new_key] === null && $new_nulls_first) {
+                            return false;
+                        }
+                    } else if($new_ascending && $array[$i][$new_key] > $array[$i+1][$new_key]) {
+                        return false;
+                    } else if(!$new_ascending && $array[$i][$new_key] < $array[$i+1][$new_key]) {
+                        return false;
+                    }
+                    $new_option = next($options);
+                }
+
+                reset($options);
+                while(key($options) !== $current_key)
+                    next($options);
+            }
+
+            $i++;
+            $total_elements--;
+        }
+
+        return true;
     }
 
     public function testSelectAll()
@@ -49,6 +100,96 @@ class SelectTest extends fSQLBaseTest
         $this->assertEquals(self::$entries1, $results);
     }
 
+    public function testOrderByColumnIndex()
+    {
+        $table = fSQLCachedTable::create($this->fsql->current_db(), 'customers', self::$columns1);
+        foreach(self::$entries1 as $entry) {
+            $table->insertRow($entry);
+        }
+        $table->commit();
+
+        $result = $this->fsql->query("SELECT * FROM customers ORDER BY 3, 2");
+        $this->assertTrue($result !== false);
+
+        $results = $this->fsql->fetch_all($result, FSQL_NUM);
+        $tosort = array( array( 2, true, true ), array( 1, true, true) );
+        $this->assertTrue($this->isArrayKeySorted($results, $tosort));
+    }
+
+    public function testOrderByColumnIndexBad()
+    {
+        $table = fSQLCachedTable::create($this->fsql->current_db(), 'customers', self::$columns1);
+        foreach(self::$entries1 as $entry) {
+            $table->insertRow($entry);
+        }
+        $table->commit();
+
+        $result = $this->fsql->query("SELECT * FROM customers ORDER BY 5");
+        $this->assertFalse($result);
+        $this->assertEquals('ORDER BY: Invalid column number: 5', trim($this->fsql->error()));
+    }
+
+    public function testOrderByColumnName()
+    {
+        $table = fSQLCachedTable::create($this->fsql->current_db(), 'customers', self::$columns1);
+        foreach(self::$entries1 as $entry) {
+            $table->insertRow($entry);
+        }
+        $table->commit();
+
+        $result = $this->fsql->query("SELECT * FROM customers ORDER BY lastName, firstName");
+        $this->assertTrue($result !== false);
+
+        $results = $this->fsql->fetch_all($result, FSQL_NUM);
+        $tosort = array( array( 2, true, true ), array( 1, true, true) );
+        $this->assertTrue($this->isArrayKeySorted($results, $tosort));
+    }
+
+    public function testOrderByColumnNameBad()
+    {
+        $table = fSQLCachedTable::create($this->fsql->current_db(), 'customers', self::$columns1);
+        foreach(self::$entries1 as $entry) {
+            $table->insertRow($entry);
+        }
+        $table->commit();
+
+        $result = $this->fsql->query("SELECT * FROM customers ORDER BY garbage");
+        $this->assertFalse($result);
+        $this->assertEquals('Unknown column/alias in ORDER BY clause: garbage', trim($this->fsql->error()));
+    }
+
+    public function testOrderByDescAsc()
+    {
+        $table = fSQLCachedTable::create($this->fsql->current_db(), 'customers', self::$columns1);
+        foreach(self::$entries1 as $entry) {
+            $table->insertRow($entry);
+        }
+        $table->commit();
+
+        $result = $this->fsql->query("SELECT * FROM customers ORDER BY lastName ASC, firstName DESC");
+        $this->assertTrue($result !== false);
+
+        $results = $this->fsql->fetch_all($result, FSQL_NUM);
+        $tosort = array( array( 2, true, true ), array( 1, false, true) );
+        $this->assertTrue($this->isArrayKeySorted($results, $tosort));
+    }
+
+    public function testOrderByNullsFirstLast()
+    {
+        $table = fSQLCachedTable::create($this->fsql->current_db(), 'customers', self::$columns1);
+        foreach(self::$entries1 as $entry) {
+            $table->insertRow($entry);
+        }
+        $table->commit();
+
+        $result = $this->fsql->query("SELECT * FROM customers ORDER BY lastName NULLS FIRST, firstName NULLS LAST");
+        $this->assertTrue($result !== false);
+
+        $results = $this->fsql->fetch_all($result, FSQL_NUM);
+        $tosort = array( array( 2, true, true ), array( 1, true, false) );
+        $this->assertTrue($this->isArrayKeySorted($results, $tosort));
+    }
+
     public function testOffsetOnly()
     {
         $table = fSQLCachedTable::create($this->fsql->current_db(), 'customers', self::$columns1);
@@ -61,6 +202,7 @@ class SelectTest extends fSQLBaseTest
         $this->assertTrue($result !== false);
 
         $results = $this->fsql->fetch_all($result, FSQL_NUM);
+
         $this->assertEquals(array_slice(self::$entries1, 5), $results);
     }
 

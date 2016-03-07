@@ -1386,7 +1386,7 @@ EOC;
             }
         }
 
-        $this->tosort = array();
+        $tosort = array();
         $where = null;
         $group_key = null;
         $isGrouping = false;
@@ -1447,15 +1447,26 @@ EOC;
             $the_rest = isset($additional[2]) ? $additional[2] : '';
             $ORDERBY = explode(',', $additional[1]);
             foreach($ORDERBY as $order_item) {
-                if(preg_match('/(?:`?([^\W\d]\w*)`?\.)?`?([^\W\d]\w*)`?(?:\s+(ASC|DESC))?/is', $order_item, $additional)) {
-                    list( , $table_alias, $column) = $additional;
-                    $index = $this->find_column($column, $table_alias, $joined_info, "ORDER BY clause");
-                    if($index === false) {
-                        return false;
+                if(preg_match('/(?:(?:(?:`?([^\W\d]\w*)`?\.)?`?([^\W\d]\w*)`?)|(\d+))(?:\s+(ASC|DESC))?(?:\s+NULLS\s+(FIRST|LAST))?/is', $order_item, $additional)) {
+                    if(!empty($additional[2])) {
+                        // table column name
+                        list( , $table_alias, $column) = $additional;
+                        $index = $this->find_column($column, $table_alias, $joined_info, "ORDER BY clause");
+                        if($index === false) {
+                            return false;
+                        }
+                    } else {
+                        // table column number (starts at 1).
+                        $number = $additional[3];
+                        $index = $number - 1;
+                        if(!isset($joined_info['columns'][$index])) {
+                            return $this->set_error('ORDER BY: Invalid column number: '.$number);
+                        }
                     }
 
-                    $ascend = !empty($additional[3]) ? !strcasecmp('ASC', $additional[3]) : true;
-                    $this->tosort[] = array('key' => $index, 'ascend' => $ascend);
+                    $ascend = !empty($additional[4]) ? !strcasecmp('ASC', $additional[4]) : true;
+                    $nulls_first = !empty($additional[5]) ? !strcasecmp('FIRST', $additional[5]) : true;
+                    $tosort[] = array('key' => $index, 'ascend' => $ascend, 'nullsFirst' => $nulls_first);
                 }
             }
         }
@@ -1662,8 +1673,9 @@ EOT;
         $final_set = array();
         eval($code);
 
-        if(!empty($this->tosort)) {
-            usort($final_set, array($this, "orderBy"));
+        if(!empty($tosort)) {
+            $orderBy = new fSQLOrderByClause($tosort);
+            $orderBy->sort($final_set);
         }
 
         if($limit !== null) {
@@ -1690,9 +1702,9 @@ EOT;
         return $this->create_result_set($selected_columns, $final_set);
     }
 
-    private function trim_quotes($string)
+    private function trim_quotes($value)
     {
-        return preg_replace("/^'(.+)'$/s", "\\1", $string);
+        return $value !== null && is_string($value) ? preg_replace("/^'(.+)'$/s", "\\1", $value) : $value;
     }
 
     private function find_column($column, $table_name, $joined_info, $where) {
@@ -2024,20 +2036,6 @@ EOT;
             return "($condition) === ".FSQL_TRUE;
         }
         return false;
-    }
-
-    private function orderBy($a, $b)
-    {
-        foreach($this->tosort as $tosort) {
-            extract($tosort);
-            $a[$key] = preg_replace("/^'(.+?)'$/", "\\1", $a[$key]);
-            $b[$key] = preg_replace("/^'(.+?)'$/", "\\1", $b[$key]);
-            if (($a[$key] > $b[$key] && $ascend) || ($a[$key] < $b[$key] && !$ascend)) {
-                return 1;
-            } else if (($a[$key] < $b[$key] && $ascend) || ($a[$key] > $b[$key] && !$ascend)) {
-                return -1;
-            }
-        }
     }
 
     ////Delete data from the DB
