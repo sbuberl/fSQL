@@ -996,6 +996,7 @@ class fSQLEnvironment
                 return $this->error_table_read_lock($table_name_pieces);
             }
 
+            $table_name = $table_name_pieces[2];
             $columns = $table->getColumns();
             $columnNames = array_keys($columns);
             $cursor = $table->getCursor();
@@ -1136,7 +1137,7 @@ EOC;
             list( , $full_dest_table_name, $dest_alias, $full_src_table_name, $src_alias, $on_clause, $matches_clause) = $matches;
 
             $dest_table_name_pieces = $this->parse_relation_name($full_dest_table_name);
-            if(!($dest_table = $this->find_table($dest_table_name_piecese))) {
+            if(!($dest_table = $this->find_table($dest_table_name_pieces))) {
                 return false;
             }
 
@@ -1402,13 +1403,14 @@ EOC;
                             $join_name = trim($join[1][$i]);
                             $join_full_table_name = $join[2][$i];
                             $join_table_saveas = $join[3][$i];
-                            if(empty($join_table_saveas)) {
-                                $join_table_saveas = $join_table_name;
-                            }
 
                             $join_table_name_pieces = $this->parse_relation_name($join_full_table_name);
                             if(!($join_table = $this->find_table($join_table_name_pieces))) {
                                 return false;
+                            }
+
+                            if(empty($join_table_saveas)) {
+                                $join_table_saveas = $join_table_name_pieces[2];
                             }
 
                             if(!isset($tables[$join_table_saveas])) {
@@ -2383,7 +2385,7 @@ EOC;
                         return $this->set_error("Destination table {$newTable->fullName()} already exists");
                     }
 
-                    return $schema->renameTable($tableName, $newTable->name(), $new_schema);
+                    return $schema->renameTable($tableName, $newTable->name(), $newSchema);
                 }
                 else {
                     return $this->set_error("Invalid ALTER TABLE query");
@@ -2472,8 +2474,8 @@ EOC;
                 }
 
                 $old_table_name = $old_table_pieces[2];
-                $old_table = $this->find_table($old_db_name, $old_table_name);
-                if($old_table === false) {
+                $old_table = $old_schema->getTable($old_table_name);
+                if($old_table->exists()) {
                     return false;
                 }
                 elseif($old_table->isReadLocked()) {
@@ -2481,12 +2483,12 @@ EOC;
                 }
 
                 $new_table_name = $new_table_pieces[2];
-                $new_table = $new_db->getTable($new_table_name);
+                $new_table = $new_schema->getTable($new_table_name);
                 if($new_table->exists()) {
                     return $this->set_error("Destination table {$new_table->fullName()} already exists");
                 }
 
-                return $old_db->renameTable($old_table_name, $new_table_name, $new_db);
+                return $old_schema->renameTable($old_table_name, $new_table_name, $new_schema);
             }
             return true;
         } else {
@@ -2508,12 +2510,13 @@ EOC;
                     if($schema == false)
                         return false;
 
-                    $table = $schema->getTable($table_name_pieces[2]);
+                    $table_name = $table_name_pieces[2];
+                    $table = $schema->getTable($table_name);
                     if($table->isReadLocked()) {
                         return $this->error_table_read_lock($table_name_pieces);
                     }
 
-                    $existed = $db->dropTable($table_name);
+                    $existed = $schema->dropTable($table_name);
                     if(!$ifexists && !$existed) {
                         return $this->error_table_not_exists($table_name_pieces);
                     }
@@ -2557,7 +2560,7 @@ EOC;
         } else if(preg_match("/\ADROP\s+SEQUENCE(?:\s+(IF\s+EXISTS))?\s+(`?(?:[^\W\d]\w*`?\.`?){0,2}[^\W\d]\w*`?)\s*[;]?\Z/is", $query, $matches)) {
             list(, $ifExists, $fullSequenceName) = $matches;
 
-            $seqNamePieces = $this->parse_relation_name($table_parts[1]);
+            $seqNamePieces = $this->parse_relation_name($fullSequenceName);
             $schema = $this->find_schema($seqNamePieces[0], $seqNamePieces[1]);
             if($schema == false)
                 return false;
