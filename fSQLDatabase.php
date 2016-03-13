@@ -16,6 +16,7 @@ class fSQLTableCursor
     {
         $this->num_rows = count($this->entries);
         $this->pos = 0;
+
         return $this->pos;
     }
 
@@ -26,10 +27,11 @@ class fSQLTableCursor
 
     public function getRow()
     {
-        if($this->pos >= 0 && $this->pos < $this->num_rows)
+        if ($this->pos >= 0 && $this->pos < $this->num_rows) {
             return $this->entries[$this->pos];
-        else
+        } else {
             return false;
+        }
     }
 
     public function isDone()
@@ -44,19 +46,21 @@ class fSQLTableCursor
 
     public function previous()
     {
-        $this->pos--;
+        --$this->pos;
     }
 
     public function next()
     {
-        $this->pos++;
+        ++$this->pos;
+
         return $this->pos;
     }
 
     public function seek($pos)
     {
-        if($pos >=0 & $pos < count($this->entries))
+        if ($pos >= 0 & $pos < count($this->entries)) {
             $this->pos = $pos;
+        }
     }
 }
 
@@ -89,7 +93,7 @@ abstract class fSQLTable implements fSQLRelation
 
     public function fullName()
     {
-        return $this->schema->fullName(). '.' . $this->name;
+        return $this->schema->fullName().'.'.$this->name;
     }
 
     public function schema()
@@ -97,11 +101,11 @@ abstract class fSQLTable implements fSQLRelation
         return $this->schema;
     }
 
-    public abstract function exists();
+    abstract public function exists();
 
-    public abstract function temporary();
+    abstract public function temporary();
 
-    public abstract function truncate();
+    abstract public function truncate();
 
     public function getColumnNames()
     {
@@ -125,10 +129,12 @@ abstract class fSQLTable implements fSQLRelation
 
     public function getCursor()
     {
-        if($this->cursor === null)
+        if ($this->cursor === null) {
             $this->cursor = new fSQLTableCursor($this->entries);
+        }
 
         $this->cursor->first();
+
         return $this->cursor;
     }
 
@@ -137,25 +143,28 @@ abstract class fSQLTable implements fSQLRelation
         return new fSQLTableCursor($this->entries);
     }
 
-    public function getIdentity() {
-         if($this->identity === null) {
-            foreach($this->getColumns() as $columnName => $column) {
-                if($column['auto']) {
+    public function getIdentity()
+    {
+        if ($this->identity === null) {
+            foreach ($this->getColumns() as $columnName => $column) {
+                if ($column['auto']) {
                     $this->identity = new fSQLIdentity($this, $columnName);
                     $this->identity->load();
                     break;
                 }
             }
         }
+
         return $this->identity;
     }
 
-    public function dropIdentity() {
+    public function dropIdentity()
+    {
         $this->getIdentity();
-        if($this->identity !== null) {
+        if ($this->identity !== null) {
             $columns = $this->getColumns();
             $columnName = $this->identity->getColumnName();
-            $columns[$columnName]['auto'] ='0';
+            $columns[$columnName]['auto'] = '0';
             $columns[$columnName]['restraint'] = array();
             $this->identity = null;
             $this->setColumns($columns);
@@ -169,8 +178,9 @@ abstract class fSQLTable implements fSQLRelation
 
     public function updateRow($row, $data)
     {
-        foreach($data as $key=> $value)
+        foreach ($data as $key => $value) {
             $this->entries[$row][$key] = $value;
+        }
     }
 
     public function deleteRow($row)
@@ -178,14 +188,14 @@ abstract class fSQLTable implements fSQLRelation
         unset($this->entries[$row]);
     }
 
-    public abstract function commit();
+    abstract public function commit();
 
-    public abstract function rollback();
+    abstract public function rollback();
 
-    public abstract function isReadLocked();
-    public abstract function readLock();
-    public abstract function writeLock();
-    public abstract function unlock();
+    abstract public function isReadLocked();
+    abstract public function readLock();
+    abstract public function writeLock();
+    abstract public function unlock();
 }
 
 class fSQLTempTable extends fSQLTable
@@ -217,12 +227,25 @@ class fSQLTempTable extends fSQLTable
     }
 
     /* Unecessary for temporary tables */
-    public function commit() { }
-    public function rollback() { }
-    public function isReadLocked() { return false; }
-    public function readLock() { }
-    public function writeLock() { }
-    public function unlock() { }
+    public function commit()
+    {
+    }
+    public function rollback()
+    {
+    }
+    public function isReadLocked()
+    {
+        return false;
+    }
+    public function readLock()
+    {
+    }
+    public function writeLock()
+    {
+    }
+    public function unlock()
+    {
+    }
 }
 
 class fSQLCachedTable extends fSQLTable
@@ -248,7 +271,7 @@ class fSQLCachedTable extends fSQLTable
 
     public static function create(fSQLSchema $schema, $table_name, $columnDefs)
     {
-        $table = new fSQLCachedTable($schema, $table_name);
+        $table = new self($schema, $table_name);
         $table->columns = $columnDefs;
 
         // create the columns lock
@@ -276,23 +299,24 @@ class fSQLCachedTable extends fSQLTable
     private function printColumns($columnDefs)
     {
         $toprint = count($columnDefs)."\r\n";
-        foreach($columnDefs as $name => $column) {
+        foreach ($columnDefs as $name => $column) {
             $default = $column['default'];
             $type = $column['type'];
             $auto = $column['auto'];
-            if(is_string($default) && $default !== "NULL") {
+            if (is_string($default) && $default !== 'NULL') {
                 $default = "'$default'";
             }
 
             $restraint = '';
-            if($type === FSQL_TYPE_ENUM) {
-                $restraint= "'".implode("','", $column['restraint'])."'";
-            } else if($auto) {
-                $restraint = implode(",", $column['restraint']);
+            if ($type === FSQL_TYPE_ENUM) {
+                $restraint = "'".implode("','", $column['restraint'])."'";
+            } elseif ($auto) {
+                $restraint = implode(',', $column['restraint']);
             }
 
-            $toprint .= $name.": ".$type.";".$restraint.";".$auto.";".$default.";".$column['key'].";".$column['null'].";\r\n";
+            $toprint .= $name.': '.$type.';'.$restraint.';'.$auto.';'.$default.';'.$column['key'].';'.$column['null'].";\r\n";
         }
+
         return $toprint;
     }
 
@@ -350,59 +374,57 @@ class fSQLCachedTable extends fSQLTable
     public function getColumns()
     {
         $this->columnsLockFile->acquireRead();
-        if($this->columnsLockFile->wasModified())
-        {
+        if ($this->columnsLockFile->wasModified()) {
             $this->columnsLockFile->accept();
 
             $this->columnsFile->acquireRead();
             $columnsHandle = $this->columnsFile->getHandle();
 
             $line = fgets($columnsHandle);
-            if(!preg_match("/^(\d+)/", $line, $matches))
-            {
+            if (!preg_match("/^(\d+)/", $line, $matches)) {
                 $this->columnsFile->releaseRead();
                 $this->columnsLockFile->releaseRead();
+
                 return false;
             }
 
             $num_columns = $matches[1];
 
-            for($i = 0; $i < $num_columns; $i++) {
-                $line =    fgets($columnsHandle, 4096);
-                if(preg_match("/(\S+): (dt|d|i|f|s|t|e);(.*);(0|1);(-?\d+(?:\.\d+)?|'.*'|NULL);(p|u|k|n);(0|1);/", $line, $matches)) {
+            for ($i = 0; $i < $num_columns; ++$i) {
+                $line = fgets($columnsHandle, 4096);
+                if (preg_match("/(\S+): (dt|d|i|f|s|t|e);(.*);(0|1);(-?\d+(?:\.\d+)?|'.*'|NULL);(p|u|k|n);(0|1);/", $line, $matches)) {
                     $name = $matches[1];
                     $type = $matches[2];
                     $restraintString = $matches[3];
                     $auto = $matches[4];
                     $default = $matches[5];
 
-                    if($type === FSQL_TYPE_INTEGER)
+                    if ($type === FSQL_TYPE_INTEGER) {
                         $default = (int) $default;
-                    else if($type === FSQL_TYPE_FLOAT)
+                    } elseif ($type === FSQL_TYPE_FLOAT) {
                         $default = (float) $default;
-                    else if($default{0} == "'" && substr($default, -1) == "'") {
+                    } elseif ($default{0} == "'" && substr($default, -1) == "'") {
                         $default = substr($default, 1, -1);
-                    } else if($default === "NULL") {
+                    } elseif ($default === 'NULL') {
                         $default = null;
                     }
 
-                    if($auto === '1' && !empty($restraintString)) {
+                    if ($auto === '1' && !empty($restraintString)) {
                         list($current, $always, $start, $increment, $min, $max, $cycle) = explode(',', $restraintString);
                         $restraint = array((int) $current, (int) $always, (int) $start, (int) $increment, (int) $min, (int) $max, (int) $cycle);
-                    } else if($type === FSQL_TYPE_ENUM && preg_match_all("/'(.*?(?<!\\\\))'/", $restraintString, $enumMatches) !== false) {
+                    } elseif ($type === FSQL_TYPE_ENUM && preg_match_all("/'(.*?(?<!\\\\))'/", $restraintString, $enumMatches) !== false) {
                         $restraint = $enumMatches[1];
                     } else {
                         $restraint = array();
                     }
 
                     $this->columns[$name] = array(
-                        'type' => $type, 'auto' => $auto, 'default' => $default, 'key' => $matches[6], 'null' => $matches[7], 'restraint' => $restraint
+                        'type' => $type, 'auto' => $auto, 'default' => $default, 'key' => $matches[6], 'null' => $matches[7], 'restraint' => $restraint,
                     );
-
-
                 } else {
                     $this->columnsFile->releaseRead();
                     $this->columnsLockFile->releaseRead();
+
                     return false;
                 }
             }
@@ -418,6 +440,7 @@ class fSQLCachedTable extends fSQLTable
     public function getEntries()
     {
         $this->loadEntries();
+
         return parent::getEntries();
     }
 
@@ -438,8 +461,7 @@ class fSQLCachedTable extends fSQLTable
     private function loadEntries()
     {
         $this->dataLockFile->acquireRead();
-        if($this->dataLockFile->wasModified())
-        {
+        if ($this->dataLockFile->wasModified()) {
             $this->dataLockFile->accept();
 
             $entries = null;
@@ -447,38 +469,35 @@ class fSQLCachedTable extends fSQLTable
             $dataHandle = $this->dataFile->getHandle();
 
             $line = fgets($dataHandle);
-            if(!preg_match("/^(\d+)/", $line, $matches))
-            {
+            if (!preg_match("/^(\d+)/", $line, $matches)) {
                 $this->dataFile->releaseRead();
                 $this->dataLockFile->releaseRead();
+
                 return false;
             }
 
             $num_entries = rtrim($matches[1]);
 
-            if($num_entries != 0)
-            {
+            if ($num_entries != 0) {
                 $skip = false;
                 $entries = array();
 
                 $columnDefs = array_values($this->getColumns());
-                for($i = 0;  $i < $num_entries; $i++) {
+                for ($i = 0;  $i < $num_entries; ++$i) {
                     $line = rtrim(fgets($dataHandle, 4096));
 
-                    if(!$skip) {
-                        if(preg_match("/^(\d+):(.*)$/", $line, $matches))
-                        {
+                    if (!$skip) {
+                        if (preg_match("/^(\d+):(.*)$/", $line, $matches)) {
                             $row = $matches[1];
                             $data = trim($matches[2]);
-                        }
-                        else
+                        } else {
                             continue;
-                    }
-                    else {
+                        }
+                    } else {
                         $data .= $line;
                     }
 
-                    if(!preg_match("/(-?\d+(?:\.\d+)?|'.*?(?<!\\\\)'|NULL);$/", $line)) {
+                    if (!preg_match("/(-?\d+(?:\.\d+)?|'.*?(?<!\\\\)'|NULL);$/", $line)) {
                         $skip = true;
                         continue;
                     } else {
@@ -486,20 +505,20 @@ class fSQLCachedTable extends fSQLTable
                     }
 
                     preg_match_all("#((-?\d+(?:\.\d+)?)|'.*?(?<!\\\\)'|NULL);#s", $data, $matches);
-                    for($m = 0; $m < count($matches[0]); $m++) {
-                        if($matches[1][$m] === 'NULL') {
+                    for ($m = 0; $m < count($matches[0]); ++$m) {
+                        if ($matches[1][$m] === 'NULL') {
                             $entries[$row][$m] = null;
-                        } else if(!empty($matches[2][$m])) {
+                        } elseif (!empty($matches[2][$m])) {
                             $number = $matches[2][$m];
-                            if(strpos($number, '.') !== false) {
+                            if (strpos($number, '.') !== false) {
                                 $number = (float) $number;
                             } else {
                                 $number = (int) $number;
                             }
                             $entries[$row][$m] = $number;
-                        } else if($columnDefs[$m]['type'] === FSQL_TYPE_ENUM) {
+                        } elseif ($columnDefs[$m]['type'] === FSQL_TYPE_ENUM) {
                             $index = (int) $matches[2][$m];
-                            $entries[$row][$m] = $index > 0 ? $columnDefs[$m]['restraint'][$index] : "";
+                            $entries[$row][$m] = $index > 0 ? $columnDefs[$m]['restraint'][$index] : '';
                         } else {
                             $entries[$row][$m] = $matches[1][$m];
                         }
@@ -517,19 +536,22 @@ class fSQLCachedTable extends fSQLTable
         return true;
     }
 
-    public function insertRow($data) {
+    public function insertRow($data)
+    {
         $this->loadEntries();
         parent::insertRow($data);
         $this->uncommited = true;
     }
 
-    public function updateRow($row, $data) {
+    public function updateRow($row, $data)
+    {
         $this->loadEntries();
         parent::updateRow($row, $data);
         $this->uncommited = true;
     }
 
-    public function deleteRow($row) {
+    public function deleteRow($row)
+    {
         $this->loadEntries();
         parent::deleteRow($row);
         $this->uncommited = true;
@@ -553,20 +575,21 @@ class fSQLCachedTable extends fSQLTable
 
     public function commit()
     {
-        if($this->uncommited === false)
+        if ($this->uncommited === false) {
             return;
+        }
 
         $this->dataLockFile->acquireWrite();
         $columnDefs = array_values($this->getColumns());
         $toprint = count($this->entries)."\r\n";
-        foreach($this->entries as $number => $entry) {
+        foreach ($this->entries as $number => $entry) {
             $toprint .= $number.': ';
-            foreach($entry as $key => $value) {
-                if($value === NULL) {
+            foreach ($entry as $key => $value) {
+                if ($value === null) {
                     $value = 'NULL';
-                } else if($columnDefs[$key]['type'] === FSQL_TYPE_ENUM) {
+                } elseif ($columnDefs[$key]['type'] === FSQL_TYPE_ENUM) {
                     $value = (int) array_search($value, $columnDefs[$key]['restraint']);
-                } else if(is_string($value)) {
+                } elseif (is_string($value)) {
                     $value = "'$value'";
                 }
                 $toprint .= $value.';';
@@ -601,8 +624,9 @@ class fSQLCachedTable extends fSQLTable
     {
         $success = $this->columnsLockFile->acquireRead() && $this->columnsFile->acquireRead()
             && $this->dataLockFile->acquireRead() && $this->dataFile->acquireRead();
-        if($success) {
+        if ($success) {
             $this->lock = 'r';
+
             return true;
         } else {
             $this->unlock();  // release any locks that did work if at least one failed
@@ -614,8 +638,9 @@ class fSQLCachedTable extends fSQLTable
     {
         $success = $this->columnsLockFile->acquireWrite() && $this->columnsFile->acquireWrite()
             && $this->dataLockFile->acquireWrite() && $this->dataFile->acquireWrite();
-        if($success) {
+        if ($success) {
             $this->lock = 'w';
+
             return true;
         } else {
             $this->unlock();  // release any locks that did work if at least one failed
@@ -625,21 +650,19 @@ class fSQLCachedTable extends fSQLTable
 
     public function unlock()
     {
-        if($this->lock === 'r')
-        {
+        if ($this->lock === 'r') {
             $this->columnsLockFile->releaseRead();
             $this->columnsFile->releaseRead();
             $this->dataLockFile->releaseRead();
             $this->dataFile->releaseRead();
-        }
-        else if($this->lock === 'w')
-        {
+        } elseif ($this->lock === 'w') {
             $this->columnsLockFile->releaseWrite();
             $this->columnsFile->releaseWrite();
             $this->dataLockFile->releaseWrite();
             $this->dataFile->releaseWrite();
         }
         $this->lock = null;
+
         return true;
     }
 }
@@ -667,7 +690,7 @@ class fSQLSchema
 
     public function fullName()
     {
-        return $this->database->name(). '.' . $this->name;
+        return $this->database->name().'.'.$this->name;
     }
 
     public function path()
@@ -683,34 +706,36 @@ class fSQLSchema
     public function create()
     {
         $path = fsql_create_directory($this->path, 'schema', $this->database->environment());
-        if($path !== false) {
+        if ($path !== false) {
             $this->path = $path;
+
             return true;
-        }
-        else
+        } else {
             return false;
+        }
     }
 
     public function drop()
     {
         $tables = $this->listTables();
 
-        foreach($tables as $table) {
+        foreach ($tables as $table) {
             $this->dropTable($table);
         }
 
-        if($this->sequencesFile->exists()) {
+        if ($this->sequencesFile->exists()) {
             $this->sequencesFile->drop();
         }
     }
 
     public function createTable($table_name, $columns, $temporary = false)
     {
-        if(!$temporary) {
+        if (!$temporary) {
             return fSQLCachedTable::create($this, $table_name, $columns);
         } else {
             $table = new fSQLTempTable($this, $table_name, $columns);
             $this->loadedTables[$table_name] = $table;
+
             return $table;
         }
     }
@@ -718,12 +743,12 @@ class fSQLSchema
     public function getRelation($name)
     {
         $table = $this->getTable($name);
-        if($table->exists()) {
+        if ($table->exists()) {
             return $table;
         }
 
         $sequence = $this->getSequence($name);
-        if($sequence !== false) {
+        if ($sequence !== false) {
             return $sequence;
         }
 
@@ -733,14 +758,16 @@ class fSQLSchema
     public function getSequence($name)
     {
         $sequence = $this->sequencesFile->getSequence($name);
-        if($sequence !== false)
+        if ($sequence !== false) {
             return $sequence;
+        }
+
         return false;
     }
 
     public function getTable($table_name)
     {
-        if(!isset($this->loadedTables[$table_name])) {
+        if (!isset($this->loadedTables[$table_name])) {
             $table = new fSQLCachedTable($this, $table_name);
             $this->loadedTables[$table_name] = $table;
         }
@@ -756,11 +783,11 @@ class fSQLSchema
     public function listTables()
     {
         $tables = array();
-        if(file_exists($this->path) && is_dir($this->path)) {
+        if (file_exists($this->path) && is_dir($this->path)) {
             $dir = opendir($this->path);
             while (false !== ($file = readdir($dir))) {
                 if ($file != '.' && $file != '..' && !is_dir($file)) {
-                    if(substr($file, -12) == '.columns.cgi') {
+                    if (substr($file, -12) == '.columns.cgi') {
                         $tables[] = substr($file, 0, -12);
                     }
                 }
@@ -774,8 +801,8 @@ class fSQLSchema
     public function renameTable($old_table_name, $new_table_name, fSQLSchema $new_schema)
     {
         $oldTable = $this->getTable($old_table_name);
-        if($oldTable->exists()) {
-            if(!$oldTable->temporary()) {
+        if ($oldTable->exists()) {
+            if (!$oldTable->temporary()) {
                 $newTable = $new_schema->createTable($new_table_name,  $oldTable->getColumns());
                 copy($oldTable->dataFile->getPath(), $newTable->dataFile->getPath());
                 copy($oldTable->dataLockFile->getPath(), $newTable->dataLockFile->getPath());
@@ -794,9 +821,10 @@ class fSQLSchema
     public function dropTable($table_name)
     {
         $table = $this->getTable($table_name);
-        if($table->exists()) {
+        if ($table->exists()) {
             $table->drop();
             unset($this->loadedTables[$table_name]);
+
             return true;
         } else {
             return false;
@@ -836,8 +864,9 @@ class fSQLDatabase
     public function create()
     {
         $path = fsql_create_directory($this->path, 'database', $this->environment);
-        if($path !== false) {
+        if ($path !== false) {
             $this->path = $path;
+
             return $this->defineSchema('public');
         } else {
             return false;
@@ -846,16 +875,17 @@ class fSQLDatabase
 
     public function drop()
     {
-        foreach($this->schemas as $schema)
+        foreach ($this->schemas as $schema) {
             $schema->drop();
+        }
         $this->schemas = array();
     }
 
     public function defineSchema($name)
     {
-        if(!isset($this->schemas[$name])) {
+        if (!isset($this->schemas[$name])) {
             $schema = new fSQLSchema($this, $name);
-            if($schema->create()) {
+            if ($schema->create()) {
                 $this->schemas[$name] = $schema;
             } else {
                 return false;
@@ -867,7 +897,7 @@ class fSQLDatabase
 
     public function getSchema($name)
     {
-        if(isset($this->schemas[$name])) {
+        if (isset($this->schemas[$name])) {
             return $this->schemas[$name];
         }
 
@@ -881,9 +911,10 @@ class fSQLDatabase
 
     public function dropSchema($name)
     {
-        if(isset($this->schemas[$name])) {
+        if (isset($this->schemas[$name])) {
             $this->schemas[$name]->drop();
             unset($this->schemas[$name]);
+
             return true;
         }
 
@@ -912,14 +943,14 @@ abstract class fSQLSequenceBase
         return $this->lastValue;
     }
 
-    public abstract function load();
+    abstract public function load();
 
-    public abstract function save();
+    abstract public function save();
 
     private function lockAndReload()
     {
         $this->lockFile->acquireWrite();
-        if($this->lockFile->wasModified()) {
+        if ($this->lockFile->wasModified()) {
             $this->load();
         }
     }
@@ -931,7 +962,7 @@ abstract class fSQLSequenceBase
         $this->lockFile->releaseWrite();
     }
 
-    public function set($current,$start,$increment,$min,$max,$cycle)
+    public function set($current, $start, $increment, $min, $max, $cycle)
     {
         $this->current = $current;
         $this->start = $start;
@@ -941,13 +972,15 @@ abstract class fSQLSequenceBase
         $this->cycle = $cycle;
     }
 
-    public function alter($updates) {
+    public function alter($updates)
+    {
         $this->lockAndReload();
 
-        if(array_key_exists('INCREMENT', $updates)) {
+        if (array_key_exists('INCREMENT', $updates)) {
             $this->increment = (int) $updates['INCREMENT'];
-            if($this->increment === 0) {
+            if ($this->increment === 0) {
                 $this->lockFile->releaseWrite();
+
                 return 'Increment of zero in sequence/identity defintion is not allowed';
             }
         }
@@ -956,26 +989,28 @@ abstract class fSQLSequenceBase
         $intMin = defined('PHP_INT_MIN') ? PHP_INT_MIN : ~$intMax;
 
         $climbing = $this->increment > 0;
-        if(array_key_exists('MINVALUE', $updates)) {
+        if (array_key_exists('MINVALUE', $updates)) {
             $this->min = isset($updates['MINVALUE']) ? (int) $updates['MINVALUE'] : ($climbing ? 1 : $intMin);
         }
-        if(array_key_exists('MAXVALUE', $updates)) {
+        if (array_key_exists('MAXVALUE', $updates)) {
             $this->max = isset($updates['MAXVALUE']) ? (int) $updates['MAXVALUE'] : ($climbing ? $intMax : -1);
         }
-        if(array_key_exists('CYCLE', $updates)) {
+        if (array_key_exists('CYCLE', $updates)) {
             $this->cycle = isset($updates['CYCLE']) ? (int) $updates['CYCLE'] : 0;
         }
 
-        if($this->min > $this->max) {
+        if ($this->min > $this->max) {
             $this->lockFile->releaseWrite();
+
             return 'Sequence/identity minimum is greater than maximum';
         }
 
-        if(isset($updates['RESTART'])) {
+        if (isset($updates['RESTART'])) {
             $restart = $updates['RESTART'];
             $this->current = $restart !== 'start' ? (int) $restart : $this->start;
-            if($this->current < $this->min || $this->current > $this->max) {
+            if ($this->current < $this->min || $this->current > $this->max) {
                 $this->lockFile->releaseWrite();
+
                 return 'Sequence/identity restart value not between min and max';
             }
         }
@@ -990,16 +1025,17 @@ abstract class fSQLSequenceBase
         $this->lockAndReload();
 
         $cycled = false;
-        if($this->increment > 0 && $this->current > $this->max) {
+        if ($this->increment > 0 && $this->current > $this->max) {
             $this->current = $this->min;
             $cycled = true;
-        } else if($this->increment < 0 && $this->current < $this->min) {
+        } elseif ($this->increment < 0 && $this->current < $this->min) {
             $this->current = $this->max;
             $cycled = true;
         }
 
-        if($cycled && !$this->cycle) {
+        if ($cycled && !$this->cycle) {
             $this->lockFile->releaseWrite();
+
             return false;
         }
 
@@ -1043,6 +1079,7 @@ class fSQLIdentity extends fSQLSequenceBase
     public function getAlways()
     {
         $this->load();
+
         return $this->always;
     }
 
@@ -1059,12 +1096,13 @@ class fSQLIdentity extends fSQLSequenceBase
     {
         $columns = $this->table->getColumns();
         $columns[$this->columnName]['restraint'] = array($this->current, $this->always,
-            $this->start, $this->increment, $this->min, $this->max, $this->cycle);
+            $this->start, $this->increment, $this->min, $this->max, $this->cycle, );
         $this->table->setColumns($columns);
     }
 
-    public function alter($updates) {
-        if(array_key_exists('ALWAYS', $updates)) {
+    public function alter($updates)
+    {
+        if (array_key_exists('ALWAYS', $updates)) {
             $this->always = (int) $updates['ALWAYS'];
         }
 
@@ -1096,7 +1134,7 @@ class fSQLSequence extends fSQLSequenceBase implements fSQLRelation
 
     public function fullName()
     {
-        return $this->file->schema()->name() . '.' . $this->name;
+        return $this->file->schema()->name().'.'.$this->name;
     }
 
     public function load()
@@ -1132,7 +1170,7 @@ class fSQLSequencesFile
         $this->lockFile->reset();
 
         $this->file->acquireWrite();
-        fwrite($this->file->getHandle(), "");
+        fwrite($this->file->getHandle(), '');
         $this->file->releaseWrite();
 
         return true;
@@ -1167,13 +1205,13 @@ class fSQLSequencesFile
         $this->reload();
 
         $sequence = new fSQLSequence($name, $this);
-        $sequence->set($start,$start,$increment,$min,$max,$cycle);
+        $sequence->set($start, $start, $increment, $min, $max, $cycle);
         $this->sequences[$name] = $sequence;
 
         $fileHandle = $this->file->getHandle();
         fseek($fileHandle, 0, SEEK_END);
         fprintf($fileHandle, "%s: %d;%d;%d;%d;%d;%d\r\n", $name, $start,
-            $start,$increment,$min,$max,$cycle);
+            $start, $increment, $min, $max, $cycle);
 
         $this->file->releaseWrite();
         $this->lockFile->releaseWrite();
@@ -1182,16 +1220,16 @@ class fSQLSequencesFile
     public function getSequence($name)
     {
         $sequence = false;
-        if($this->exists())
-        {
+        if ($this->exists()) {
             $this->lockFile->acquireRead();
             $this->reload();
 
-            if(isset($this->sequences[$name])) {
+            if (isset($this->sequences[$name])) {
                 $sequence = $this->sequences[$name];
             }
             $this->lockFile->releaseRead();
         }
+
         return $sequence;
     }
 
@@ -1199,7 +1237,7 @@ class fSQLSequencesFile
     {
         $this->lockFile->acquireWrite();
         $this->reload();
-        if(isset($this->sequences[$name])) {
+        if (isset($this->sequences[$name])) {
             unset($this->sequences[$name]);
         }
 
@@ -1210,18 +1248,18 @@ class fSQLSequencesFile
     public function reload()
     {
         $this->lockFile->acquireRead();
-        if($this->lockFile->wasModified()) {
+        if ($this->lockFile->wasModified()) {
             $this->lockFile->accept();
 
             $this->file->acquireRead();
             $fileHandle = $this->file->getHandle();
-            while(!feof($fileHandle)) {
+            while (!feof($fileHandle)) {
                 fscanf($fileHandle, "%[^:]: %d;%d;%d;%d;%d;%d\r\n", $name, $current,
-                    $start,$increment,$min,$max,$cycle);
-                if(!isset($this->sequences[$name])) {
+                    $start, $increment, $min, $max, $cycle);
+                if (!isset($this->sequences[$name])) {
                     $this->sequences[$name] = new fSQLSequence($name, $this);
                 }
-                $this->sequences[$name]->set($current,$start,$increment,$min,$max,$cycle);
+                $this->sequences[$name]->set($current, $start, $increment, $min, $max, $cycle);
             }
 
             $this->file->releaseRead();
@@ -1238,9 +1276,9 @@ class fSQLSequencesFile
 
         $fileHandle = $this->file->getHandle();
         ftruncate($fileHandle, 0);
-        foreach($this->sequences as $name => $sequence) {
+        foreach ($this->sequences as $name => $sequence) {
             fprintf($fileHandle, "%s: %d;%d;%d;%d;%d;%d\r\n", $name, $sequence->current,
-                $sequence->start,$sequence->increment,$sequence->min,$sequence->max,$sequence->cycle);
+                $sequence->start, $sequence->increment, $sequence->min, $sequence->max, $sequence->cycle);
         }
 
         $this->file->releaseWrite();

@@ -1,12 +1,12 @@
 <?php
 
-require_once dirname(__FILE__) . '/fSQLBaseTest.php';
+require_once dirname(__FILE__).'/fSQLBaseTest.php';
 
 abstract class fSQLSequenceBaseTest extends fSQLBaseTest
 {
     protected $sequence;
 
-     public function testSet()
+    public function testSet()
     {
         $current = -14;
         $start = -2;

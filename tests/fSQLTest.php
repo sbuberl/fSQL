@@ -1,10 +1,10 @@
 <?php
 
-require_once dirname(__FILE__) . '/fSQLBaseTest.php';
+require_once dirname(__FILE__).'/fSQLBaseTest.php';
 
 class fSQLTest extends fSQLBaseTest
 {
-    var $fsql;
+    private $fsql;
 
     public function setUp()
     {
@@ -19,12 +19,12 @@ class fSQLTest extends fSQLBaseTest
 
     public function testDefineDB()
     {
-        $dbName = "db1";
+        $dbName = 'db1';
         $passed = $this->fsql->define_db($dbName, parent::$tempDir);
         $this->assertTrue($passed);
 
-        $db2Name = "stuff";
-        $passed = $this->fsql->define_db($db2Name, "./");
+        $db2Name = 'stuff';
+        $passed = $this->fsql->define_db($db2Name, './');
         $this->assertTrue($passed);
 
         $this->assertTrue($this->fsql->get_database($dbName) !== false);
@@ -33,7 +33,7 @@ class fSQLTest extends fSQLBaseTest
 
     public function testDefineSchema()
     {
-        $dbName = "db1";
+        $dbName = 'db1';
         $passed = $this->fsql->define_db($dbName, parent::$tempDir);
         $this->assertTrue($passed);
 
@@ -41,7 +41,7 @@ class fSQLTest extends fSQLBaseTest
         $passed = $this->fsql->define_schema($dbName, $schema1);
         $this->assertTrue($passed);
 
-        $schema2 = "junk";
+        $schema2 = 'junk';
         $passed = $this->fsql->define_schema($dbName, $schema2);
         $this->assertTrue($passed);
 
@@ -52,10 +52,10 @@ class fSQLTest extends fSQLBaseTest
 
     public function testSelectDB()
     {
-        $dbName = "db";
+        $dbName = 'db';
         $this->fsql->define_db($dbName, parent::$tempDir);
 
-        $fakeDb = "BAM";
+        $fakeDb = 'BAM';
         $fakePassed = $this->fsql->select_db($fakeDb);
         $this->assertFalse($fakePassed);
         $this->assertEquals(trim($this->fsql->error()), "No database called {$fakeDb} found");
@@ -74,15 +74,15 @@ class fSQLTest extends fSQLBaseTest
 
     public function testSelectSchema()
     {
-        $dbName = "db";
+        $dbName = 'db';
         $this->fsql->define_db($dbName, parent::$tempDir);
 
-        $fakeDb = "BAM";
+        $fakeDb = 'BAM';
         $fakePassed = $this->fsql->select_schema($fakeDb, 'public');
         $this->assertFalse($fakePassed);
         $this->assertEquals(trim($this->fsql->error()), "No database called {$fakeDb} found");
 
-        $fakeSchema = "blah";
+        $fakeSchema = 'blah';
         $fakePassed = $this->fsql->select_schema($dbName, $fakeSchema);
         $this->assertFalse($fakePassed);
         $this->assertEquals(trim($this->fsql->error()), "Schema {$dbName}.{$fakeSchema} does not exist");

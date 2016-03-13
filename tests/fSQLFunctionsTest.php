@@ -1,6 +1,6 @@
 <?php
 
-require_once dirname(__FILE__) . '/fSQLBaseTest.php';
+require_once dirname(__FILE__).'/fSQLBaseTest.php';
 
 class fSQLFunctionsTest extends fSQLBaseTest
 {
@@ -11,14 +11,14 @@ class fSQLFunctionsTest extends fSQLBaseTest
     {
         parent::setUp();
         $this->fsql = new fSQLEnvironment();
-        $this->fsql->define_db("db", parent::$tempDir);
-        $this->fsql->select_db("db");
+        $this->fsql->define_db('db', parent::$tempDir);
+        $this->fsql->select_db('db');
         $this->functions = new fSQLFunctions($this->fsql);
     }
 
     public function testNextval()
     {
-        $name = "counter";
+        $name = 'counter';
         $schema = $this->fsql->current_schema();
         $sequences = $schema->getSequences();
         $sequences->addSequence($name, 3, 1, 1, 100, false);
@@ -30,7 +30,7 @@ class fSQLFunctionsTest extends fSQLBaseTest
 
     public function testCurval()
     {
-        $name = "counter";
+        $name = 'counter';
         $schema = $this->fsql->current_schema();
         $sequences = $schema->getSequences();
         $sequences->addSequence($name, -1, -2, -100, 1, false);

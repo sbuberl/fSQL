@@ -1,6 +1,6 @@
 <?php
 
-require_once dirname(__FILE__) . '/fSQLBaseTest.php';
+require_once dirname(__FILE__).'/fSQLBaseTest.php';
 
 class CreateSequenceTest extends fSQLBaseTest
 {
@@ -18,7 +18,7 @@ class CreateSequenceTest extends fSQLBaseTest
 
     public function testWrongDB()
     {
-        $dbName = "wrongDB";
+        $dbName = 'wrongDB';
         $result = $this->fsql->query("CREATE SEQUENCE $dbName.public.userids MINVALUE=11;");
         $this->assertFalse($result);
         $this->assertEquals("Database $dbName not found", trim($this->fsql->error()));
@@ -26,8 +26,8 @@ class CreateSequenceTest extends fSQLBaseTest
 
     public function testFoundError()
     {
-        $fullName = "db1.public.userids";
-        $this->sequences->addSequence("userids", 1, 1, 1, 10000, false);
+        $fullName = 'db1.public.userids';
+        $this->sequences->addSequence('userids', 1, 1, 1, 10000, false);
 
         $result = $this->fsql->query("CREATE SEQUENCE $fullName MINVALUE=12;");
         $this->assertFalse($result);
@@ -36,23 +36,23 @@ class CreateSequenceTest extends fSQLBaseTest
 
     public function testFoundIgnore()
     {
-        $this->sequences->addSequence("userids", 1, 1, 1, 10000, false);
+        $this->sequences->addSequence('userids', 1, 1, 1, 10000, false);
 
-        $result = $this->fsql->query("CREATE SEQUENCE IF NOT EXISTS userids MINVALUE=13;");
+        $result = $this->fsql->query('CREATE SEQUENCE IF NOT EXISTS userids MINVALUE=13;');
         $this->assertTrue($result);
         $this->assertNotNull($this->sequences->getSequence('userids'));
     }
 
     public function testParseParamsError()
     {
-        $result = $this->fsql->query("CREATE SEQUENCE userids MINVALUE 10 MINVALUE 32;");
+        $result = $this->fsql->query('CREATE SEQUENCE userids MINVALUE 10 MINVALUE 32;');
         $this->assertFalse($result);
-        $this->assertEquals("MINVALUE already set for this identity/sequence.", trim($this->fsql->error()));
+        $this->assertEquals('MINVALUE already set for this identity/sequence.', trim($this->fsql->error()));
     }
 
     public function testSuccess()
     {
-        $result = $this->fsql->query("CREATE SEQUENCE userids INCREMENT BY 2 START WITH 22 MAXVALUE 66 NO CYCLE");
+        $result = $this->fsql->query('CREATE SEQUENCE userids INCREMENT BY 2 START WITH 22 MAXVALUE 66 NO CYCLE');
         $this->assertTrue($result);
 
         $sequence = $this->sequences->getSequence('userids');

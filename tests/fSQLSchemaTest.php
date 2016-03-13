@@ -1,16 +1,16 @@
 <?php
 
-require_once dirname(__FILE__) . '/fSQLBaseTest.php';
+require_once dirname(__FILE__).'/fSQLBaseTest.php';
 
 class fSQLSchemaTest extends fSQLBaseTest
 {
-    static $columns = array(
-        'id' => array ('type' => 'i', 'auto' => '0', 'default' => 0, 'key' => 'p', 'null' => '0', 'restraint' => array()),
+    private static $columns = array(
+        'id' => array('type' => 'i', 'auto' => '0', 'default' => 0, 'key' => 'p', 'null' => '0', 'restraint' => array()),
         'username' => array('type' => 's', 'auto' => '0', 'default' => '', 'key' => 'n', 'null' => '0', 'restraint' => array()),
-        'age' => array ('type' => 'i', 'auto' => '0', 'default' => 18, 'key' => 'n', 'null' => '0', 'restraint' => array()),
+        'age' => array('type' => 'i', 'auto' => '0', 'default' => 18, 'key' => 'n', 'null' => '0', 'restraint' => array()),
         'address' => array('type' => 's', 'auto' => '0', 'default' => '', 'key' => 'n', 'null' => '0', 'restraint' => array()),
         'salary' => array('type' => 'f', 'auto' => '0', 'default' => 0.0, 'key' => 'n', 'null' => '0', 'restraint' => array()),
-        'size' => array('type' => 'e', 'auto' => '0', 'default' => 0.0, 'key' => 'n', 'null' => '1', 'restraint' => array('small', 'medium', 'large'))
+        'size' => array('type' => 'e', 'auto' => '0', 'default' => 0.0, 'key' => 'n', 'null' => '1', 'restraint' => array('small', 'medium', 'large')),
     );
 
     private $subDir;
@@ -48,7 +48,7 @@ class fSQLSchemaTest extends fSQLBaseTest
 
     public function testCreateTable()
     {
-        $name = "customers";
+        $name = 'customers';
         $schema = new fSQLSchema($this->db, 'myschema');
         $schema->create();
 
@@ -59,7 +59,7 @@ class fSQLSchemaTest extends fSQLBaseTest
 
     public function testCreateTableTemp()
     {
-        $name = "customers";
+        $name = 'customers';
         $schema = new fSQLSchema($this->db, 'myschema');
         $schema->create();
 

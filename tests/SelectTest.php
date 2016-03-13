@@ -1,19 +1,19 @@
 <?php
 
-require_once dirname(__FILE__) . '/fSQLBaseTest.php';
+require_once dirname(__FILE__).'/fSQLBaseTest.php';
 
 class SelectTest extends fSQLBaseTest
 {
     private $fsql;
 
-    static $columns1 = array(
+    private static $columns1 = array(
         'personId' => array('type' => 'i', 'auto' => 0, 'default' => 0, 'key' => 'n', 'null' => 1, 'restraint' => array()),
-        'firstName' => array ('type' => 's', 'auto' => 0, 'default' => '', 'key' => 'n', 'null' => 1, 'restraint' => array()),
-        'lastName' => array ('type' => 's', 'auto' => 0, 'default' => '', 'key' => 'n', 'null' => 1, 'restraint' => array()),
-        'city' => array('type' => 's', 'auto' => 0, 'default' => '', 'key' => 'n', 'null' => 1, 'restraint' => array())
+        'firstName' => array('type' => 's', 'auto' => 0, 'default' => '', 'key' => 'n', 'null' => 1, 'restraint' => array()),
+        'lastName' => array('type' => 's', 'auto' => 0, 'default' => '', 'key' => 'n', 'null' => 1, 'restraint' => array()),
+        'city' => array('type' => 's', 'auto' => 0, 'default' => '', 'key' => 'n', 'null' => 1, 'restraint' => array()),
     );
 
-    static $entries1 = array(
+    private static $entries1 = array(
         array(1, 'bill', 'smith', 'chicago'),
         array(2, 'jon', 'doe', 'baltimore'),
         array(3, 'mary', 'shelley', 'seattle'),
@@ -28,7 +28,7 @@ class SelectTest extends fSQLBaseTest
         array(12, null, 'king', 'tokyo'),
     );
 
-    static $columns2 = array(
+    private static $columns2 = array(
         'id' => array('type' => 'i', 'auto' => 0, 'default' => 0, 'key' => 'n', 'null' => 0, 'restraint' => array()),
         'person' => array('type' => 'i', 'auto' => 0, 'default' => 0, 'key' => 'n', 'null' => 0, 'restraint' => array()),
         'item' => array('type' => 'i', 'auto' => 0, 'default' => 0, 'key' => 'n', 'null' => 0, 'restraint' => array()),
@@ -54,41 +54,41 @@ class SelectTest extends fSQLBaseTest
 
         list($key, $ascending, $nulls_first) = $current_option;
 
-        while($total_elements > 1) {
-            if($array[$i][$key] === null && $array[$i+1][$key] !== null && !$nulls_first) {
+        while ($total_elements > 1) {
+            if ($array[$i][$key] === null && $array[$i + 1][$key] !== null && !$nulls_first) {
                 return false;
-            } else if($array[$i][$key] !== null && $array[$i+1][$key] === null && $nulls_first) {
+            } elseif ($array[$i][$key] !== null && $array[$i + 1][$key] === null && $nulls_first) {
                 return false;
-            } else if($ascending && $array[$i][$key] > $array[$i+1][$key]) {
+            } elseif ($ascending && $array[$i][$key] > $array[$i + 1][$key]) {
                 return false;
-            } else if(!$ascending && $array[$i][$key] < $array[$i+1][$key]) {
+            } elseif (!$ascending && $array[$i][$key] < $array[$i + 1][$key]) {
                 return false;
-            } else if($array[$i][$key] == $array[$i+1][$key]) {
+            } elseif ($array[$i][$key] == $array[$i + 1][$key]) {
                 $new_option = next($options);
-                while($new_option !== false)
-                {
+                while ($new_option !== false) {
                     list($new_key, $new_ascending, $new_nulls_first) = $new_option;
-                    if($array[$i][$new_key] === null || $array[$i+1][$new_key] === null) {
-                        if($array[$i+1][$new_key] !== null && !$new_nulls_first) {
+                    if ($array[$i][$new_key] === null || $array[$i + 1][$new_key] === null) {
+                        if ($array[$i + 1][$new_key] !== null && !$new_nulls_first) {
                             return false;
-                        } else if($array[$i+1][$new_key] === null && $new_nulls_first) {
+                        } elseif ($array[$i + 1][$new_key] === null && $new_nulls_first) {
                             return false;
                         }
-                    } else if($new_ascending && $array[$i][$new_key] > $array[$i+1][$new_key]) {
+                    } elseif ($new_ascending && $array[$i][$new_key] > $array[$i + 1][$new_key]) {
                         return false;
-                    } else if(!$new_ascending && $array[$i][$new_key] < $array[$i+1][$new_key]) {
+                    } elseif (!$new_ascending && $array[$i][$new_key] < $array[$i + 1][$new_key]) {
                         return false;
                     }
                     $new_option = next($options);
                 }
 
                 reset($options);
-                while(key($options) !== $current_key)
+                while (key($options) !== $current_key) {
                     next($options);
+                }
             }
 
-            $i++;
-            $total_elements--;
+            ++$i;
+            --$total_elements;
         }
 
         return true;
@@ -106,12 +106,12 @@ class SelectTest extends fSQLBaseTest
     public function testSelectAll()
     {
         $table = fSQLCachedTable::create($this->fsql->current_schema(), 'customers', self::$columns1);
-        foreach(self::$entries1 as $entry) {
+        foreach (self::$entries1 as $entry) {
             $table->insertRow($entry);
         }
         $table->commit();
 
-        $result = $this->fsql->query("SELECT * FROM customers");
+        $result = $this->fsql->query('SELECT * FROM customers');
         $this->assertTrue($result !== false);
 
         $results = $this->fsql->fetch_all($result, FSQL_NUM);
@@ -121,28 +121,28 @@ class SelectTest extends fSQLBaseTest
     public function testOrderByColumnIndex()
     {
         $table = fSQLCachedTable::create($this->fsql->current_schema(), 'customers', self::$columns1);
-        foreach(self::$entries1 as $entry) {
+        foreach (self::$entries1 as $entry) {
             $table->insertRow($entry);
         }
         $table->commit();
 
-        $result = $this->fsql->query("SELECT * FROM customers ORDER BY 3, 2");
+        $result = $this->fsql->query('SELECT * FROM customers ORDER BY 3, 2');
         $this->assertTrue($result !== false);
 
         $results = $this->fsql->fetch_all($result, FSQL_NUM);
-        $tosort = array( array( 2, true, true ), array( 1, true, true) );
+        $tosort = array(array(2, true, true), array(1, true, true));
         $this->assertTrue($this->isArrayKeySorted($results, $tosort));
     }
 
     public function testOrderByColumnIndexBad()
     {
         $table = fSQLCachedTable::create($this->fsql->current_schema(), 'customers', self::$columns1);
-        foreach(self::$entries1 as $entry) {
+        foreach (self::$entries1 as $entry) {
             $table->insertRow($entry);
         }
         $table->commit();
 
-        $result = $this->fsql->query("SELECT * FROM customers ORDER BY 5");
+        $result = $this->fsql->query('SELECT * FROM customers ORDER BY 5');
         $this->assertFalse($result);
         $this->assertEquals('ORDER BY: Invalid column number: 5', trim($this->fsql->error()));
     }
@@ -150,28 +150,28 @@ class SelectTest extends fSQLBaseTest
     public function testOrderByColumnName()
     {
         $table = fSQLCachedTable::create($this->fsql->current_schema(), 'customers', self::$columns1);
-        foreach(self::$entries1 as $entry) {
+        foreach (self::$entries1 as $entry) {
             $table->insertRow($entry);
         }
         $table->commit();
 
-        $result = $this->fsql->query("SELECT * FROM customers ORDER BY lastName, firstName");
+        $result = $this->fsql->query('SELECT * FROM customers ORDER BY lastName, firstName');
         $this->assertTrue($result !== false);
 
         $results = $this->fsql->fetch_all($result, FSQL_NUM);
-        $tosort = array( array( 2, true, true ), array( 1, true, true) );
+        $tosort = array(array(2, true, true), array(1, true, true));
         $this->assertTrue($this->isArrayKeySorted($results, $tosort));
     }
 
     public function testOrderByColumnNameBad()
     {
         $table = fSQLCachedTable::create($this->fsql->current_schema(), 'customers', self::$columns1);
-        foreach(self::$entries1 as $entry) {
+        foreach (self::$entries1 as $entry) {
             $table->insertRow($entry);
         }
         $table->commit();
 
-        $result = $this->fsql->query("SELECT * FROM customers ORDER BY garbage");
+        $result = $this->fsql->query('SELECT * FROM customers ORDER BY garbage');
         $this->assertFalse($result);
         $this->assertEquals('Unknown column/alias in ORDER BY clause: garbage', trim($this->fsql->error()));
     }
@@ -179,44 +179,44 @@ class SelectTest extends fSQLBaseTest
     public function testOrderByDescAsc()
     {
         $table = fSQLCachedTable::create($this->fsql->current_schema(), 'customers', self::$columns1);
-        foreach(self::$entries1 as $entry) {
+        foreach (self::$entries1 as $entry) {
             $table->insertRow($entry);
         }
         $table->commit();
 
-        $result = $this->fsql->query("SELECT * FROM customers ORDER BY lastName ASC, firstName DESC");
+        $result = $this->fsql->query('SELECT * FROM customers ORDER BY lastName ASC, firstName DESC');
         $this->assertTrue($result !== false);
 
         $results = $this->fsql->fetch_all($result, FSQL_NUM);
-        $tosort = array( array( 2, true, true ), array( 1, false, true) );
+        $tosort = array(array(2, true, true), array(1, false, true));
         $this->assertTrue($this->isArrayKeySorted($results, $tosort));
     }
 
     public function testOrderByNullsFirstLast()
     {
         $table = fSQLCachedTable::create($this->fsql->current_schema(), 'customers', self::$columns1);
-        foreach(self::$entries1 as $entry) {
+        foreach (self::$entries1 as $entry) {
             $table->insertRow($entry);
         }
         $table->commit();
 
-        $result = $this->fsql->query("SELECT * FROM customers ORDER BY lastName NULLS FIRST, firstName NULLS LAST");
+        $result = $this->fsql->query('SELECT * FROM customers ORDER BY lastName NULLS FIRST, firstName NULLS LAST');
         $this->assertTrue($result !== false);
 
         $results = $this->fsql->fetch_all($result, FSQL_NUM);
-        $tosort = array( array( 2, true, true ), array( 1, true, false) );
+        $tosort = array(array(2, true, true), array(1, true, false));
         $this->assertTrue($this->isArrayKeySorted($results, $tosort));
     }
 
     public function testOffsetOnly()
     {
         $table = fSQLCachedTable::create($this->fsql->current_schema(), 'customers', self::$columns1);
-        foreach(self::$entries1 as $entry) {
+        foreach (self::$entries1 as $entry) {
             $table->insertRow($entry);
         }
         $table->commit();
 
-        $result = $this->fsql->query("SELECT * FROM customers OFFSET 5 ROWS");
+        $result = $this->fsql->query('SELECT * FROM customers OFFSET 5 ROWS');
         $this->assertTrue($result !== false);
 
         $results = $this->fsql->fetch_all($result, FSQL_NUM);
@@ -227,12 +227,12 @@ class SelectTest extends fSQLBaseTest
     public function testOffsetFetchFirstNoLength()
     {
         $table = fSQLCachedTable::create($this->fsql->current_schema(), 'customers', self::$columns1);
-        foreach(self::$entries1 as $entry) {
+        foreach (self::$entries1 as $entry) {
             $table->insertRow($entry);
         }
         $table->commit();
 
-        $result = $this->fsql->query("SELECT * FROM customers OFFSET 5 ROWS FETCH FIRST ROW ONLY");
+        $result = $this->fsql->query('SELECT * FROM customers OFFSET 5 ROWS FETCH FIRST ROW ONLY');
         $this->assertTrue($result !== false);
 
         $results = $this->fsql->fetch_all($result, FSQL_NUM);
@@ -242,12 +242,12 @@ class SelectTest extends fSQLBaseTest
     public function testOffsetFetchFirstLength()
     {
         $table = fSQLCachedTable::create($this->fsql->current_schema(), 'customers', self::$columns1);
-        foreach(self::$entries1 as $entry) {
+        foreach (self::$entries1 as $entry) {
             $table->insertRow($entry);
         }
         $table->commit();
 
-        $result = $this->fsql->query("SELECT * FROM customers OFFSET 5 ROWS FETCH FIRST 3 ROWS ONLY");
+        $result = $this->fsql->query('SELECT * FROM customers OFFSET 5 ROWS FETCH FIRST 3 ROWS ONLY');
         $this->assertTrue($result !== false);
 
         $results = $this->fsql->fetch_all($result, FSQL_NUM);
@@ -257,12 +257,12 @@ class SelectTest extends fSQLBaseTest
     public function testFetchFirstLength()
     {
         $table = fSQLCachedTable::create($this->fsql->current_schema(), 'customers', self::$columns1);
-        foreach(self::$entries1 as $entry) {
+        foreach (self::$entries1 as $entry) {
             $table->insertRow($entry);
         }
         $table->commit();
 
-        $result = $this->fsql->query("SELECT * FROM customers FETCH NEXT 3 ROWS ONLY");
+        $result = $this->fsql->query('SELECT * FROM customers FETCH NEXT 3 ROWS ONLY');
         $this->assertTrue($result !== false);
 
         $results = $this->fsql->fetch_all($result, FSQL_NUM);
@@ -272,12 +272,12 @@ class SelectTest extends fSQLBaseTest
     public function testOffsetAndLimit()
     {
         $table = fSQLCachedTable::create($this->fsql->current_schema(), 'customers', self::$columns1);
-        foreach(self::$entries1 as $entry) {
+        foreach (self::$entries1 as $entry) {
             $table->insertRow($entry);
         }
         $table->commit();
 
-        $result = $this->fsql->query("SELECT * FROM customers OFFSET 3 ROWS LIMIT 5");
+        $result = $this->fsql->query('SELECT * FROM customers OFFSET 3 ROWS LIMIT 5');
         $this->assertFalse($result);
         $this->assertEquals('LIMIT forbidden when FETCH FIRST or OFFSET already specified', trim($this->fsql->error()));
     }
@@ -285,12 +285,12 @@ class SelectTest extends fSQLBaseTest
     public function testFetchFirstAndLimit()
     {
         $table = fSQLCachedTable::create($this->fsql->current_schema(), 'customers', self::$columns1);
-        foreach(self::$entries1 as $entry) {
+        foreach (self::$entries1 as $entry) {
             $table->insertRow($entry);
         }
         $table->commit();
 
-        $result = $this->fsql->query("SELECT * FROM customers FETCH NEXT 3 ROWS ONLY LIMIT 5");
+        $result = $this->fsql->query('SELECT * FROM customers FETCH NEXT 3 ROWS ONLY LIMIT 5');
         $this->assertFalse($result);
         $this->assertEquals('LIMIT forbidden when FETCH FIRST or OFFSET already specified', trim($this->fsql->error()));
     }
@@ -298,12 +298,12 @@ class SelectTest extends fSQLBaseTest
     public function testLimitLengthOnly()
     {
         $table = fSQLCachedTable::create($this->fsql->current_schema(), 'customers', self::$columns1);
-        foreach(self::$entries1 as $entry) {
+        foreach (self::$entries1 as $entry) {
             $table->insertRow($entry);
         }
         $table->commit();
 
-        $result = $this->fsql->query("SELECT * FROM customers LIMIT 5");
+        $result = $this->fsql->query('SELECT * FROM customers LIMIT 5');
         $this->assertTrue($result !== false);
 
         $results = $this->fsql->fetch_all($result, FSQL_NUM);
@@ -313,12 +313,12 @@ class SelectTest extends fSQLBaseTest
     public function testLimitThenOffset()
     {
         $table = fSQLCachedTable::create($this->fsql->current_schema(), 'customers', self::$columns1);
-        foreach(self::$entries1 as $entry) {
+        foreach (self::$entries1 as $entry) {
             $table->insertRow($entry);
         }
         $table->commit();
 
-        $result = $this->fsql->query("SELECT * FROM customers LIMIT 4 OFFSET 3");
+        $result = $this->fsql->query('SELECT * FROM customers LIMIT 4 OFFSET 3');
         $this->assertTrue($result !== false);
 
         $results = $this->fsql->fetch_all($result, FSQL_NUM);
@@ -328,12 +328,12 @@ class SelectTest extends fSQLBaseTest
     public function testLimitCommas()
     {
         $table = fSQLCachedTable::create($this->fsql->current_schema(), 'customers', self::$columns1);
-        foreach(self::$entries1 as $entry) {
+        foreach (self::$entries1 as $entry) {
             $table->insertRow($entry);
         }
         $table->commit();
 
-        $result = $this->fsql->query("SELECT * FROM customers LIMIT 3, 4");
+        $result = $this->fsql->query('SELECT * FROM customers LIMIT 3, 4');
         $this->assertTrue($result !== false);
 
         $results = $this->fsql->fetch_all($result, FSQL_NUM);

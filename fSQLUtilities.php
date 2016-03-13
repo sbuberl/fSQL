@@ -5,28 +5,31 @@ function fsql_create_directory($original_path, $type, fSQLEnvironment $environme
     $paths = pathinfo($original_path);
 
     $dirname = realpath($paths['dirname']);
-    if(!$dirname || !is_dir($dirname) || !is_readable($dirname)) {
-        if(@mkdir($original_path, 0777, true) === true)
+    if (!$dirname || !is_dir($dirname) || !is_readable($dirname)) {
+        if (@mkdir($original_path, 0777, true) === true) {
             $realpath = $original_path;
-        else
+        } else {
             return $environment->set_error(ucfirst($type)." parent path '{$paths['dirname']}' does not exist.  Please correct the path or create the directory.");
+        }
     }
 
     $path = $dirname.'/'.$paths['basename'];
     $realpath = realpath($path);
-    if($realpath === false || !file_exists($realpath)) {
-        if(@mkdir($path, 0777, true) === true)
-                $realpath = $path;
-            else
-                return $environment->set_error("Unable to create directory '$path'.  Please make the directory manually or check the permissions of the parent directory.");
-    } else if(!is_readable($realpath) || !is_writeable($realpath)) {
+    if ($realpath === false || !file_exists($realpath)) {
+        if (@mkdir($path, 0777, true) === true) {
+            $realpath = $path;
+        } else {
+            return $environment->set_error("Unable to create directory '$path'.  Please make the directory manually or check the permissions of the parent directory.");
+        }
+    } elseif (!is_readable($realpath) || !is_writeable($realpath)) {
         @chmod($realpath, 0777);
     }
 
-    if(substr($realpath, -1) != '/')
+    if (substr($realpath, -1) != '/') {
         $realpath .= '/';
+    }
 
-    if(is_dir($realpath) && is_readable($realpath) && is_writeable($realpath)) {
+    if (is_dir($realpath) && is_readable($realpath) && is_writeable($realpath)) {
         return $realpath;
     } else {
         return $environment->set_error("Path to directory for $type is not valid.  Please correct the path or create the directory and check that is readable and writable.");
@@ -38,11 +41,11 @@ class fSQLOrderByClause
 
     public function __construct($tosortData)
     {
-        $code = "";
-        foreach($tosortData as $tosort) {
+        $code = '';
+        foreach ($tosortData as $tosort) {
             $key = $tosort['key'];
 
-            if($tosort['ascend']) {
+            if ($tosort['ascend']) {
                 $ltVal = -1;
                 $gtVal = 1;
             } else {
@@ -50,7 +53,7 @@ class fSQLOrderByClause
                 $gtVal = -1;
             }
 
-            if($tosort['nullsFirst']) {
+            if ($tosort['nullsFirst']) {
                 $leftNullVal = -1;
                 $rightNullVal = 1;
             } else {
@@ -97,7 +100,7 @@ class fSQLFile
     {
         // should be unlocked before reaches here, but just in case,
         // release all locks and close file
-        if(isset($this->handle)) {
+        if (isset($this->handle)) {
             // flock($this->handle, LOCK_UN);
             fclose($this->handle);
         }
@@ -111,13 +114,13 @@ class fSQLFile
     public function drop()
     {
         // only allow drops if not locked
-        if($this->handle === null)
-        {
+        if ($this->handle === null) {
             unlink($this->filepath);
+
             return true;
-        }
-        else
+        } else {
             return false;
+        }
     }
 
     public function getHandle()
@@ -132,18 +135,17 @@ class fSQLFile
 
     public function acquireRead()
     {
-        if($this->lock !== 0 && $this->handle !== null) {  /* Already have at least a read lock */
-            $this->rcount++;
+        if ($this->lock !== 0 && $this->handle !== null) {  /* Already have at least a read lock */
+            ++$this->rcount;
+
             return true;
-        }
-        else if($this->lock === 0 && $this->handle === null) /* New lock */
-        {
+        } elseif ($this->lock === 0 && $this->handle === null) {/* New lock */
             $this->handle = fopen($this->filepath, 'rb');
-            if($this->handle)
-            {
+            if ($this->handle) {
                 flock($this->handle, LOCK_SH);
                 $this->lock = 1;
                 $this->rcount = 1;
+
                 return true;
             }
         }
@@ -153,27 +155,24 @@ class fSQLFile
 
     public function acquireWrite()
     {
-        if($this->lock === 2 && $this->handle !== null)  /* Already have a write lock */
-        {
-            $this->wcount++;
+        if ($this->lock === 2 && $this->handle !== null) {/* Already have a write lock */
+            ++$this->wcount;
+
             return true;
-        }
-        else if($this->lock === 1 && $this->handle !== null)  /* Upgrade a lock*/
-        {
+        } elseif ($this->lock === 1 && $this->handle !== null) {/* Upgrade a lock*/
             flock($this->handle, LOCK_EX);
             $this->lock = 2;
-            $this->wcount++;
+            ++$this->wcount;
+
             return true;
-        }
-        else if($this->lock === 0 && $this->handle === null) /* New lock */
-        {
+        } elseif ($this->lock === 0 && $this->handle === null) {/* New lock */
             touch($this->filepath); // make sure it exists
             $this->handle = fopen($this->filepath, 'r+b');
-            if($this->handle)
-            {
+            if ($this->handle) {
                 flock($this->handle, LOCK_EX);
                 $this->lock = 2;
                 $this->wcount = 1;
+
                 return true;
             }
         }
@@ -183,12 +182,10 @@ class fSQLFile
 
     public function releaseRead()
     {
-        if($this->lock !== 0 && $this->handle !== null)
-        {
-            $this->rcount--;
+        if ($this->lock !== 0 && $this->handle !== null) {
+            --$this->rcount;
 
-            if($this->lock === 1 && $this->rcount === 0) /* Read lock now empty */
-            {
+            if ($this->lock === 1 && $this->rcount === 0) {/* Read lock now empty */
                 // no readers or writers left, release lock
                 flock($this->handle, LOCK_UN);
                 fclose($this->handle);
@@ -202,20 +199,20 @@ class fSQLFile
 
     public function releaseWrite()
     {
-        if($this->lock !== 0 && $this->handle !== null)
-        {
-            if($this->lock === 2) /* Write lock */
-            {
-                $this->wcount--;
-                if($this->wcount === 0) // no writers left.
-                {
-                    if($this->rcount > 0)  // only readers left.  downgrade lock.
-                    {
+        if ($this->lock !== 0 && $this->handle !== null) {
+            if ($this->lock === 2) {/* Write lock */
+                --$this->wcount;
+                if ($this->wcount === 0) {
+                    // no writers left.
+
+                    if ($this->rcount > 0) {
+                        // only readers left.  downgrade lock.
+
                         flock($this->handle, LOCK_SH);
                         $this->lock = 1;
-                    }
-                    else // no readers or writers left, release lock
-                    {
+                    } else {
+                        // no readers or writers left, release lock
+
                         flock($this->handle, LOCK_UN);
                         fclose($this->handle);
                         $this->handle = null;
@@ -248,6 +245,7 @@ class fSQLMicrotimeLockFile extends fSQLFile
     {
         $this->loadTime = null;
         $this->lastReadStamp = null;
+
         return true;
     }
 

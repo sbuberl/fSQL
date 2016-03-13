@@ -1,6 +1,6 @@
 <?php
 
-require_once dirname(__FILE__) . '/fSQLBaseTest.php';
+require_once dirname(__FILE__).'/fSQLBaseTest.php';
 
 class fSQLSequenceFileTest extends fSQLBaseTest
 {
