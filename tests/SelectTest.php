@@ -94,6 +94,15 @@ class SelectTest extends fSQLBaseTest
         return true;
     }
 
+    public function testSelectNoTable()
+    {
+        $result = $this->fsql->query("SELECT NULL, -3, 3.14, 'my string', CONCAT('x ', 'y ', 'z')");
+        $this->assertTrue($result !== false);
+
+        $result = $this->fsql->fetch_row($result);
+        $this->assertEquals(array(null, -3, 3.14, 'my string', 'x y z'), $result);
+    }
+
     public function testSelectAll()
     {
         $table = fSQLCachedTable::create($this->fsql->current_schema(), 'customers', self::$columns1);

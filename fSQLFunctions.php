@@ -296,17 +296,21 @@ class fSQLFunctions
     }
 
      /////String Functions
-    public function concat_ws($string) {
+    public function concat_ws($separator) {
         $numargs = func_num_args();
-        if($numargs > 2) {
+        if($numargs >= 2) {
+            $return = array();
             for($i = 1; $i < $numargs; $i++) { $return[] = func_get_arg($i);  }
-            return implode($string, $return);
+            return implode($separator, $return);
         }
         else { return null; }
     }
-    public function concat() { return call_user_func_array(array($this,'concat_ws'), array("",func_get_args())); }
-    public function elt() {
-        $return = func_get_arg(0);
+    public function concat() {
+        $args = func_get_args();
+        array_unshift($args, "");
+        return call_user_func_array(array($this,'concat_ws'), $args);
+    }
+    public function elt($return) {
         if(func_num_args() > 1 && $return >= 1 && $return <= func_num_args()) {    return func_get_arg($return);  }
         else { return null; }
     }
