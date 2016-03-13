@@ -19,8 +19,8 @@ class fSQLFunctionsTest extends fSQLBaseTest
     public function testNextval()
     {
         $name = "counter";
-        $db = $this->fsql->current_db();
-        $sequences = $db->getSequences();
+        $schema = $this->fsql->current_schema();
+        $sequences = $schema->getSequences();
         $sequences->addSequence($name, 3, 1, 1, 100, false);
 
         $this->assertEquals(3, $this->functions->nextval($name));
@@ -31,8 +31,8 @@ class fSQLFunctionsTest extends fSQLBaseTest
     public function testCurval()
     {
         $name = "counter";
-        $db = $this->fsql->current_db();
-        $sequences = $db->getSequences();
+        $schema = $this->fsql->current_schema();
+        $sequences = $schema->getSequences();
         $sequences->addSequence($name, -1, -2, -100, 1, false);
 
         $this->functions->nextval($name);

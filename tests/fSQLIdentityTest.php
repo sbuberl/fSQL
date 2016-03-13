@@ -16,8 +16,10 @@ class fSQLIdentityTest extends fSQLSequenceBaseTest
     public function setUp()
     {
         parent::setUp();
-        $database = new fSQLDatabase('db1', parent::$tempDir);
-        $table = fSQLCachedTable::create($database, 'blah', self::$columns);
+        $fsql = new fSQLEnvironment();
+        $fsql->define_db('db1', parent::$tempDir);
+        $schema = $fsql->get_database('db1')->getSchema('public');
+        $table = fSQLCachedTable::create($schema, 'blah', self::$columns);
         $this->sequence = new fSQLIdentity($table, 'id');
     }
 

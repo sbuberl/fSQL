@@ -164,16 +164,16 @@ class fSQLFunctions
     /////Sequence Functions
     public function currval($sequenceName)
     {
-        $db = $this->environment->current_db();
-        $sequences = $db->getSequences();
+        $schema = $this->environment->current_schema();
+        $sequences = $schema->getSequences();
         $sequence = $sequences->getSequence($sequenceName);
         return $sequence->lastValue();
     }
 
     public function nextval($sequenceName)
     {
-        $db = $this->environment->current_db();
-        $sequences = $db->getSequences();
+        $schema = $this->environment->current_schema();
+        $sequences = $schema->getSequences();
         $sequence = $sequences->getSequence($sequenceName);
         return $sequence->nextValueFor();
     }

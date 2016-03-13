@@ -14,195 +14,79 @@ class fSQLDatabaseTest extends fSQLBaseTest
     );
 
     private $subDir;
+    private $fsql;
 
     public function setUp()
     {
         parent::setUp();
         $this->subDir = parent::$tempDir.'sub/';
         mkdir($this->subDir);
+        $this->fsql = new fSQLEnvironment();
     }
 
     public function testConstructor()
     {
         $name = 'shazam';
         $path = 'blah/blah';
-        $db = new fSQLDatabase($name, $path);
+        $db = new fSQLDatabase($this->fsql, $name, $path);
 
         $this->assertEquals($name, $db->name());
         $this->assertEquals($path, $db->path());
+        $this->assertEquals($this->fsql, $db->environment());
     }
 
-    public function testCreateTable()
+    public function testDefineSchema()
     {
-        $name = "customers";
-        $db = new fSQLDatabase('db1', parent::$tempDir);
-        $table = $db->createTable($name, self::$columns, false);
-        $this->assertInstanceOf('fSQLCachedTable', $table);
-        $this->assertEquals($name, $table->name());
+        $name = "mySchema";
+        $db = new fSQLDatabase($this->fsql, 'db1', parent::$tempDir);
+        $db->create();
+
+        $passed = $db->defineSchema($name);
+        $this->assertTrue($passed);
+        $this->assertEquals($name, $db->getSchema($name)->name());
     }
 
-    public function testCreateTableTemp()
+    public function testListSchemas()
     {
-        $name = "customers";
-        $db = new fSQLDatabase('db1', parent::$tempDir);
-        $table = $db->createTable($name, self::$columns, true);
-        $this->assertInstanceOf('fSQLTempTable', $table);
-        $this->assertEquals($name, $table->name());
-    }
+        $db = new fSQLDatabase($this->fsql, 'shazam', parent::$tempDir);
+        $db->create();
 
-    public function testListTablesNone()
-    {
-        $name = 'shazam';
-        $path = 'blah/blah';
-        $db = new fSQLDatabase($name, $path);
+        $db->defineSchema('schema1');
+        $db->defineSchema('schema2');
 
-        $tables = $db->listTables();
-        $this->assertEmpty($tables);
-    }
-
-    public function testGetSequences()
-    {
-        $db = new fSQLDatabase('shazam', parent::$tempDir);
-        $sequences = $db->getSequences();
-        $this->assertNotNull($sequences);
-        $this->assertInstanceOf('fSQLSequencesFile', $sequences);
-    }
-
-    // skips temp tables like mySQL does
-    public function testListTables()
-    {
-        $db = new fSQLDatabase('shazam', parent::$tempDir);
-        $db->createTable('temp1', self::$columns, true);
-        $db->createTable('temp2', self::$columns, true);
-        $db->createTable('real1', self::$columns, false);
-        $db->createTable('real2', self::$columns, false);
-
-        $tables = $db->listTables();
-        $this->assertEquals(array('real1', 'real2'), $tables);
+        $schemas = $db->listSchemas();
+        $this->assertEquals(array('public', 'schema1', 'schema2'), $schemas);
     }
 
     public function testDrop()
     {
-        $db = new fSQLDatabase('shazam', parent::$tempDir);
-        $table = $db->createTable('blah', self::$columns, false);
-        $sequences = $db->getSequences();
-        $sequences->create();
-        $this->assertNotEmpty($db->listTables());
-        $this->assertTrue($sequences->exists());
+        $db = new fSQLDatabase($this->fsql, 'shazam', parent::$tempDir);
+        $db->create();
+
+        $schema = $db->defineSchema('testing');
+        $this->assertNotEmpty($db->listSchemas());
 
         $db->drop();
-        $this->assertFalse($sequences->exists());
-        $this->assertEmpty($db->listTables());
+        $this->assertEmpty($db->listSchemas());
     }
 
-    public function testGetTableEmpty()
+    public function GetSchemaNonExist()
     {
-        $db = new fSQLDatabase('shazam', parent::$tempDir);
-        $table = $db->getTable('myTable');
-        $this->assertInstanceOf('fSQLCachedTable', $table);
-        $this->assertEquals('myTable', $table->name());
+        $db = new fSQLDatabase($this->fsql, 'shazam', parent::$tempDir);
+        $db->create();
+
+        $schema = $db->getSchema('blah');
+        $this->assertFalse($schema);
     }
 
-    public function testGetTableTemp()
+    public function testGetSchema()
     {
-        $name = 'temp1';
-        $db = new fSQLDatabase('shazam', parent::$tempDir);
-        $db->createTable($name, self::$columns, true);
+        $name = 'schemaA';
+        $db = new fSQLDatabase($this->fsql, 'shazam', parent::$tempDir);
+        $db->create();
+        $db->defineSchema($name);
 
-        $table = $db->getTable($name);
-        $this->assertInstanceOf('fSQLTempTable', $table);
-        $this->assertEquals($name, $table->name());
-    }
-
-    public function testGetTable()
-    {
-        $name = 'table1';
-        $db = new fSQLDatabase('shazam', parent::$tempDir);
-        $db->createTable($name, self::$columns, false);
-        $db->createTable('table2', self::$columns, false);
-
-        $table = $db->getTable($name);
-        $this->assertInstanceOf('fSQLCachedTable', $table);
-        $this->assertEquals($name, $table->name());
-    }
-
-    public function testRenameDoesntExist()
-    {
-        $db = new fSQLDatabase('shazam', parent::$tempDir);
-        $passed = $db->renameTable('answer42', 'else', $this);
-        $this->assertFalse($passed);
-    }
-
-    public function testRename()
-    {
-        $from = 'blah';
-        $to = 'else';
-        $db = new fSQLDatabase('shazam', parent::$tempDir);
-        $db->createTable($from, self::$columns, false);
-        $passed = $db->renameTable($from, $to, $db);
-        $this->assertTrue($passed);
-        $newTable = $db->getTable($to);
-        $this->assertTrue($newTable->exists());
-        $oldTable = $db->getTable($from);
-        $this->assertFalse($oldTable->exists());
-    }
-
-    public function testRenameTemp()
-    {
-        $from = 'blah';
-        $to = 'else';
-        $db = new fSQLDatabase('shazam', parent::$tempDir);
-        $db->createTable($from, self::$columns, true);
-        $passed = $db->renameTable($from, $to, $db);
-        $this->assertTrue($passed);
-        $newTable = $db->getTable($to);
-        $this->assertTrue($newTable->exists());
-        $oldTable = $db->getTable($from);
-        $this->assertFalse($oldTable->exists());
-    }
-
-    public function testRenameToOtherDB()
-    {
-        $from = 'temp1';
-        $to = 'something';
-        $db = new fSQLDatabase('shazam', parent::$tempDir);
-        $db->createTable($from, self::$columns, true);
-
-        $db2 = new fSQLDatabase('other', $this->subDir);
-        $passed = $db->renameTable($from, $to, $db2);
-        $this->assertTrue($passed);
-        $newTable = $db2->getTable($to);
-        $this->assertTrue($newTable->exists());
-        $oldTable = $db->getTable($from);
-        $this->assertFalse($oldTable->exists());
-    }
-
-    public function testDropTableDoesntExist()
-    {
-        $db = new fSQLDatabase('shazam', parent::$tempDir);
-        $passed = $db->dropTable('answer42');
-        $this->assertFalse($passed);
-    }
-
-    public function testDropTable()
-    {
-        $name = 'blah';
-        $db = new fSQLDatabase('shazam', parent::$tempDir);
-        $db->createTable($name, self::$columns, false);
-        $passed = $db->dropTable($name);
-        $this->assertTrue($passed);
-        $table = $db->getTable($name);
-        $this->assertFalse($table->exists());
-    }
-
-    public function testDropTableTemp()
-    {
-        $name = 'blah';
-        $db = new fSQLDatabase('shazam', parent::$tempDir);
-        $db->createTable($name, self::$columns, true);
-        $passed = $db->dropTable($name);
-        $this->assertTrue($passed);
-        $table = $db->getTable($name);
-        $this->assertFalse($table->exists());
+        $schema = $db->getSchema($name);
+        $this->assertInstanceOf('fSQLSchema', $schema);
     }
 }

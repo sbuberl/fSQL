@@ -4,16 +4,23 @@ require_once dirname(__FILE__) . '/fSQLBaseTest.php';
 
 class fSQLSequenceFileTest extends fSQLBaseTest
 {
+    private $schema;
+    private $sequences;
+
     public function setUp()
     {
         parent::setUp();
-        $this->database = new fSQLDatabase('db1', parent::$tempDir);
-        $this->sequences = new fSQLSequencesFile($this->database);
+        $fsql = new fSQLEnvironment();
+        $database = new fSQLDatabase($fsql, 'db1', parent::$tempDir);
+        $database->create();
+
+        $this->schema = $database->getSchema('public');
+        $this->sequences = new fSQLSequencesFile($this->schema);
     }
 
     public function testConstructor()
     {
-        $this->assertEquals($this->sequences->database()->name(), $this->database->name());
+        $this->assertEquals($this->sequences->schema()->name(), $this->schema->name());
         $this->assertTrue($this->sequences->isEmpty());
     }
 

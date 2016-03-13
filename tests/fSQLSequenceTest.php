@@ -7,8 +7,11 @@ class fSQLSequenceTest extends fSQLSequenceBaseTest
     public function setUp()
     {
         parent::setUp();
-        $database = new fSQLDatabase('db1', parent::$tempDir);
-        $sequences = new fSQLSequencesFile($database);
+        $fsql = new fSQLEnvironment();
+        $database = new fSQLDatabase($fsql, 'db1', parent::$tempDir);
+        $database->create();
+        $schema = $database->getSchema('public');
+        $sequences = new fSQLSequencesFile($schema);
         $sequences->create();
         $this->sequence = new fSQLSequence('ids', $sequences);
     }

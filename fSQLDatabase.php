@@ -60,19 +60,26 @@ class fSQLTableCursor
     }
 }
 
-abstract class fSQLTable
+interface fSQLRelation
+{
+    public function name();
+
+    public function drop();
+}
+
+abstract class fSQLTable implements fSQLRelation
 {
     protected $name;
-    protected $database;
+    protected $schema;
     protected $cursor = null;
     protected $columns = null;
     protected $entries = null;
     protected $identity = null;
 
-    public function __construct(fSQLDatabase $database, $name)
+    public function __construct(fSQLSchema $schema, $name)
     {
         $this->name = $name;
-        $this->database = $database;
+        $this->schema = $schema;
     }
 
     public function name()
@@ -82,12 +89,12 @@ abstract class fSQLTable
 
     public function fullName()
     {
-        return $this->database->name(). '.' . $this->name;
+        return $this->schema->fullName(). '.' . $this->name;
     }
 
-    public function database()
+    public function schema()
     {
-        return $this->database;
+        return $this->schema;
     }
 
     public abstract function exists();
@@ -185,9 +192,9 @@ abstract class fSQLTable
 
 class fSQLTempTable extends fSQLTable
 {
-    public function __construct(fSQLDatabase $database, $tableName, $columnDefs)
+    public function __construct(fSQLSchema $schema, $tableName, $columnDefs)
     {
-        parent::__construct($database, $tableName);
+        parent::__construct($schema, $tableName);
         $this->columns = $columnDefs;
         $this->entries = array();
     }
@@ -229,21 +236,21 @@ class fSQLCachedTable extends fSQLTable
     public $dataFile;
     private $lock = null;
 
-    public function __construct(fSQLDatabase $database, $table_name)
+    public function __construct(fSQLSchema $schema, $table_name)
     {
-        parent::__construct($database, $table_name);
-        $path_to_db = $this->database->path();
-        $columns_path = $path_to_db.$table_name.'.columns';
-        $data_path = $path_to_db.$table_name.'.data';
+        parent::__construct($schema, $table_name);
+        $path_to_schema = $this->schema->path();
+        $columns_path = $path_to_schema.$table_name.'.columns';
+        $data_path = $path_to_schema.$table_name.'.data';
         $this->columnsLockFile = new fSQLMicrotimeLockFile($columns_path.'.lock.cgi');
         $this->columnsFile = new fSQLFile($columns_path.'.cgi');
         $this->dataLockFile = new fSQLMicrotimeLockFile($data_path.'.lock.cgi');
         $this->dataFile = new fSQLFile($data_path.'.cgi');
     }
 
-    public static function create($database, $table_name, $columnDefs)
+    public static function create(fSQLSchema $schema, $table_name, $columnDefs)
     {
-        $table = new fSQLCachedTable($database, $table_name);
+        $table = new fSQLCachedTable($schema, $table_name);
         $table->columns = $columnDefs;
 
         // create the columns lock
@@ -639,17 +646,19 @@ class fSQLCachedTable extends fSQLTable
     }
 }
 
-class fSQLDatabase
+class fSQLSchema
 {
     private $name = null;
     private $path = null;
+    private $database = null;
     private $loadedTables = array();
     private $sequencesFile;
 
-    public function __construct($name, $filePath)
+    public function __construct(fSQLDatabase $database, $name)
     {
+        $this->database = $database;
         $this->name = $name;
-        $this->path = $filePath;
+        $this->path = $name !== 'public' ? $database->path().$name.'/' : $database->path();
         $this->sequencesFile = new fSQLSequencesFile($this);
     }
 
@@ -658,9 +667,30 @@ class fSQLDatabase
         return $this->name;
     }
 
+    public function fullName()
+    {
+        return $this->database->name(). '.' . $this->name;
+    }
+
     public function path()
     {
         return $this->path;
+    }
+
+    public function database()
+    {
+        return $this->database;
+    }
+
+    public function create()
+    {
+        $path = fsql_create_directory($this->path, 'schema', $this->database->environment());
+        if($path !== false) {
+            $this->path = $path;
+            return true;
+        }
+        else
+            return false;
     }
 
     public function drop()
@@ -685,6 +715,29 @@ class fSQLDatabase
             $this->loadedTables[$table_name] = $table;
             return $table;
         }
+    }
+
+    public function getRelation($name)
+    {
+        $table = $this->getTable($name);
+        if($table->exists()) {
+            return $table;
+        }
+
+        $sequence = $this->getSequence($name);
+        if($sequence !== false) {
+            return $sequence;
+        }
+
+        return false;
+    }
+
+    public function getSequence($name)
+    {
+        $sequence = $this->sequencesFile->getSequence($name);
+        if($sequence !== false)
+            return $sequence;
+        return false;
     }
 
     public function getTable($table_name)
@@ -720,17 +773,17 @@ class fSQLDatabase
         return $tables;
     }
 
-    public function renameTable($old_table_name, $new_table_name, $new_db)
+    public function renameTable($old_table_name, $new_table_name, fSQLSchema $new_schema)
     {
         $oldTable = $this->getTable($old_table_name);
         if($oldTable->exists()) {
             if(!$oldTable->temporary()) {
-                $newTable = $new_db->createTable($new_table_name,  $oldTable->getColumns());
+                $newTable = $new_schema->createTable($new_table_name,  $oldTable->getColumns());
                 copy($oldTable->dataFile->getPath(), $newTable->dataFile->getPath());
                 copy($oldTable->dataLockFile->getPath(), $newTable->dataLockFile->getPath());
                 $this->dropTable($old_table_name);
             } else {
-                $new_db->loadedTables[$new_table_name] = $this->loadedTables[$old_table_name];
+                $new_schema->loadedTables[$new_table_name] = $this->loadedTables[$old_table_name];
                 unset($this->loadedTables[$old_table_name]);
             }
 
@@ -750,6 +803,93 @@ class fSQLDatabase
         } else {
             return false;
         }
+    }
+}
+
+class fSQLDatabase
+{
+    private $name = null;
+    private $path = null;
+    private $environment = null;
+    private $schemas = array();
+
+    public function __construct(fSQLEnvironment $environment, $name, $filePath)
+    {
+        $this->environment = $environment;
+        $this->name = $name;
+        $this->path = $filePath;
+    }
+
+    public function name()
+    {
+        return $this->name;
+    }
+
+    public function path()
+    {
+        return $this->path;
+    }
+
+    public function environment()
+    {
+        return $this->environment;
+    }
+
+    public function create()
+    {
+        $path = fsql_create_directory($this->path, 'database', $this->environment);
+        if($path !== false) {
+            $this->path = $path;
+            return $this->defineSchema('public');
+        } else {
+            return false;
+        }
+    }
+
+    public function drop()
+    {
+        foreach($this->schemas as $schema)
+            $schema->drop();
+        $this->schemas = array();
+    }
+
+    public function defineSchema($name)
+    {
+        if(!isset($this->schemas[$name])) {
+            $schema = new fSQLSchema($this, $name);
+            if($schema->create()) {
+                $this->schemas[$name] = $schema;
+            } else {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    public function getSchema($name)
+    {
+        if(isset($this->schemas[$name])) {
+            return $this->schemas[$name];
+        }
+
+        return false;
+    }
+
+    public function listSchemas()
+    {
+        return array_keys($this->schemas);
+    }
+
+    public function dropSchema($name)
+    {
+        if(isset($this->schemas[$name])) {
+            $this->schemas[$name]->drop();
+            unset($this->schemas[$name]);
+            return true;
+        }
+
+        return false;
     }
 }
 
@@ -934,7 +1074,7 @@ class fSQLIdentity extends fSQLSequenceBase
     }
 }
 
-class fSQLSequence extends fSQLSequenceBase
+class fSQLSequence extends fSQLSequenceBase implements fSQLRelation
 {
     private $name;
     private $file;
@@ -951,6 +1091,16 @@ class fSQLSequence extends fSQLSequenceBase
         return $this->name;
     }
 
+    public function drop()
+    {
+        return $this->file->dropSequence($this->name);
+    }
+
+    public function fullName()
+    {
+        return $this->file->schema()->name() . '.' . $this->name;
+    }
+
     public function load()
     {
         $this->file->reload();
@@ -964,15 +1114,15 @@ class fSQLSequence extends fSQLSequenceBase
 
 class fSQLSequencesFile
 {
-    private $database;
+    private $schema;
     private $sequences;
     private $file;
     public $lockFile;
 
-    public function __construct(fSQLDatabase $database)
+    public function __construct(fSQLSchema $schema)
     {
-        $this->database = $database;
-        $path = $database->path().'sequences';
+        $this->schema = $schema;
+        $path = $schema->path().'sequences';
         $this->sequences = array();
         $this->file = new fSQLFile($path.'.cgi');
         $this->lockFile = new fSQLMicrotimeLockFile($path.'.lock.cgi');
@@ -990,9 +1140,9 @@ class fSQLSequencesFile
         return true;
     }
 
-    public function database()
+    public function schema()
     {
-        return $this->database;
+        return $this->schema;
     }
 
     public function exists()
@@ -1033,13 +1183,17 @@ class fSQLSequencesFile
 
     public function getSequence($name)
     {
-        $this->lockFile->acquireRead();
-        $this->reload();
         $sequence = false;
-        if(isset($this->sequences[$name])) {
-            $sequence = $this->sequences[$name];
+        if($this->exists())
+        {
+            $this->lockFile->acquireRead();
+            $this->reload();
+
+            if(isset($this->sequences[$name])) {
+                $sequence = $this->sequences[$name];
+            }
+            $this->lockFile->releaseRead();
         }
-        $this->lockFile->releaseRead();
         return $sequence;
     }
 

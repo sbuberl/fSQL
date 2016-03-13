@@ -31,6 +31,25 @@ class fSQLTest extends fSQLBaseTest
         $this->assertTrue($this->fsql->get_database($db2Name) !== false);
     }
 
+    public function testDefineSchema()
+    {
+        $dbName = "db1";
+        $passed = $this->fsql->define_db($dbName, parent::$tempDir);
+        $this->assertTrue($passed);
+
+        $schema1 = 'stuff';
+        $passed = $this->fsql->define_schema($dbName, $schema1);
+        $this->assertTrue($passed);
+
+        $schema2 = "junk";
+        $passed = $this->fsql->define_schema($dbName, $schema2);
+        $this->assertTrue($passed);
+
+        $database = $this->fsql->get_database($dbName);
+        $this->assertTrue($database->getSchema($schema1) !== false);
+        $this->assertTrue($database->getSchema($schema2) !== false);
+    }
+
     public function testSelectDB()
     {
         $dbName = "db";
@@ -51,5 +70,36 @@ class fSQLTest extends fSQLBaseTest
         $this->assertFalse($fakePassed);
         $this->assertEquals(trim($this->fsql->error()), "No database called {$fakeDb} found");
         $this->assertEquals($this->fsql->current_db()->name(), $dbName);
+    }
+
+    public function testSelectSchema()
+    {
+        $dbName = "db";
+        $this->fsql->define_db($dbName, parent::$tempDir);
+
+        $fakeDb = "BAM";
+        $fakePassed = $this->fsql->select_schema($fakeDb, 'public');
+        $this->assertFalse($fakePassed);
+        $this->assertEquals(trim($this->fsql->error()), "No database called {$fakeDb} found");
+
+        $fakeSchema = "blah";
+        $fakePassed = $this->fsql->select_schema($dbName, $fakeSchema);
+        $this->assertFalse($fakePassed);
+        $this->assertEquals(trim($this->fsql->error()), "Schema {$dbName}.{$fakeSchema} does not exist");
+
+        $goodSchema = 'stuff';
+        $this->fsql->define_schema($dbName, $goodSchema);
+
+        $goodPassed = $this->fsql->select_schema($dbName, $goodSchema);
+        $this->assertTrue($goodPassed);
+        $currentSchema = $this->fsql->current_schema();
+        $this->assertNotNull($currentSchema);
+        $this->assertEquals($goodSchema, $currentSchema->name());
+        $this->assertEquals($dbName, $currentSchema->database()->name());
+
+        $fakePassed = $this->fsql->select_schema($dbName, $fakeSchema);
+        $this->assertFalse($fakePassed);
+        $this->assertEquals(trim($this->fsql->error()), "Schema {$dbName}.{$fakeSchema} does not exist");
+        $this->assertEquals($goodSchema, $this->fsql->current_schema()->name());
     }
 }

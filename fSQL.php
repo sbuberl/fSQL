@@ -39,6 +39,7 @@ class fSQLEnvironment
     private $lockedTables = array();
     private $databases = array();
     private $currentDB = null;
+    private $currentSchema = null;
     private $error_msg = null;
     private $query_count = 0;
     private $cursors = array();
@@ -62,42 +63,59 @@ class fSQLEnvironment
 
     public function define_db($name, $path)
     {
-        $path = realpath($path);
-        if($path === false || !is_dir($path)) {
-            if(@mkdir($path, 0777))
-                $path = realpath($path);
-        } else if(!is_readable($path) || !is_writeable($path)) {
-            chmod($path, 0777);
-        }
-
-        if($path && substr($path, -1) != '/')
-            $path .= '/';
-
         list($usec, $sec) = explode(' ', microtime());
         srand((float) $sec + ((float) $usec * 100000));
 
-        if(is_dir($path) && is_readable($path) && is_writeable($path)) {
-            $db = new fSQLDatabase($name, $path);
+        $db = new fSQLDatabase($this, $name, $path);
+        if($db->create()) {
             $this->databases[$name] = $db;
             return true;
         } else {
-            return $this->set_error("Path to directory for {$name} database is not valid.  Please correct the path or create the directory and chmod it to 777.");
+            return false;
         }
+    }
+
+    public function define_schema($db_name, $schema_name)
+    {
+        $db = $this->get_database($db_name);
+        if($db !== false) {
+            $schema = $db->defineSchema($schema_name);
+            return $schema != false;
+        }
+
+        return false;
     }
 
     public function select_db($name)
     {
-        if(isset($this->databases[$name])) {
-            $this->currentDB = $this->databases[$name];
-            return true;
+        return $this->select_schema($name, 'public');
+    }
+
+    public function select_schema($db_name, $schema_name)
+    {
+        if(isset($this->databases[$db_name])) {
+            $db = $this->databases[$db_name];
+            $schema = $db->getSchema($schema_name);
+            if($schema !== false) {
+                $this->currentDB = $db;
+                $this->currentSchema = $schema;
+                return true;
+            } else {
+                return $this->error_schema_not_exist($db_name, $schema_name);
+            }
         } else {
-            return $this->set_error("No database called {$name} found");
+            return $this->set_error("No database called {$db_name} found");
         }
     }
 
     public function current_db()
     {
         return $this->currentDB;
+    }
+
+    public function current_schema()
+    {
+        return $this->currentSchema;
     }
 
     public function error()
@@ -110,20 +128,47 @@ class fSQLEnvironment
         return $this->functions->register($sqlName, $phpName);
     }
 
-    private function set_error($error)
+    public function set_error($error)
     {
         $this->error_msg = $error."\r\n";
         return false;
     }
 
-    private function error_table_not_exists($tableFullName)
+    private function build_relation_name($table_name_pieces)
     {
-        return $this->set_error("Table {$tableFullName} does not exist");
+        list($db_name, $schema_name, $table_name) = $table_name_pieces;
+        if($db_name === null)
+            $db_name = $this->currentDB->name();
+        if($schema_name === null)
+            $schema_name = $this->currentSchema !== null ? $this->currentSchema->name() : 'public';
+        return $db_name.'.'.$schema_name.'.'.$table_name;
     }
 
-    private function error_table_read_lock($tableFullName)
+    private function error_schema_not_exist($db_name, $schema_name)
     {
-        return $this->set_error("Table {$tableFullName} is locked for reading only");
+        return $this->set_error("Schema {$db_name}.{$schema_name} does not exist");
+    }
+
+    private function error_relation_not_exists($relation_name_pieces, $relation_type)
+    {
+        $relation_name = $this->build_relation_name($relation_name_pieces);
+        return $this->set_error("${relation_type} {$relation_name} does not exist");
+    }
+
+    private function error_table_not_exists($table_name_pieces)
+    {
+        return $this->error_relation_not_exists($table_name_pieces, "Table");
+    }
+
+    private function error_table_read_lock($table_name_pieces)
+    {
+        $table_name = $this->build_relation_name($table_name_pieces);
+        return $this->set_error("Table {$table_name} is locked for reading only");
+    }
+
+    public function list_dbs()
+    {
+        return array_keys($this->databases);
     }
 
     public function get_database($db_name)
@@ -148,20 +193,79 @@ class fSQLEnvironment
         return $db;
     }
 
-    public function find_table($dbName, $tableName)
+    public function find_schema($db_name, $schema_name)
     {
-        $table = false;
+        $schema = false;
 
-        $db = $this->get_database($dbName);
+        $db = $this->get_database($db_name);
         if($db !== false) {
-            $table = $db->getTable($tableName);
-            if(!$table->exists()) {
-                $this->error_table_not_exists($table->fullName());
-                $table = false;
+            // if $schema_name is not given try to find current schema
+            // else ( $schema_name is given) try to find schema.
+            if(!$schema_name) {
+                if($this->currentSchema !== null)
+                    $schema = $this->currentSchema;
+                else
+                    $this->set_error('No schema selected');
+            } else {
+                $schema = $db->getSchema($schema_name);
+                if($schema === false)
+                    $this->error_schema_not_exist($db->name(), $schema_name);
+                }
+            }
+
+            return $schema;
+        }
+
+    public function find_relation($name_pieces)
+    {
+        $relation = false;
+
+        if($name_pieces !== false)
+        {
+            list($db_name, $schema_name, $relation_name) = $name_pieces;
+            $schema = $this->find_schema($db_name, $schema_name);
+            if($schema)
+            {
+                $relation = $schema->getRelation($relation_name);
+                if(!$relation)
+                    $this->error_relation_not_exists($name_pieces, "Relation");
+            }
+        }
+
+        return $relation;
+    }
+
+    public function find_table($name_pieces)
+    {
+        $table = $this->find_relation($name_pieces);
+        if($table !== false) {
+            if(!($table instanceof fSQLTable)) {
+                $name = $this->build_relation_name($name_pieces);
+                return $this->set_error("Relation {$name} is not a table");
             }
         }
 
         return $table;
+    }
+
+    public function parse_relation_name($name)
+    {
+        if(preg_match('/^(?:(`?)([^\W\d]\w*)\1\.)?(?:(`?)([^\W\d]\w*)\3\.)?(`?)([^\W\d]\w*)\5$/', $name, $matches))
+        {
+            if(!empty($matches[2]) && empty($matches[4])) {
+                $db_name = null;
+                $schema_name = $matches[2];
+            } else if(empty($matches[2])) {
+                $db_name = null;
+                $schema_name = null;
+            } else {
+                $db_name = $matches[2];
+                $schema_name = $matches[4];
+            }
+            return array($db_name, $schema_name, $matches[6]);
+        }
+        else
+            return $this->set_error('Parse error in table name: ' . $name);
     }
 
     public function lookup_function($function)
@@ -321,24 +425,24 @@ class fSQLEnvironment
 
     private function query_create_sequence($query)
     {
+        if(preg_match("/\ACREATE\s+SEQUENCE\s+(?:(IF\s+NOT\s+EXISTS)\s+)?(`?(?:[^\W\d]\w*`?\.`?){0,2}[^\W\d]\w*`?)(.+?)\s*[;]?\Z/is", $query, $matches)) {
+            list(, $ifNotExists, $fullSequenceName, $valuesList) = $matches;
+            $seqNamePieces = $this->parse_relation_name($fullSequenceName);
+            if($seqNamePieces === false)
+                return false;
 
-        if(preg_match("/\ACREATE\s+SEQUENCE\s+(?:(IF\s+NOT\s+EXISTS)\s+)?(?:`?([^\W\d]\w*)`?\.)?`?([^\W\d]\w*)`?(.+?)\s*[;]?\Z/is", $query, $matches)) {
-            list(, $ifNotExists, $dbName, $sequenceName, $valuesList) = $matches;
-            $db = $this->get_database($dbName);
-            if($db === false) {
+            $schema = $this->find_schema($seqNamePieces[0], $seqNamePieces[1]);
+            if($schema === false) {
                 return false;
             }
 
-            $sequences = $db->getSequences();
-            $seqFileExists = $sequences->exists();
-            if($seqFileExists) {
-                $sequence = $sequences->getSequence($sequenceName);
-                if($sequence !== false) {
-                    if(empty($ifNotExists)) {
-                        return $this->set_error("Sequence {$db->name()}.{$sequenceName} already exists");
-                    } else {
-                        return true;
-                    }
+            $sequenceName = $seqNamePieces[2];
+            $sequence = $schema->getRelation($sequenceName);
+            if($sequence !== false) {
+                if(empty($ifNotExists)) {
+                    return $this->set_error("Relation {$fullSequenceName} already exists");
+                } else {
+                    return true;
                 }
             }
 
@@ -349,7 +453,8 @@ class fSQLEnvironment
 
             list($start, $increment, $min, $max, $cycle) = $this->load_create_sequence($parsed);
 
-            if(!$seqFileExists) {
+            $sequences = $schema->getSequences();
+            if(!$sequences->exists()) {
                 $sequences->create();
             }
             $sequences->addSequence($sequenceName, $start, $increment, $min, $max, $cycle);
@@ -362,23 +467,25 @@ class fSQLEnvironment
 
     private function query_create_table($query)
     {
-        if(preg_match("/\ACREATE(?:\s+(TEMPORARY))?\s+TABLE\s+(?:(IF\s+NOT\s+EXISTS)\s+)?`?(?:([A-Z][A-Z0-9\_]*)`?\.`?)?([A-Z][A-Z0-9\_]*?)`?(?:\s*\((.+)\)|\s+LIKE\s+(?:([A-Z][A-Z0-9\_]*)\.)?([A-Z][A-Z0-9\_]*))/is", $query, $matches)) {
+        if(preg_match("/\ACREATE(?:\s+(TEMPORARY))?\s+TABLE\s+(?:(IF\s+NOT\s+EXISTS)\s+)?(`?(?:[^\W\d]\w*`?\.`?){0,2}[^\W\d]\w*`?)(?:\s*\((.+)\)|\s+LIKE\s+(`?(?:[^\W\d]\w*`?\.`?){0,2}[^\W\d]\w*`?))/is", $query, $matches)) {
 
-            list(, $temporary, $ifnotexists, $db_name, $table_name, $column_list) = $matches;
+            list(, $temporary, $ifnotexists, $full_table_name, $column_list) = $matches;
 
-            if(!$table_name) {
-                return $this->set_error("No table name specified");
-            }
+            $table_name_pieces = $this->parse_relation_name($full_table_name);
+            if($table_name_pieces === false)
+                return false;
 
-            $db = $this->get_database($db_name);
-            if($db === false) {
+            $table_name = $table_name_pieces[2];
+
+            $schema = $this->find_schema($table_name_pieces[0], $table_name_pieces[1]);
+            if($schema === false) {
                 return false;
             }
 
-            $table = $db->getTable($table_name);
-            if($table->exists()) {
+            $table = $schema->getRelation($table_name);
+            if($table === false) {
                 if(empty($ifnotexists)) {
-                    return $this->set_error("Table {$db->name}.{$table_name} already exists");
+                    return $this->set_error("Relation $full_table_name already exists");
                 } else {
                     return true;
                 }
@@ -386,9 +493,8 @@ class fSQLEnvironment
 
             $temporary = !empty($temporary) ? true : false;
 
-            if(!isset($matches[6])) {
-                //preg_match_all("/(?:(KEY|PRIMARY KEY|UNIQUE) (?:([A-Z][A-Z0-9\_]*)\s*)?\((.+?)\))|(?:`?([A-Z][A-Z0-9\_]*?)`?(?:\s+((?:TINY|MEDIUM|BIG)?(?:TEXT|BLOB)|(?:VAR)?(?:CHAR|BINARY)|INTEGER|(?:TINY|SMALL|MEDIUM|BIG)?INT|FLOAT|REAL|DOUBLE(?: PRECISION)?|BIT|BOOLEAN|DEC(?:IMAL)?|NUMERIC|DATE(?:TIME)?|TIME(?:STAMP)?|YEAR|ENUM|SET)(?:\((.+?)\))?)(\s+UNSIGNED)?(.*?)?(?:,|\)|$))/is", trim($column_list), $Columns);
-                preg_match_all("/(?:(?:CONSTRAINT\s+(?:`?[A-Z][A-Z0-9\_]*`?\s+)?)?(KEY|INDEX|PRIMARY\s+KEY|UNIQUE)(?:\s+`?([A-Z][A-Z0-9\_]*)`?)?\s*\(`?(.+?)`?\))|(?:`?([A-Z][A-Z0-9\_]*?)`?(?:\s+((?:TINY|MEDIUM|LONG)?(?:TEXT|BLOB)|(?:VAR)?(?:CHAR|BINARY)|INTEGER|(?:TINY|SMALL|MEDIUM|BIG)?INT|FLOAT|REAL|DOUBLE(?: PRECISION)?|BIT|BOOLEAN|DEC(?:IMAL)?|NUMERIC|DATE(?:TIME)?|TIME(?:STAMP)?|YEAR|ENUM|SET)(?:\((.+?)\))?)\s*(UNSIGNED\s+)?(?:GENERATED\s+(BY\s+DEFAULT|ALWAYS)\s+AS\s+IDENTITY(?:\s*\((.*?)\))?)?(.*?)?(?:,|\)|$))/is", trim($column_list), $Columns);
+            if(!isset($matches[5])) {
+                preg_match_all("/(?:(?:CONSTRAINT\s+(?:`?[^\W\d]\w*`?\s+)?)?(KEY|INDEX|PRIMARY\s+KEY|UNIQUE)(?:\s+`?([^\W\d]\w*)`?)?\s*\(`?(.+?)`?\))|(?:`?([^\W\d]\w*?)`?(?:\s+((?:TINY|MEDIUM|LONG)?(?:TEXT|BLOB)|(?:VAR)?(?:CHAR|BINARY)|INTEGER|(?:TINY|SMALL|MEDIUM|BIG)?INT|FLOAT|REAL|DOUBLE(?: PRECISION)?|BIT|BOOLEAN|DEC(?:IMAL)?|NUMERIC|DATE(?:TIME)?|TIME(?:STAMP)?|YEAR|ENUM|SET)(?:\((.+?)\))?)\s*(UNSIGNED\s+)?(?:GENERATED\s+(BY\s+DEFAULT|ALWAYS)\s+AS\s+IDENTITY(?:\s*\((.*?)\))?)?(.*?)?(?:,|\)|$))/is", trim($column_list), $Columns);
 
                 if(!$Columns) {
                     return $this->set_error("Parsing error in CREATE TABLE query");
@@ -522,10 +628,9 @@ class fSQLEnvironment
                     }
                 }
             } else {
-                $src_db_name = $matches[6];
-                $src_table_name = $matches[7];
+                $src_table_name_pieces = $this->parse_relation_name($matches[5]);
 
-                $src_table = $this->find_table($src_db_name, $src_table_name);
+                $src_table = $this->find_table($src_table_name_pieces);
                 if($src_table !== false) {
                     $new_columns = $src_table->getColumns();
                 } else {
@@ -533,7 +638,7 @@ class fSQLEnvironment
                 }
             }
 
-            $db->createTable($table_name, $new_columns, $temporary);
+            $schema->createTable($table_name, $new_columns, $temporary);
 
             return true;
         } else {
@@ -664,8 +769,8 @@ class fSQLEnvironment
         $this->affected = 0;
 
         // All INSERT/REPLACE queries are the same until after the table name
-        if(preg_match("/\A((INSERT|REPLACE)(?:\s+(IGNORE))?\s+INTO\s+`?(?:([A-Z][A-Z0-9\_]*)`?\.`?)?([A-Z][A-Z0-9\_]*)`?)\s+(.+?)\s*[;]?\Z/is", $query, $matches)) {
-            list(, $beginning, $command, $ignore, $db_name, $table_name, $the_rest) = $matches;
+        if(preg_match("/\A((INSERT|REPLACE)(?:\s+(IGNORE))?\s+INTO\s+(`?(?:[^\W\d]\w*`?\.`?){0,2}[^\W\d]\w*`?))\s+(.+?)\s*[;]?\Z/is", $query, $matches)) {
+            list(, $beginning, $command, $ignore, $full_table_name, $the_rest) = $matches;
         } else {
             return $this->set_error('Invalid Query');
         }
@@ -682,16 +787,12 @@ class fSQLEnvironment
             return true;
         }
 
-        $db = $this->get_database($db_name);
-        if($db === false) {
-            return false;
-        }
-
-        $table = $this->find_table($db_name, $table_name);
+        $table_name_pieces = $this->parse_relation_name($full_table_name);
+        $table = $this->find_table($table_name_pieces);
         if($table === false) {
             return false;
         } else if($table->isReadLocked()) {
-            return $this->error_table_read_lock($table-fullName());
+            return $this->error_table_read_lock($table_name_pieces);
         }
 
         $tableColumns = $table->getColumns();
@@ -882,16 +983,17 @@ class fSQLEnvironment
     ////Update data in the DB
     private function query_update($query) {
         $this->affected = 0;
-        if(preg_match("/\AUPDATE(?:\s+(IGNORE))?\s+(?:`?([^\W\d]\w*)`?\.)?`?([^\W\d]\w*)`?\s+SET\s+(.+?)(?:\s+WHERE\s+(.+))?\s*[;]?\Z/is", $query, $matches)) {
-            $matches[4] = preg_replace("/(.+?)(\s+WHERE)(.*)/is", "\\1", $matches[4]);
+        if(preg_match("/\AUPDATE(?:\s+(IGNORE))?\s+(`?(?:[^\W\d]\w*`?\.`?){0,2}[^\W\d]\w*`?)\s+SET\s+(.+?)(?:\s+WHERE\s+(.+))?\s*[;]?\Z/is", $query, $matches)) {
+            $set_clause = preg_replace("/(.+?)(\s+WHERE)(.*)/is", "\\1", $matches[3]);
             $ignore = !empty($matches[1]);
-            $table_name = $matches[3];
+            $full_table_name = $matches[2];
 
-            $table = $this->find_table($db_name, $table_name);
+            $table_name_pieces = $this->parse_relation_name($full_table_name);
+            $table = $this->find_table($table_name_pieces);
             if($table === false) {
                 return false;
             } else if($table->isReadLocked()) {
-                return $this->error_table_read_lock($table-fullName());
+                return $this->error_table_read_lock($table_name_pieces);
             }
 
             $columns = $table->getColumns();
@@ -899,12 +1001,12 @@ class fSQLEnvironment
             $cursor = $table->getCursor();
             $col_indicies = array_flip($columnNames);
 
-            $SET = $this->parseSetClause($matches[4], $columns);
+            $SET = $this->parseSetClause($set_clause, $columns);
 
             $where = null;
-            if(isset($matches[5]))
+            if(isset($matches[4]))
             {
-                $where = $this->build_where($matches[5], array('tables' => array($table_name => $columns), 'offsets' => array($table_name => 0), 'columns' => $columnNames));
+                $where = $this->build_where($matches[4], array('tables' => array($table_name => $columns), 'offsets' => array($table_name => 0), 'columns' => $columnNames));
                 if(!$where) {
                     return $this->set_error('Invalid WHERE clause: '.$this->error_msg);
                 }
@@ -1030,23 +1132,25 @@ EOC;
     */
     private function query_merge($query)
     {
-        if(preg_match("/\AMERGE\s+INTO\s+(?:`?([^\W\d]\w*)`?\.)?`?([^\W\d]\w*)`?(?:\s+(?:AS\s+)?`?([A-Z][A-Z0-9\_]*)`?)?\s+USING\s+(?:`?([^\W\d]\w*)`?\.)?`?([^\W\d]\w*)`?(?:\s(?:AS\s+)?`?([^\W\d]\w*)`?)?\s+ON\s+(.+?)\s+(WHEN\s+(?:NOT\s+)?MATCHED.+?);?\Z/is", $query, $matches)) {
-            list( , $dest_db_name, $dest_table_name, $dest_alias, $src_db_name, $src_table_name, $src_alias, $on_clause, $matches_clause) = $matches;
+        if(preg_match("/\AMERGE\s+INTO\s+(`?(?:[^\W\d]\w*`?\.`?){0,2}[^\W\d]\w*`?)(?:\s+(?:AS\s+)?`?([^\W\d]\w*)`?)?\s+USING\s+(`?(?:[^\W\d]\w*`?\.`?){0,2}[^\W\d]\w*`?)(?:\s(?:AS\s+)?`?([^\W\d]\w*)`?)?\s+ON\s+(.+?)\s+(WHEN\s+(?:NOT\s+)?MATCHED.+?);?\Z/is", $query, $matches)) {
+            list( , $full_dest_table_name, $dest_alias, $full_src_table_name, $src_alias, $on_clause, $matches_clause) = $matches;
 
-            if(!($dest_table = $this->find_table($dest_db_name, $dest_table_name))) {
+            $dest_table_name_pieces = $this->parse_relation_name($full_dest_table_name);
+            if(!($dest_table = $this->find_table($dest_table_name_piecese))) {
                 return false;
             }
 
-            if(!($src_table = $this->find_table($src_db_name, $src_table_name))) {
+            $src_table_name_pieces = $this->parse_relation_name($full_src_table_name);
+            if(!($src_table = $this->find_table($src_table_name_pieces))) {
                 return false;
             }
 
             if(empty($dest_alias)) {
-                $dest_alias = $dest_table_name;
+                $dest_alias = $full_dest_table_name[2];
             }
 
             if(empty($src_alias)) {
-                $src_alias = $src_table_name;
+                $src_alias = $full_src_table_name[2];
             }
 
             $src_table_columns = $src_table->getColumns();
@@ -1264,14 +1368,16 @@ EOC;
 
             $tbls = explode(',', $from_matches[1]);
             foreach($tbls as $tbl) {
-                if(preg_match('/\A\s*(?:`?([^\W\d]\w*)`?\.)?`?([^\W\d]\w*)`?(?:\s+(?:AS\s+)?`?([^\W\d]\w*)`?)?\s*(.*)/is', $tbl, $table_matches)) {
-                    list(, $db_name, $table_name, $saveas, $table_unparsed) = $table_matches;
-                    if(empty($saveas)) {
-                        $saveas = $table_name;
+                if(preg_match('/\A\s*(`?(?:[^\W\d]\w*`?\.`?){0,2}[^\W\d]\w*`?)(?:\s+(?:AS\s+)?`?([^\W\d]\w*)`?)?\s*(.*)/is', $tbl, $table_matches)) {
+                    list(, $full_table_name, $saveas, $table_unparsed) = $table_matches;
+
+                    $table_name_pieces = $this->parse_relation_name($full_table_name);
+                    if(!($table = $this->find_table($table_name_pieces))) {
+                        return false;
                     }
 
-                    if(!($table = $this->find_table($db_name, $table_name))) {
-                        return false;
+                    if(empty($saveas)) {
+                        $saveas = $table_name_pieces[2];
                     }
 
                     if(!isset($tables[$saveas])) {
@@ -2042,14 +2148,13 @@ EOT;
     private function query_delete($query)
     {
         $this->affected  = 0;
-        if(preg_match('/\ADELETE\s+FROM\s+(?:`?([^\W\d]\w*)`?\.)?`?([^\W\d]\w*)`?(?:\s+WHERE\s+(.+?))?\s*[;]?\Z/is', $query, $matches)) {
-            list(, $db_name, $table_name) = $matches;
-
-            $table = $this->find_table($db_name, $table_name);
+        if(preg_match('/\ADELETE\s+FROM\s+(`?(?:[^\W\d]\w*`?\.`?){0,2}[^\W\d]\w*`?)(?:\s+WHERE\s+(.+?))?\s*[;]?\Z/is', $query, $matches)) {
+            $table_name_pieces = $this->parse_relation_name($matches[1]);
+            $table = $this->find_table($table_name_pieces);
             if($table === false) {
                 return false;
             } else if($table->isReadLocked()) {
-                return $this->error_table_read_lock($table->fullName());
+                return $this->error_table_read_lock($table_name_pieces);
             }
 
             $columns = $table->getColumns();
@@ -2060,8 +2165,8 @@ EOT;
                 return true;
 
 
-            if(isset($matches[3])) {
-                $where = $this->build_where($matches[3], array('tables' => array($table_name => $columns), 'offsets' => array($table_name => 0), 'columns' => $columnNames));
+            if(isset($matches[2])) {
+                $where = $this->build_where($matches[2], array('tables' => array($table_name => $columns), 'offsets' => array($table_name => 0), 'columns' => $columnNames));
                 if(!$where) {
                     return $this->set_error('Invalid WHERE clause: '.$this->error_msg);
                 }
@@ -2116,30 +2221,39 @@ EOC;
 
     private function query_alter_sequence($query)
     {
-        if(preg_match("/\AALTER\s+SEQUENCE\s+(?:(IF\s+EXISTS)\s+)?(?:`?([^\W\d]\w*)`?\.)?`?([^\W\d]\w*)`?\s+(.+?)\s*[;]?\Z/is", $query, $matches)) {
-            list(, $ifExists, $dbName, $sequenceName, $valuesList) = $matches;
-            $db = $this->get_database($dbName);
-            if($db === false) {
+        if(preg_match("/\AALTER\s+SEQUENCE\s+(?:(IF\s+EXISTS)\s+)?(`?(?:[^\W\d]\w*`?\.`?){0,2}[^\W\d]\w*`?)\s+(.+?)\s*[;]?\Z/is", $query, $matches)) {
+            list(, $ifExists, $fullSequenceName, $valuesList) = $matches;
+
+            $seqNamePieces = $this->parse_relation_name($fullSequenceName);
+
+            $schema = $this->find_schema($seqNamePieces[0], $seqNamePieces[1]);
+            if($schema === false) {
                 return false;
             }
 
-            $sequences = $db->getSequences();
-            if(!$sequences->exists()) {
-                $sequences->create();
-            }
-
-            $sequence = $sequences->getSequence($sequenceName);
+            $sequenceName = $seqNamePieces[2];
+            $sequence = $schema->getRelation($sequenceName);
             if($sequence === false) {
                 if(empty($ifExists)) {
-                    return $this->set_error("Sequence {$db->name()}.{$sequenceName} does not exist");
+                    return $this->error_relation_not_exists($seqNamePieces, "Sequence");
                 } else {
                     return true;
                 }
             }
 
+            if(!($sequence instanceof fSQLSequence)) {
+                $fullName = $this->build_relation_name($seqNamePieces);
+                return $this->set_error("Relation {$fullName} is not a sequence");
+            }
+
             $parsed = $this->parse_sequence_options($valuesList, true);
             if($parsed === false) {
                 return false;
+            }
+
+            $sequences = $schema->getSequences();
+            if(!$sequences->exists()) {
+                $sequences->create();
             }
 
             $result = $sequence->alter($parsed);
@@ -2156,21 +2270,23 @@ EOC;
 
     private function query_alter_table($query)
     {
-        if(preg_match("/\AALTER\s+TABLE\s+`?(?:([A-Z][A-Z0-9\_]*)`?\.`?)?([A-Z][A-Z0-9\_]*)`?\s+(.*)/is", $query, $matches)) {
-            list(, $db_name, $table_name, $changes) = $matches;
+        if(preg_match("/\AALTER\s+TABLE\s+(`?(?:[^\W\d]\w*`?\.`?){0,2}[^\W\d]\w*`?)\s+(.*)/is", $query, $matches)) {
+            list(, $fullTableName, $changes) = $matches;
 
-            $tableObj = $this->find_table($db_name, $table_name);
+            $tableNamePieces = $this->parse_relation_name($fullTableName);
+            $tableObj = $this->find_table($tableNamePieces);
             if($tableObj === false) {
                 return false;
             } else if($tableObj->isReadLocked()) {
-                return $this->error_table_read_lock($tableObj->fullName());
+                return $this->error_table_read_lock($tableNamePieces);
             }
 
+            $tableName = $tableNamePieces[2];
             $columns =  $tableObj->getColumns();
 
             preg_match_all("/(?:ADD|ALTER|DROP|RENAME).*?(?:,|\Z)/is", trim($changes), $specs);
             for($i = 0; $i < count($specs[0]); $i++) {
-                if(preg_match("/\AADD\s+(?:CONSTRAINT\s+`?[A-Z][A-Z0-9\_]*`?\s+)?PRIMARY\s+KEY\s*\((.+?)\)/is", $specs[0][$i], $matches)) {
+                if(preg_match("/\AADD\s+(?:CONSTRAINT\s+`?[^\W\d]\w*`?\s+)?PRIMARY\s+KEY\s*\((.+?)\)/is", $specs[0][$i], $matches)) {
                     $columnDef =& $columns[$matches[1]];
 
                     foreach($columns as $name => $column) {
@@ -2183,10 +2299,10 @@ EOC;
                     $tableObj->setColumns($columns);
 
                     return true;
-                } else if(preg_match("/\AALTER(?:\s+(?:COLUMN))?\s+`?([A-Z][A-Z0-9\_]*)`?\s+(.+?)(?:,|;|\Z)/is", $specs[0][$i], $matches)) {
+                } else if(preg_match("/\AALTER(?:\s+(?:COLUMN))?\s+`?([^\W\d]\w*)`?\s+(.+?)(?:,|;|\Z)/is", $specs[0][$i], $matches)) {
                     list(, $columnName, $the_rest) = $matches;
                     if(!isset($columns[$columnName])) {
-                        return $this->set_error("Column named '$columnName' does not exist in table '$table_name'");
+                        return $this->set_error("Column named '$columnName' does not exist in table '$tableName'");
                     }
 
                     $columnDef =& $columns[$columnName];
@@ -2250,22 +2366,24 @@ EOC;
                         return $this->set_error("No primary key found");
                     }
                 }
-                else if(preg_match("/\ARENAME\s+(?:TO\s+)?`?(?:([A-Z][A-Z0-9\_]*)`?\.`?)?([A-Z][A-Z0-9\_]*)`?/is", $specs[0][$i], $matches)) {
-                    list(, $new_db_name, $new_table_name) = $matches;
+                else if(preg_match("/\ARENAME\s+(?:TO\s+)?(`?(?:[^\W\d]\w*`?\.`?){0,2}[^\W\d]\w*`?)/is", $specs[0][$i], $matches)) {
 
-                    $db = $tableObj->database();
-
-                    $new_db = $this->get_database($new_db_name);
-                    if($new_db === false) {
+                    $newTableNamePieces = $this->parse_relation_name($matches[1]);
+                    if($newTableNamePieces === false)
                         return false;
+
+                    $schema = $tableObj->schema();
+
+                    $newSchema = $this->find_schema($newTableNamePieces[0], $newTableNamePieces[1]);
+                    if($newSchema === false)
+                        return false;
+
+                    $newTable = $newSchema->getTable($newTableNamePieces[2]);
+                    if($newTable->exists()) {
+                        return $this->set_error("Destination table {$newTable->fullName()} already exists");
                     }
 
-                    $new_table = $new_db->getTable($new_table_name);
-                    if($new_table->exists()) {
-                        return $this->set_error("Destination table {$new_db_name}.{$new_table_name} already exists");
-                    }
-
-                    return $db->renameTable($table_name, $new_table_name, $new_db);
+                    return $schema->renameTable($tableName, $newTable->name(), $new_schema);
                 }
                 else {
                     return $this->set_error("Invalid ALTER TABLE query");
@@ -2327,39 +2445,45 @@ EOC;
             foreach($tables as $table) {
                 list($old, $new) = preg_split("/\s+TO\s+/i", trim($table));
 
-                if(preg_match("/`?(?:([A-Z][A-Z0-9\_]*)`?\.`?)?([A-Z][A-Z0-9\_]*)`?/is", $old, $table_parts)) {
-                    list(, $old_db_name, $old_table_name) = $table_parts;
+                if(preg_match("/(`?(?:[^\W\d]\w*`?\.`?){0,2}[^\W\d]\w*`?)/is", $old, $table_parts)) {
+                    $old_table_pieces = $this->parse_relation_name($table_parts[1]);
+                    if($old_table_pieces === false)
+                        return false;
 
-                    $old_db = $this->get_database($old_db_name);
-                    if($old_db === false) {
+                    $old_schema = $this->find_schema($old_table_pieces[0], $old_table_pieces[1]);
+                    if($old_schema === false) {
                         return false;
                     }
                 } else {
                     return $this->set_error("Parse error in table listing");
                 }
 
-                if(preg_match("/(?:([A-Z][A-Z0-9\_]*)\.)?([A-Z][A-Z0-9\_]*)/is", $new, $table_parts)) {
-                    list(, $new_db_name, $new_table_name) = $table_parts;
+                if(preg_match("/(`?(?:[^\W\d]\w*`?\.`?){0,2}[^\W\d]\w*`?)/is", $new, $table_parts)) {
+                    $new_table_pieces = $this->parse_relation_name($table_parts[1]);
+                    if($new_table_pieces === false)
+                        return false;
 
-                    $new_db = $this->get_database($new_db_name);
-                    if($new_db === false) {
+                    $new_schema = $this->find_schema($new_table_pieces[0], $new_table_pieces[1]);
+                    if($new_schema === false) {
                         return false;
                     }
                 } else {
                     return $this->set_error("Parse error in table listing");
                 }
 
+                $old_table_name = $old_table_pieces[2];
                 $old_table = $this->find_table($old_db_name, $old_table_name);
                 if($old_table === false) {
                     return false;
                 }
                 elseif($old_table->isReadLocked()) {
-                    return $this->error_table_read_lock($old_table_name->fullName());
+                    return $this->error_table_read_lock($old_table_pieces);
                 }
 
+                $new_table_name = $new_table_pieces[2];
                 $new_table = $new_db->getTable($new_table_name);
                 if($new_table->exists()) {
-                    return $this->set_error("Destination table {$new_db_name}.{$new_table_name} already exists");
+                    return $this->set_error("Destination table {$new_table->fullName()} already exists");
                 }
 
                 return $old_db->renameTable($old_table_name, $new_table_name, $new_db);
@@ -2378,29 +2502,27 @@ EOC;
             $tables = explode(",", $matches[3]);
 
             foreach($tables as $table) {
-                if(preg_match("/`?(?:([A-Z][A-Z0-9\_]*)`?\.`?)?([A-Z][A-Z0-9\_]*)`?/is", $table, $table_parts)) {
-                    list(, $db_name, $table_name) = $table_parts;
-
-                    $db = $this->get_database($db_name);
-                    if($db === false) {
+                if(preg_match("/(`?(?:[^\W\d]\w*`?\.`?){0,2}[^\W\d]\w*`?)/is", $table, $table_parts)) {
+                    $table_name_pieces = $this->parse_relation_name($table_parts[1]);
+                    $schema = $this->find_schema($table_name_pieces[0], $table_name_pieces[1]);
+                    if($schema == false)
                         return false;
-                    }
 
-                    $table = $db->getTable($table_name);
+                    $table = $schema->getTable($table_name_pieces[2]);
                     if($table->isReadLocked()) {
-                        return $this->error_table_read_lock($db->name, $table_name);
+                        return $this->error_table_read_lock($table_name_pieces);
                     }
 
                     $existed = $db->dropTable($table_name);
                     if(!$ifexists && !$existed) {
-                        return $this->error_table_not_exists($db->name, $table_name);
+                        return $this->error_table_not_exists($table_name_pieces);
                     }
                 } else {
                     return $this->set_error("Parse error in table listing");
                 }
             }
             return true;
-        } else if(preg_match("/\ADROP\s+DATABASE(?:\s+(IF\s+EXISTS))?\s+`?([A-Z][A-Z0-9\_]*)`?\s*[;]?\Z/is", $query, $matches)) {
+        } else if(preg_match("/\ADROP\s+DATABASE(?:\s+(IF\s+EXISTS))?\s+`?([^\W\d]\w*)`?\s*[;]?\Z/is", $query, $matches)) {
             $ifexists = !empty($matches[1]);
             $db_name = $matches[2];
 
@@ -2416,29 +2538,42 @@ EOC;
             $db->drop();
             unset($this->databases[$db_name]);
 
-            return true;
-        } else if(preg_match("/\ADROP\s+SEQUENCE(?:\s+(IF\s+EXISTS))?\s+(?:`?([^\W\d]\w*)`?\.)?`?([^\W\d]\w*)`?\s*[;]?\Z/is", $query, $matches)) {
-            list(, $ifExists, $dbName, $sequenceName) = $matches;
+        } else if(preg_match('/\ADROP\s+SCHEMA(?:\s+(IF\s+EXISTS))?\s+(?:`?([^\W\d]\w*)`?\.)?`?([^\W\d]\w*)`?\s*[;]?\Z/is', $query, $matches)) {
+            $ifexists = !empty($matches[1]);
+            $dbName = $matches[2];
+            $schemaName = $matches[3];
+            $schema = $this->find_schema($dbName, $schemaName);
 
-            $db = $this->get_database($dbName);
-            if($db === false) {
-                return false;
-            }
-
-            $sequences = $db->getSequences();
-            $sequence = false;
-            if($sequences->exists()) {
-                $sequence = $sequences->getSequence($sequenceName);
-            }
-
-            if($sequence === false) {
-                if(empty($ifExists)) {
-                    return $this->set_error("Sequence {$db->name}.{$sequenceName} does not exist");
+            if($schema === false) {
+                if(!$ifexists) {
+                    return $this->error_schema_not_exist($dbName, $schemaName);
                 } else {
                     return true;
                 }
             }
 
+            $db = $schema->database();
+            $db->dropSchema($schemaName);
+        } else if(preg_match("/\ADROP\s+SEQUENCE(?:\s+(IF\s+EXISTS))?\s+(`?(?:[^\W\d]\w*`?\.`?){0,2}[^\W\d]\w*`?)\s*[;]?\Z/is", $query, $matches)) {
+            list(, $ifExists, $fullSequenceName) = $matches;
+
+            $seqNamePieces = $this->parse_relation_name($table_parts[1]);
+            $schema = $this->find_schema($seqNamePieces[0], $seqNamePieces[1]);
+            if($schema == false)
+                return false;
+
+            $sequenceName = $seqNamePieces[2];
+            $sequence = $schema->getSequence($sequenceName);
+
+            if($sequence === false) {
+                if(empty($ifExists)) {
+                    return $this->set_error("Sequence {$fullSequenceName} does not exist");
+                } else {
+                    return true;
+                }
+            }
+
+            $sequences = $schema->getSequences();
             $sequences->dropSequence($sequenceName);
             return true;
         } else {
@@ -2448,17 +2583,17 @@ EOC;
 
     private function query_truncate($query)
     {
-        if(preg_match("/\ATRUNCATE\s+TABLE\s+(?:`?([A-Z][A-Z0-9\_]*)`?\.)?`?([A-Z][A-Z0-9\_]*)`?(?:\s+(CONTINUE|RESTART)\s+IDENTITY)?\s*[;]?\Z/is", $query, $matches)) {
-            list(, $db_name, $table_name, ) = $matches;
-            $table = $this->find_table($db_name, $table_name);
+        if(preg_match("/\ATRUNCATE\s+TABLE\s+(`?(?:[^\W\d]\w*`?\.`?){0,2}[^\W\d]\w*`?)(?:\s+(CONTINUE|RESTART)\s+IDENTITY)?\s*[;]?\Z/is", $query, $matches)) {
+            $table_name_pieces = $this->parse_relation_name($matches[1]);
+            $table = $this->find_table($table_name_pieces);
             if($table === false) {
                 return false;
             } else if($table->isReadLocked()) {
-                return $this->error_table_read_lock($table->fullName());
+                return $this->error_table_read_lock($table_name_pieces);
             }
 
             $table->truncate();
-            if(isset($matches[3]) && !strcasecmp($matches[3], 'RESTART')) {
+            if(isset($matches[2]) && !strcasecmp($matches[2], 'RESTART')) {
                 $identity = $table->getIdentity();
                 if($identity !== null) {
                     $identity->restart();
@@ -2479,10 +2614,9 @@ EOC;
 
             $tables = explode(",", $matches[1]);
             foreach($tables as $table) {
-                if(preg_match("/`?(?:([A-Z][A-Z0-9\_]*)`?\.`?)?([A-Z][A-Z0-9\_]*)`?/is", $table, $table_name_matches)) {
-                    list(, $db_name, $table_name) = $table_name_matches;
-
-                    $tableObj = $this->find_table($db_name, $table_name);
+                if(preg_match("/(`?(?:[^\W\d]\w*`?\.`?){0,2}[^\W\d]\w*`?)/is", $table, $table_name_matches)) {
+                    $table_name_pieces = $this->parse_relation_name($table_name_matches[1]);
+                    $tableObj = $this->find_table($table_name_pieces);
                     if($tableObj === false) {
                         return false;
                     } else if($tableObj->temporary()) {
@@ -2507,10 +2641,9 @@ EOC;
 
             $tables = explode(",", $matches[1]);
             foreach($tables as $table) {
-                if(preg_match("/`?(?:([A-Z][A-Z0-9\_]*)`?\.`?)?([A-Z][A-Z0-9\_]*)`?/is", $table, $table_name_matches)) {
-                    list(, $db_name, $table_name) = $table_name_matches;
-
-                    $tableObj = $this->find_table($db_name, $table_name);
+                if(preg_match("/(`?(?:[^\W\d]\w*`?\.`?){0,2}[^\W\d]\w*`?)/is", $table, $table_name_matches)) {
+                    $table_name_pieces = $this->parse_relation_name($table_name_matches[1]);
+                    $tableObj = $this->find_table($table_name_pieces);
                     if($tableObj === false) {
                         return false;
                     } else if($tableObj->temporary()) {
@@ -2529,7 +2662,7 @@ EOC;
 
     private function query_show($query)
     {
-        if(preg_match("/\ASHOW\s+(FULL\s+)?TABLES(?:\s+FROM\s+`?([A-Z][A-Z0-9\_]*)`?)?\s*[;]?\Z/is", $query, $matches)) {
+        if(preg_match("/\ASHOW\s+(FULL\s+)?TABLES(?:\s+FROM\s+`?([^\W\d]\w*)`?)?\s*[;]?\Z/is", $query, $matches)) {
             $full = !empty($matches[1]);
             $db_name = !empty($matches[2]) ? $matches[2] : "";
 
@@ -2556,23 +2689,26 @@ EOC;
 
             return $this->create_result_set($columns, $data);
         } else if(preg_match("/\ASHOW\s+DATABASES\s*[;]?\s*\Z/is", $query, $matches)) {
-            $dbs = array_keys($this->databases);
-            foreach($dbs as $db) {
+            foreach($this->list_dbs() as $db) {
                 $data[] = array($db);
             }
 
+            $columns = array("Name");
             return $this->create_result_set($columns, $data);
-        } else if(preg_match('/\ASHOW\s+(FULL\s+)?COLUMNS\s+(?:FROM|IN)\s+`?([^\W\d]\w*)`?(?:\s+(?:FROM|IN)\s+`?([^\W\d]\w*)`?)?\s*[;]?\s*\Z/is', $query, $matches)) {
-            $db_name = !empty($matches[3]) ? $matches[3] : '';
-            return $this->show_columns($db_name, $matches[2], !empty($matches[1]));
+        } else if(preg_match('/\ASHOW\s+(FULL\s+)?COLUMNS\s+(?:FROM|IN)\s+`?([^\W\d]\w*)`?(?:\s+(?:FROM|IN)\s+(?:`?([^\W\d]\w*)`?\.`?)?([^\W\d]\w*)`?)?([^\W\d]\w*)`?)?\s*[;]?\s*\Z/is', $query, $matches)) {
+            $db_name = !empty($matches[3]) ? $matches[3] : null;
+            $schema_name = isset($matches[4]) ? $matches[4] : null;
+            $table_name = $matches[2];
+            $pieces = array($db_name, $schema_name, $table_name);
+            return $this->show_columns($pieces, !empty($matches[1]));
          } else {
             return $this->set_error("Invalid SHOW query");
         }
     }
 
-    private function show_columns($db_name, $table_name, $full)
+    private function show_columns($name_pieces, $full)
     {
-        $table = $this->find_table($db_name, $table_name);
+        $table = $this->find_table($name_pieces);
         if($table === false) {
             return false;
         }
@@ -2617,8 +2753,9 @@ EOC;
 
     private function query_describe($query)
     {
-        if(preg_match("/\ADESC(?:RIBE)?\s+`?(?:([A-Z][A-Z0-9\_]*)`?\.`?)?([A-Z][A-Z0-9\_]*)`?\s*[;]?\Z/is", $query, $matches)) {
-            return $this->show_columns($matches[1], $matches[2], false);
+        if(preg_match("/\ADESC(?:RIBE)?\s+(`?(?:[^\W\d]\w*`?\.`?){0,2}[^\W\d]\w*`?)\s*[;]?\Z/is", $query, $matches)) {
+            $name_pieces = $this->parse_relation_name($matches[1]);
+            return $this->show_columns($name_pieces, false);
         } else {
             return $this->set_error('Invalid DESCRIBE query');
         }
@@ -2626,7 +2763,7 @@ EOC;
 
     private function query_use($query)
     {
-        if(preg_match("/\AUSE\s+`?([A-Z][A-Z0-9\_]*)`?\s*[;]?\Z/is", $query, $matches)) {
+        if(preg_match("/\AUSE\s+`?([^\W\d]\w*)`?\s*[;]?\Z/is", $query, $matches)) {
             $this->select_db($matches[1]);
             return true;
         } else {
@@ -2637,18 +2774,16 @@ EOC;
     private function query_lock($query)
     {
         if(preg_match("/\ALOCK\s+TABLES\s+(.+?)\s*[;]?\Z/is", $query, $matches)) {
-            preg_match_all("/(?:([A-Z][A-Z0-9\_]*)`?\.`?)?`?([A-Z][A-Z0-9\_]*)`?\s+((?:READ(?:\s+LOCAL)?)|((?:LOW\s+PRIORITY\s+)?WRITE))/is", $matches[1], $rules);
+            preg_match_all("/(`?(?:[^\W\d]\w*`?\.`?){0,2}[^\W\d]\w*`?)\s+((?:READ(?:\s+LOCAL)?)|((?:LOW\s+PRIORITY\s+)?WRITE))/is", $matches[1], $rules);
             $numRules = count($rules[0]);
             for($r = 0; $r < $numRules; $r++) {
-                $db_name = $rules[1][$r];
-                $table_name = $rules[2][$r];
-
-                $table = $this->find_table($db_name, $table_name);
+                $table_name_pieces = $this->parse_relation_name($rules[1][$r]);
+                $table = $this->find_table($table_name_pieces);
                 if($table !== false) {
                     return false;
                 }
 
-                if(!strcasecmp(substr($rules[3][$r], 0, 4), "READ")) {
+                if(!strcasecmp(substr($rules[2][$r], 0, 4), "READ")) {
                     $table->readLock();
                 }
                 else {  /* WRITE */
@@ -2953,7 +3088,7 @@ EOC;
     }
 
     function fetch_all($id, $type = 1)
-	{
+    {
         if($id && isset($this->cursors[$id]) && isset($this->data[$id])) {
             $data = $this->data[$id];
             if($type === FSQL_NUM) {
@@ -2973,7 +3108,7 @@ EOC;
         } else {
             return $this->set_error('Bad results id passed in');
         }
-	}
+    }
 
     public function fetch_array($id, $type = 1)
     {
