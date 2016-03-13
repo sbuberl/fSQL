@@ -1386,7 +1386,7 @@ EOC;
                         return $this->set_error("Table named '$saveas' already specified");
                     }
 
-                    $joins[$saveas] = array('fullName' => array($db_name, $table_name), 'joined' => array());
+                    $joins[$saveas] = array('fullName' => $table_name_pieces, 'joined' => array());
                     $table_columns = $table->getColumns();
                     $join_columns_size = count($table_columns);
                     $joined_info['tables'][$saveas] = $table_columns;
@@ -1396,18 +1396,18 @@ EOC;
                     $join_data = $table->getEntries();
 
                     if(!empty($table_unparsed)) {
-                        preg_match_all("/\s*(?:((?:LEFT|RIGHT|FULL)(?:\s+OUTER)?|INNER)\s+)?JOIN\s+(`?(?:[^\W\d]\w*)`?\.)?`?([^\W\d]\w*)`?(?:\s+(?:AS\s+)?`?([^\W\d]\w*)`?)?\s+(USING|ON)\s*(?:(?:\((.*?)\))|(?:(?:\()?((?:\S+)\s*=\s*(?:\S+)(?:\))?)))/is", $table_unparsed, $join);
+                        preg_match_all("/\s*(?:((?:LEFT|RIGHT|FULL)(?:\s+OUTER)?|INNER)\s+)?JOIN\s+(`?(?:[^\W\d]\w*`?\.`?){0,2}[^\W\d]\w*`?)(?:\s+(?:AS\s+)?`?([^\W\d]\w*)`?)?\s+(USING|ON)\s*(?:(?:\((.*?)\))|(?:(?:\()?((?:\S+)\s*=\s*(?:\S+)(?:\))?)))/is", $table_unparsed, $join);
                         $numJoins = count($join[0]);
                         for($i = 0; $i < $numJoins; ++$i) {
                             $join_name = trim($join[1][$i]);
-                            $join_db_name = $join[2][$i];
-                            $join_table_name = $join[3][$i];
-                            $join_table_saveas = $join[4][$i];
+                            $join_full_table_name = $join[2][$i];
+                            $join_table_saveas = $join[3][$i];
                             if(empty($join_table_saveas)) {
                                 $join_table_saveas = $join_table_name;
                             }
 
-                            if(!($join_table = $this->find_table($join_db_name, $join_table_name))) {
+                            $join_table_name_pieces = $this->parse_relation_name($join_full_table_name);
+                            if(!($join_table = $this->find_table($join_table_name_pieces))) {
                                 return false;
                             }
 
@@ -1417,9 +1417,9 @@ EOC;
                                 return $this->set_error("Table named '$join_table_saveas' already specified");
                             }
 
-                            $clause = $join[5][$i];
+                            $clause = $join[4][$i];
                             if(!strcasecmp($clause, "ON")) {
-                                $conditions = isset($list[6][$i]) ? $join[6][$i] : $join[7][$i];
+                                $conditions = isset($join[5][$i]) ? $join[5][$i] : $join[6][$i];
                             }
                             else if(!strcasecmp($clause, "USING")) {
                                 $shared_columns = preg_split('/\s*,\s*/', trim($join[6][$i]));
@@ -1452,7 +1452,7 @@ EOC;
                             }
 
                             $joined_info['offsets'][$join_table_saveas] = $new_offset;
-                            $joins[$saveas]['joined'][] = array('alias' => $join_table_saveas, 'fullName' => array($join_db_name, $join_table_name), 'type' => $join_name, 'clause' => $clause, 'comparator' => $join_function);
+                            $joins[$saveas]['joined'][] = array('alias' => $join_table_saveas, 'fullName' => $join_table_name_pieces, 'type' => $join_name, 'clause' => $clause, 'comparator' => $join_function);
 
                             $joining_entries = $join_table->getEntries();
                             if(!strncasecmp($join_name, "LEFT", 4)) {

@@ -101,8 +101,6 @@ abstract class fSQLTable implements fSQLRelation
 
     public abstract function temporary();
 
-    public abstract function drop();
-
     public abstract function truncate();
 
     public function getColumnNames()
