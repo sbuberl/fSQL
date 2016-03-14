@@ -381,9 +381,7 @@ class fSQLEnvironment
             case 'LOCK':        return $this->query_lock($query);
             case 'UNLOCK':        return $this->query_unlock($query);
             case 'MERGE':        return $this->query_merge($query);
-            default:            $this->set_error('Invalid Query');
-
-return false;
+            default:            return $this->set_error('Invalid Query');
         }
     }
 
@@ -503,7 +501,7 @@ return false;
             }
 
             $table = $schema->getRelation($table_name);
-            if ($table === false) {
+            if ($table !== false) {
                 if (empty($ifnotexists)) {
                     return $this->set_error("Relation $full_table_name already exists");
                 } else {
@@ -523,8 +521,8 @@ return false;
                 $new_columns = array();
                 $hasIdentity = false;
 
-                for ($c = 0; $c < count($Columns[0]); ++$c) {
-                    //$column = str_replace("\"", "'", $column);
+                $numColums = count($Columns[0]);
+                for ($c = 0; $c < $numColums; ++$c) {
                     if ($Columns[1][$c]) {
                         if (!$Columns[3][$c]) {
                             return $this->set_error("Parse Error: Excepted column name in \"{$Columns[1][$c]}\"");
@@ -2316,7 +2314,8 @@ EOC;
             $columns = $tableObj->getColumns();
 
             preg_match_all("/(?:ADD|ALTER|DROP|RENAME).*?(?:,|\Z)/is", trim($changes), $specs);
-            for ($i = 0; $i < count($specs[0]); ++$i) {
+            $specCount = count($specs[0]);
+            for ($i = 0; $i < $specCount; ++$i) {
                 if (preg_match("/\AADD\s+(?:CONSTRAINT\s+`?[^\W\d]\w*`?\s+)?PRIMARY\s+KEY\s*\((.+?)\)/is", $specs[0][$i], $matches)) {
                     $columnDef = &$columns[$matches[1]];
 

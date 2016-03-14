@@ -305,6 +305,8 @@ class fSQLCachedTable extends fSQLTable
             $auto = $column['auto'];
             if (is_string($default) && $default !== 'NULL') {
                 $default = "'$default'";
+            } elseif ($default === null) {
+                $default = 'NULL';
             }
 
             $restraint = '';
@@ -396,8 +398,9 @@ class fSQLCachedTable extends fSQLTable
                     $name = $matches[1];
                     $type = $matches[2];
                     $restraintString = $matches[3];
-                    $auto = $matches[4];
+                    $auto = (int) $matches[4];
                     $default = $matches[5];
+                    $null = (int) $matches[7];
 
                     if ($type === FSQL_TYPE_INTEGER) {
                         $default = (int) $default;
@@ -409,7 +412,7 @@ class fSQLCachedTable extends fSQLTable
                         $default = null;
                     }
 
-                    if ($auto === '1' && !empty($restraintString)) {
+                    if ($auto === 1 && !empty($restraintString)) {
                         list($current, $always, $start, $increment, $min, $max, $cycle) = explode(',', $restraintString);
                         $restraint = array((int) $current, (int) $always, (int) $start, (int) $increment, (int) $min, (int) $max, (int) $cycle);
                     } elseif ($type === FSQL_TYPE_ENUM && preg_match_all("/'(.*?(?<!\\\\))'/", $restraintString, $enumMatches) !== false) {
@@ -419,7 +422,7 @@ class fSQLCachedTable extends fSQLTable
                     }
 
                     $this->columns[$name] = array(
-                        'type' => $type, 'auto' => $auto, 'default' => $default, 'key' => $matches[6], 'null' => $matches[7], 'restraint' => $restraint,
+                        'type' => $type, 'auto' => $auto, 'default' => $default, 'key' => $matches[6], 'null' => $null, 'restraint' => $restraint,
                     );
                 } else {
                     $this->columnsFile->releaseRead();
@@ -505,7 +508,8 @@ class fSQLCachedTable extends fSQLTable
                     }
 
                     preg_match_all("#((-?\d+(?:\.\d+)?)|'.*?(?<!\\\\)'|NULL);#s", $data, $matches);
-                    for ($m = 0; $m < count($matches[0]); ++$m) {
+                    $numMatches = count($matches[0]);
+                    for ($m = 0; $m < $numMatches; ++$m) {
                         if ($matches[1][$m] === 'NULL') {
                             $entries[$row][$m] = null;
                         } elseif (!empty($matches[2][$m])) {

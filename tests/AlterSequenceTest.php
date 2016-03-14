@@ -19,7 +19,7 @@ class AlterSequenceTest extends fSQLBaseTest
     public function testWrongDB()
     {
         $dbName = 'wrongDB';
-        $result = $this->fsql->query("ALTER SEQUENCE $dbName.public.userids MINVALUE=11;");
+        $result = $this->fsql->query("ALTER SEQUENCE $dbName.public.userids MINVALUE 11;");
         $this->assertFalse($result);
         $this->assertEquals("Database $dbName not found", trim($this->fsql->error()));
     }
@@ -27,7 +27,7 @@ class AlterSequenceTest extends fSQLBaseTest
     public function testWrongSchema()
     {
         $schemaName = 'wrongSchema';
-        $result = $this->fsql->query("ALTER SEQUENCE $schemaName.userids MINVALUE=11;");
+        $result = $this->fsql->query("ALTER SEQUENCE $schemaName.userids MINVALUE 11;");
         $this->assertFalse($result);
         $this->assertEquals("Schema db1.$schemaName does not exist", trim($this->fsql->error()));
     }
@@ -35,14 +35,14 @@ class AlterSequenceTest extends fSQLBaseTest
     public function testNotFoundError()
     {
         $fullName = 'userids';
-        $result = $this->fsql->query("ALTER SEQUENCE $fullName MINVALUE=12;");
+        $result = $this->fsql->query("ALTER SEQUENCE $fullName MINVALUE 12;");
         $this->assertFalse($result);
         $this->assertEquals("Sequence db1.public.{$fullName} does not exist", trim($this->fsql->error()));
     }
 
     public function testNotFoundIgnore()
     {
-        $result = $this->fsql->query('ALTER SEQUENCE IF EXISTS userids MINVALUE=13;');
+        $result = $this->fsql->query('ALTER SEQUENCE IF EXISTS userids MINVALUE 13;');
         $this->assertTrue($result);
         $this->assertFalse($this->sequences->getSequence('userids'));
     }
