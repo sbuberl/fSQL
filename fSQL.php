@@ -485,7 +485,7 @@ class fSQLEnvironment
 
     private function query_create_table($query)
     {
-        if (preg_match("/\ACREATE(?:\s+(TEMPORARY))?\s+TABLE\s+(?:(IF\s+NOT\s+EXISTS)\s+)?(`?(?:[^\W\d]\w*`?\.`?){0,2}[^\W\d]\w*`?)(?:\s*\((.+)\)|\s+LIKE\s+(`?(?:[^\W\d]\w*`?\.`?){0,2}[^\W\d]\w*`?))/is", $query, $matches)) {
+        if (preg_match("/\ACREATE(?:\s+(TEMPORARY))?\s+TABLE\s+(?:(IF\s+NOT\s+EXISTS)\s+)?(`?(?:[^\W\d]\w*`?\.`?){0,2}[^\W\d]\w*`?)(?:\s*\((.+)\)|\s+LIKE\s+(`?(?:[^\W\d]\w*`?\.`?){0,2}[^\W\d]\w*`?)(?:\s+([\w\s}]+))?)\s*[;]?/is", $query, $matches)) {
             list(, $temporary, $ifnotexists, $full_table_name, $column_list) = $matches;
 
             $table_name_pieces = $this->parse_relation_name($full_table_name);
@@ -618,15 +618,8 @@ class fSQLEnvironment
                             }
 
                             $default = $this->parseDefault($matches[1], $type, $null, $restraint);
-                        } elseif ($null) {
-                            $default = 'NULL';
-                        } elseif ($type === FSQL_TYPE_STRING) {
-                            $default = '';
-                        } elseif ($type === FSQL_TYPE_FLOAT) {
-                            $default = 0.0;
                         } else {
-                            // The default for dates, times, enums, and int types is 0
-                            $default = 0;
+                            $default = $this->get_type_default_value($type, $null);
                         }
 
                         if (preg_match('/(PRIMARY KEY|UNIQUE(?: KEY)?)/is', $options, $keymatches)) {
@@ -640,14 +633,13 @@ class fSQLEnvironment
                     }
                 }
             } else {
-                $src_table_name_pieces = $this->parse_relation_name($matches[5]);
-
-                $src_table = $this->find_table($src_table_name_pieces);
-                if ($src_table !== false) {
-                    $new_columns = $src_table->getColumns();
-                } else {
+                $like_clause = isset($matches[6]) ? $matches[6] : '';
+                $like_columns = $this->query_create_table_like($matches[5], $like_clause);
+                if ($like_columns === false) {
                     return false;
                 }
+
+                $new_columns = $like_columns;
             }
 
             $schema->createTable($table_name, $new_columns, $temporary);
@@ -656,6 +648,88 @@ class fSQLEnvironment
         } else {
             return $this->set_error('Invalid CREATE TABLE query');
         }
+    }
+
+    private function get_type_default_value($type, $null)
+    {
+        if ($null) {
+            return 'NULL';
+        } elseif ($type === FSQL_TYPE_STRING) {
+            return '';
+        } elseif ($type === FSQL_TYPE_FLOAT) {
+            return 0.0;
+        } else {
+            return 0;
+        }
+    }
+
+    private function query_create_table_like($likeFullTableName, $likeClause)
+    {
+        $likeTablePieces = $this->parse_relation_name($likeFullTableName);
+        $likeOptions = $this->parse_table_like_clause($likeClause);
+        if ($likeOptions === false) {
+            return false;
+        }
+
+        $likeTable = $this->find_table($likeTablePieces);
+        if ($likeTable !== false) {
+            $likeColumns = $likeTable->getColumns();
+        } else {
+            return false;
+        }
+
+        foreach ($likeOptions as $type => $including) {
+            if ($type === 1) {  // IDENTITY
+                $identity = $likeTable->getIdentity();
+                if ($identity !== false) {
+                    $identityColumn = $identity->getColumnName();
+                    if ($including) {
+                        $likeColumns[$identityColumn]['restraint'][0] = $likeColumns[$identityColumn]['restraint'][2];
+                    } else {
+                        $likeColumns[$identityColumn]['auto'] = 0;
+                        $likeColumns[$identityColumn]['restraint'] = array();
+                    }
+                }
+            } else {    // DEFAULTS
+                if (!$including) {
+                    foreach ($likeColumns as &$likeColumn) {
+                        $likeColumn['default'] = $this->get_type_default_value($likeColumn['type'], $likeColumn['null']);
+                    }
+                }
+            }
+        }
+
+        return $likeColumns;
+    }
+
+    private function parse_table_like_clause($likeClause)
+    {
+        $results = array(1 => false, 2 => false);
+        $optionsWords = preg_split('/\s+/', strtoupper($likeClause), -1, PREG_SPLIT_NO_EMPTY);
+        $wordCount = count($optionsWords);
+        for ($i = 0; $i < $wordCount; ++$i) {
+            $firstWord = $optionsWords[$i];
+            if ($firstWord === 'INCLUDING') {
+                $including = true;
+            } elseif ($firstWord === 'EXCLUDING') {
+                $including = false;
+            } else {
+                return $this->set_error('Unexpected token in LIKE clause: '.$firstWord);
+            }
+
+            $word = $optionsWords[++$i];
+            if ($word === 'IDENTITY') {
+                $type = 1;
+            } elseif ($word === 'DEFAULTS') {
+                $type = 2;
+            } else {
+                return $this->set_error('Unknown option after '.$firstWord.': '.$word);
+            }
+
+            $results[$type] = $including;
+        }
+
+        return $results;
     }
 
     private function load_create_sequence($parsed)
@@ -2340,18 +2414,7 @@ EOC;
                         if (!empty($defaults[1])) {
                             $default = $this->parseDefault($defaults[1], $columnDef['type'], $columnDef['null'], $columnDef['restraint']);
                         } else {
-                            if ($columnDef['null']) {
-                                $default = 'NULL';
-                            } else {
-                                $type = $columnDef['type'];
-                                if ($type === FSQL_TYPE_STRING) {
-                                    $default = '';
-                                } elseif ($type === FSQL_TYPE_FLOAT) {
-                                    $default = 0.0;
-                                } else {
-                                    $default = 0;
-                                }
-                            }
+                            $default = $this->get_type_default_value($columnDef['type'], $columnDef['null']);
                         }
 
                         $columnDef['default'] = $default;
@@ -2456,14 +2519,7 @@ EOC;
                 }
             }
         } elseif (!$null) {
-            if ($type === FSQL_TYPE_STRING) {
-                $default = '';
-            } elseif ($type === FSQL_TYPE_FLOAT) {
-                $default = 0.0;
-            } else {
-                // The default for dates, times, enums, and int types is 0
-                $default = 0;
-            }
+            $default = $this->get_type_default_value($type, 0);
         }
 
         return $default;
