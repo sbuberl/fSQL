@@ -13,14 +13,11 @@ class fSQLDatabaseTest extends fSQLBaseTest
         'size' => array('type' => 'e', 'auto' => '0', 'default' => 0.0, 'key' => 'n', 'null' => '1', 'restraint' => array('small', 'medium', 'large')),
     );
 
-    private $subDir;
     private $fsql;
 
     public function setUp()
     {
         parent::setUp();
-        $this->subDir = parent::$tempDir.'sub/';
-        mkdir($this->subDir);
         $this->fsql = new fSQLEnvironment();
     }
 
@@ -64,10 +61,11 @@ class fSQLDatabaseTest extends fSQLBaseTest
         $db->create();
 
         $schema = $db->defineSchema('testing');
+        $schema2 = $db->defineSchema('stuff');
         $this->assertNotEmpty($db->listSchemas());
 
         $db->drop();
-        $this->assertEmpty($db->listSchemas());
+        $this->assertEquals(array('public'), $db->listSchemas());
     }
 
     public function GetSchemaNonExist()

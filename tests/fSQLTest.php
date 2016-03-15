@@ -31,25 +31,6 @@ class fSQLTest extends fSQLBaseTest
         $this->assertTrue($this->fsql->get_database($db2Name) !== false);
     }
 
-    public function testDefineSchema()
-    {
-        $dbName = 'db1';
-        $passed = $this->fsql->define_db($dbName, parent::$tempDir);
-        $this->assertTrue($passed);
-
-        $schema1 = 'stuff';
-        $passed = $this->fsql->define_schema($dbName, $schema1);
-        $this->assertTrue($passed);
-
-        $schema2 = 'junk';
-        $passed = $this->fsql->define_schema($dbName, $schema2);
-        $this->assertTrue($passed);
-
-        $database = $this->fsql->get_database($dbName);
-        $this->assertTrue($database->getSchema($schema1) !== false);
-        $this->assertTrue($database->getSchema($schema2) !== false);
-    }
-
     public function testSelectDB()
     {
         $dbName = 'db';
@@ -88,7 +69,8 @@ class fSQLTest extends fSQLBaseTest
         $this->assertEquals(trim($this->fsql->error()), "Schema {$dbName}.{$fakeSchema} does not exist");
 
         $goodSchema = 'stuff';
-        $this->fsql->define_schema($dbName, $goodSchema);
+        $db = $this->fsql->get_database($dbName);
+        $db->defineSchema($goodSchema);
 
         $goodPassed = $this->fsql->select_schema($dbName, $goodSchema);
         $this->assertTrue($goodPassed);

@@ -709,10 +709,13 @@ class fSQLSchema
 
     public function create()
     {
+        if($this->name === 'public') {
+            return true;
+        }
+
         $path = fsql_create_directory($this->path, 'schema', $this->database->environment());
         if ($path !== false) {
             $this->path = $path;
-
             return true;
         } else {
             return false;
@@ -729,6 +732,10 @@ class fSQLSchema
 
         if ($this->sequencesFile->exists()) {
             $this->sequencesFile->drop();
+        }
+
+        if($this->name !== 'public') {
+            fsql_delete_directory($this->path);
         }
     }
 
@@ -787,16 +794,14 @@ class fSQLSchema
     public function listTables()
     {
         $tables = array();
-        if (file_exists($this->path) && is_dir($this->path)) {
-            $dir = opendir($this->path);
-            while (false !== ($file = readdir($dir))) {
-                if ($file != '.' && $file != '..' && !is_dir($file)) {
-                    if (substr($file, -12) == '.columns.cgi') {
-                        $tables[] = substr($file, 0, -12);
-                    }
+        if(is_dir($this->path)) {
+            $dir = new DirectoryIterator($this->path);
+            foreach ($dir as $file) {
+                $fileName = $file->getFilename();
+                if (!$file->isDir() && substr($fileName, -12) == '.columns.cgi') {
+                    $tables[] = substr($fileName, 0, -12);
                 }
             }
-            closedir($dir);
         }
 
         return $tables;
@@ -871,7 +876,11 @@ class fSQLDatabase
         if ($path !== false) {
             $this->path = $path;
 
-            return $this->defineSchema('public');
+            foreach ($this->listSchemas() as $schemaName) {
+                $this->defineSchema($schemaName);
+            }
+
+            return true;
         } else {
             return false;
         }
@@ -901,16 +910,28 @@ class fSQLDatabase
 
     public function getSchema($name)
     {
-        if (isset($this->schemas[$name])) {
-            return $this->schemas[$name];
+        if (!isset($this->schemas[$name])) {
+            if (in_array($name, $this->listSchemas())) {
+                $this->schemas[$name] = new fSQLSchema($this, $name);
+            } else {
+                return false;
+            }
         }
 
-        return false;
+        return $this->schemas[$name];
     }
 
     public function listSchemas()
     {
-        return array_keys($this->schemas);
+        $schemas = array('public');
+        $dir = new DirectoryIterator($this->path);
+        foreach ($dir as $file) {
+            if ($file->isDir() && !$file->isDot()) {
+                $schemas[] = $file->getFilename();
+            }
+        }
+
+        return $schemas;
     }
 
     public function dropSchema($name)

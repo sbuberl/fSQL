@@ -35,6 +35,29 @@ function fsql_create_directory($original_path, $type, fSQLEnvironment $environme
         return $environment->set_error("Path to directory for $type is not valid.  Please correct the path or create the directory and check that is readable and writable.");
     }
 }
+
+function fsql_delete_directory($dirPath)
+{
+    if (is_dir($dirPath)) {
+        if (substr($dirPath, strlen($dirPath) - 1, 1) != '/') {
+            $dirPath .= '/';
+        }
+        $files = glob($dirPath.'*', GLOB_MARK);
+        foreach ($files as $file) {
+            if (is_dir($file)) {
+                fsql_delete_directory($file);
+            } else {
+                unlink($file);
+            }
+        }
+
+        $passed = rmdir($dirPath);
+
+        return true;
+    }
+
+    return false;
+}
 class fSQLOrderByClause
 {
     private $sortFunction;

@@ -76,18 +76,6 @@ class fSQLEnvironment
         }
     }
 
-    public function define_schema($db_name, $schema_name)
-    {
-        $db = $this->get_database($db_name);
-        if ($db !== false) {
-            $schema = $db->defineSchema($schema_name);
-
-            return $schema != false;
-        }
-
-        return false;
-    }
-
     public function select_db($name)
     {
         return $this->select_schema($name, 'public');
@@ -433,10 +421,37 @@ class fSQLEnvironment
     {
         if (preg_match("/\ACREATE(?:\s+TEMPORARY)?\s+TABLE\s+/is", $query)) {
             return $this->query_create_table($query);
-        } elseif (preg_match("/\ACREATE\s+SEQUENCE\s+/is", $query)) {
-            return $this->query_create_sequence($query);
+        } elseif (preg_match("/\ACREATE\s+(S(?:CHEMA|EQUENCE))\s+/is", $query, $matches)) {
+            if($matches[1] === 'SCHEMA') {
+                return $this->query_create_schema($query);
+            } else {
+                return $this->query_create_sequence($query);
+            }
         } else {
             return $this->set_error('Invalid CREATE query');
+        }
+    }
+
+    private function query_create_schema($query)
+    {
+        if (preg_match("/\ACREATE\s+SCHEMA\s+(?:(IF\s+NOT\s+EXISTS)\s+)?(?:`?([^\W\d]\w*)`?\.)?`?([^\W\d]\w*)`?\s*[;]?\Z/is", $query, $matches)) {
+            list(, $ifNotExists, $dbName, $schemaName) = $matches;
+            $db = $this->get_database($dbName);
+            if ($db === false)
+                return false;
+
+            $schema = $db->getSchema($schemaName);
+            if ($schema !== false) {
+                if (empty($ifNotExists)) {
+                    return $this->set_error("Schema {$schema->fullName()} already exists");
+                } else {
+                    return true;
+                }
+            }
+
+            return $db->defineSchema($schemaName) !== false;
+        } else {
+            return $this->set_error('Invalid CREATE SCHEMA query');
         }
     }
 
