@@ -16,6 +16,30 @@ class fSQLFunctionsTest extends fSQLBaseTest
         $this->functions = new fSQLFunctions($this->fsql);
     }
 
+    public function testCurrentCatalogNotSet()
+    {
+        $fsql = new fSQLEnvironment();
+        $functions = new fSQLFunctions($fsql);
+        $this->assertNull($functions->current_catalog());
+    }
+
+    public function testCurrentCatalog()
+    {
+        $this->assertEquals('db', $this->functions->current_catalog());
+    }
+
+    public function testCurrentSchemaNotSet()
+    {
+        $fsql = new fSQLEnvironment();
+        $functions = new fSQLFunctions($fsql);
+        $this->assertNull($functions->current_schema());
+    }
+
+    public function testCurrentSchema()
+    {
+        $this->assertEquals('public', $this->functions->current_schema());
+    }
+
     public function testNextval()
     {
         $name = 'counter';

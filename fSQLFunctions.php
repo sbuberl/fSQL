@@ -18,9 +18,10 @@ class fSQLFunctions
         'concat_ws' => FSQL_FUNC_NORMAL,
         'count' => FSQL_FUNC_AGGREGATE,
         'curdate' => FSQL_FUNC_NORMAL,
+        'current_catalog' => FSQL_FUNC_NORMAL,
+        'current_schema' => FSQL_FUNC_NORMAL,
         'curtime' => FSQL_FUNC_NORMAL,
         'currval' => FSQL_FUNC_NORMAL,
-        'database' => FSQL_FUNC_NORMAL,
         'dayofweek' => FSQL_FUNC_NORMAL,
         'dayofyear' => FSQL_FUNC_NORMAL,
         'elt' => FSQL_FUNC_NORMAL,
@@ -56,10 +57,10 @@ class fSQLFunctions
         'year' => FSQL_FUNC_NORMAL,
     );
 
-    private $renamed = array('conv' => 'base_convert', 'ceiling' => 'ceil', 'degrees' => 'rad2deg', 'format' => 'number_format',
-       'length' => 'strlen', 'lower' => 'strtolower', 'ln' => 'log', 'power' => 'pow', 'quote' => 'addslashes',
-       'radians' => 'deg2rad', 'repeat' => 'str_repeat', 'replace' => 'strtr', 'reverse' => 'strrev',
-       'rpad' => 'str_pad', 'sha' => 'sha1', 'some' => 'any', 'substr' => 'substring', 'upper' => 'strtoupper', );
+    private $renamed = array('conv' => 'base_convert', 'ceiling' => 'ceil', 'database' => 'current_catalog', 'degrees' => 'rad2deg',
+        'format' => 'number_format', 'length' => 'strlen', 'lower' => 'strtolower', 'ln' => 'log', 'power' => 'pow', 'quote' => 'addslashes',
+        'radians' => 'deg2rad', 'repeat' => 'str_repeat', 'replace' => 'strtr', 'reverse' => 'strrev',
+        'rpad' => 'str_pad', 'sha' => 'sha1', 'some' => 'any', 'substr' => 'substring', 'upper' => 'strtoupper', );
 
     private $environment;
 
@@ -149,9 +150,16 @@ class fSQLFunctions
     }
 
     //////Misc Functions
-    public function database()
+    public function current_catalog()
     {
-        return $this->environment->current_db()->name();
+        $db = $this->environment->current_db();
+        return $db !== null ? $db->name() : NULL;
+    }
+
+    public function current_schema()
+    {
+        $schema = $this->environment->current_schema();
+        return $schema !== null ? $schema->name() : NULL;
     }
 
     public function last_insert_id()
@@ -398,6 +406,7 @@ class fSQLFunctions
     }
     public function substring_index($string, $delim, $count)
     {
+        $array = array();
         $parts = explode($delim, $string);
         if ($count < 0) {
             for ($i = $count; $i > 0; ++$i) {

@@ -51,7 +51,7 @@ function fsql_delete_directory($dirPath)
             }
         }
 
-        $passed = rmdir($dirPath);
+        rmdir($dirPath);
 
         return true;
     }
