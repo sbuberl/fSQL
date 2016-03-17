@@ -153,13 +153,15 @@ class fSQLFunctions
     public function current_catalog()
     {
         $db = $this->environment->current_db();
-        return $db !== null ? $db->name() : NULL;
+
+        return $db !== null ? $db->name() : null;
     }
 
     public function current_schema()
     {
         $schema = $this->environment->current_schema();
-        return $schema !== null ? $schema->name() : NULL;
+
+        return $schema !== null ? $schema->name() : null;
     }
 
     public function last_insert_id()
@@ -266,8 +268,10 @@ class fSQLFunctions
         return false;
     }
 
-    public function avg($data, $column, $flag) {
+    public function avg($data, $column, $flag)
+    {
         $sum = $this->sum($data, $column, $flag);
+
         return $sum !== null ? $sum / count($data) : null;
     }
 

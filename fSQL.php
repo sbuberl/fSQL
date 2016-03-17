@@ -1,33 +1,31 @@
 <?php
 
-define('FSQL_ASSOC', 1, true);
-define('FSQL_NUM',  2, true);
-define('FSQL_BOTH', 3, true);
+define('FSQL_ASSOC', 1);
+define('FSQL_NUM',  2);
+define('FSQL_BOTH', 3);
 
-define('FSQL_EXTENSION', '.cgi', true);
+define('FSQL_EXTENSION', '.cgi');
 
-define('FSQL_TYPE_DATE', 'd', true);
-define('FSQL_TYPE_DATETIME', 'dt', true);
-define('FSQL_TYPE_ENUM', 'e', true);
-define('FSQL_TYPE_FLOAT', 'f', true);
-define('FSQL_TYPE_INTEGER', 'i', true);
-define('FSQL_TYPE_STRING', 's', true);
-define('FSQL_TYPE_TIME', 't', true);
+define('FSQL_TYPE_DATE', 'd');
+define('FSQL_TYPE_DATETIME', 'dt');
+define('FSQL_TYPE_ENUM', 'e');
+define('FSQL_TYPE_FLOAT', 'f');
+define('FSQL_TYPE_INTEGER', 'i');
+define('FSQL_TYPE_STRING', 's');
+define('FSQL_TYPE_TIME', 't');
 
-define('FSQL_WHERE_NORMAL', 2, true);
-define('FSQL_WHERE_NORMAL_AGG', 3, true);
-define('FSQL_WHERE_ON', 4, true);
-define('FSQL_WHERE_HAVING', 8, true);
-define('FSQL_WHERE_HAVING_AGG', 9, true);
+define('FSQL_WHERE_NORMAL', 2);
+define('FSQL_WHERE_NORMAL_AGG', 3);
+define('FSQL_WHERE_ON', 4);
+define('FSQL_WHERE_HAVING', 8);
+define('FSQL_WHERE_HAVING_AGG', 9);
 
-define('FSQL_TRUE', 3, true);
-define('FSQL_FALSE', 0, true);
-define('FSQL_NULL', 1, true);
-define('FSQL_UNKNOWN', 1, true);
+define('FSQL_TRUE', 3);
+define('FSQL_FALSE', 0);
+define('FSQL_NULL', 1);
+define('FSQL_UNKNOWN', 1);
 
-if (!defined('FSQL_INCLUDE_PATH')) {
-    define('FSQL_INCLUDE_PATH', dirname(__FILE__));
-}
+define('FSQL_INCLUDE_PATH', dirname(__FILE__));
 
 require_once FSQL_INCLUDE_PATH.'/fSQLUtilities.php';
 require_once FSQL_INCLUDE_PATH.'/fSQLDatabase.php';
@@ -422,7 +420,7 @@ class fSQLEnvironment
         if (preg_match("/\ACREATE(?:\s+TEMPORARY)?\s+TABLE\s+/is", $query)) {
             return $this->query_create_table($query);
         } elseif (preg_match("/\ACREATE\s+(S(?:CHEMA|EQUENCE))\s+/is", $query, $matches)) {
-            if($matches[1] === 'SCHEMA') {
+            if ($matches[1] === 'SCHEMA') {
                 return $this->query_create_schema($query);
             } else {
                 return $this->query_create_sequence($query);
@@ -437,8 +435,9 @@ class fSQLEnvironment
         if (preg_match("/\ACREATE\s+SCHEMA\s+(?:(IF\s+NOT\s+EXISTS)\s+)?(?:`?([^\W\d]\w*)`?\.)?`?([^\W\d]\w*)`?\s*[;]?\Z/is", $query, $matches)) {
             list(, $ifNotExists, $dbName, $schemaName) = $matches;
             $db = $this->get_database($dbName);
-            if ($db === false)
+            if ($db === false) {
                 return false;
+            }
 
             $schema = $db->getSchema($schemaName);
             if ($schema !== false) {
@@ -1408,22 +1407,22 @@ EOC;
     ////Select data from the DB
     private function query_select($query)
     {
-        if (!preg_match('/SELECT(?:\s+(ALL|DISTINCT(?:ROW)?))?(\s+RANDOM(?:\((?:\d+)\)?)?\s+|\s+)(.*)\s*[;]?\s*\Z/is', $query, $matches)) {
+        if (!preg_match('/SELECT(?:\s+(ALL|DISTINCT(?:ROW)?))?(\s+RANDOM(?:\((?:\d+)\)?)?\s+|\s+)(.*)\s*[;]?\s*\Z/is', $query, $matches, PREG_OFFSET_CAPTURE)) {
             return $this->set_error('Invalid SELECT query');
         }
 
-        $distinct = !strncasecmp($matches[1], 'DISTINCT', 8);
-        $has_random = strlen(trim($matches[2])) > 0;
+        $distinct = !strncasecmp($matches[1][0], 'DISTINCT', 8);
+        $has_random = strlen(trim($matches[2][0])) > 0;
         $isTableless = true;
 
         $oneAggregate = false;
         $selectedInfo = array();
-        $the_rest = $matches[3];
+        $currentPos = $matches[3][1];
         $stop = false;
-        while (!$stop && preg_match("/((?:\A|\s*)(?:(-?\d+(?:\.\d+)?)|('.*?(?<!\\\\)')|(?:(`?([^\W\d]\w*)`?\s*\(.*?\)))|(?:(?:(?:`?([^\W\d]\w*)`?\.)?(`?([^\W\d]\w*)`?|\*))))(?:(?:\s+(?:AS\s+)?`?([^\W\d]\w*)`?))?\s*)(?:\Z|(from|where|having|(?:group|order)?\s+by|offset|fetch|limit)|,)/is", $the_rest, $colmatches)) {
+        while (!$stop && preg_match("/((?:\A|\s*)(?:(-?\d+(?:\.\d+)?)|('.*?(?<!\\\\)')|(?:(`?([^\W\d]\w*)`?\s*\(.*?\)))|(?:(?:(?:`?([^\W\d]\w*)`?\.)?(`?([^\W\d]\w*)`?|\*))))(?:(?:\s+(?:AS\s+)?`?([^\W\d]\w*)`?))?\s*)(?:\Z|(from|where|having|(?:group|order)?\s+by|offset|fetch|limit)|,)/Ais", $query, $colmatches, 0, $currentPos)) {
             $stop = !empty($colmatches[10]);
             $idx = !$stop ? 0 : 1;
-            $the_rest = substr($the_rest, strlen($colmatches[$idx]));
+            $currentPos += strlen($colmatches[$idx]);
             $alias = null;
             if (!empty($colmatches[2])) {  // int/float constant
                 $value = $colmatches[2];
@@ -1460,13 +1459,11 @@ EOC;
         $data = array();
         $joins = array();
         $joined_info = array('tables' => array(), 'offsets' => array(), 'columns' => array());
-        if (preg_match('/\Afrom\s+(.+?)(\s+(?:where|having|(:group|order)?\s+by|offset|fetch|limit)\s+(?:.+))?\s*\Z/is', $the_rest, $from_matches)) {
+        if (preg_match('/\s*from\s+((?:(?!\b(WHERE|HAVING|(?:GROUP|ORDER)\s+BY|OFFSET|FETCH|LIMIT)\b).)+)/Ais', $query, $from_matches, 0, $currentPos)) {
             $isTableless = false;
             $tables = array();
 
-            if (isset($from_matches[2])) {
-                $the_rest = $from_matches[2];
-            }
+            $currentPos += strlen($from_matches[0]);
 
             $tbls = explode(',', $from_matches[1]);
             foreach ($tbls as $tbl) {
@@ -1601,23 +1598,23 @@ EOC;
         $limit = null;
         $singleRow = false;
 
-        if (preg_match('/\s+WHERE\s+((?:.+?)(?:(?:(?:(?:\s+)(?:AND|OR)(?:\s+))?(?:.+?)?)*?)?)(\s+(?:HAVING|(?:GROUP|ORDER)\s+BY|LIMIT|OFFET|FETCH).*)?\Z/is', $the_rest, $additional)) {
-            $the_rest = isset($additional[2]) ? $additional[2] : '';
+        if (preg_match('/\s*WHERE\s+((?:(?!\b(HAVING|(?:GROUP|ORDER)s+BY|OFFSET|FETCH|LIMIT)\b).)+)/Ais', $query, $additional, 0, $currentPos)) {
+            $currentPos += strlen($additional[0]);
             $where = $this->build_where($additional[1], $joined_info);
             if (!$where) {
                 return $this->set_error('Invalid WHERE clause: '.$this->error_msg);
             }
         }
 
-        if (preg_match('/\s+GROUP\s+BY\s+(.*?)(\s+(?:HAVING|ORDER\s+BY|OFFSET|FETCH|LIMIT).*)?\Z/is', $the_rest, $additional)) {
-            $the_rest = isset($additional[2]) ? $additional[2] : '';
+        if (preg_match('/\s*GROUP\s+BY\s+((?:(?!\b(HAVING|ORDER\s+BY|OFFSET|FETCH|LIMIT)\b).)+)/Ais', $query, $additional, 0, $currentPos)) {
+            $currentPos += strlen($additional[0]);
             $GROUPBY = explode(',', $additional[1]);
             $joined_info['group_columns'] = array();
             $isGrouping = true;
             $group_array = array();
             $group_key_list = '';
             foreach ($GROUPBY as $group_item) {
-                if (preg_match('/(?:`?([^\W\d]\w*)`?\.)?`?`?([^\W\d]\w*)`?/is', $group_item, $additional)) {
+                if (preg_match('/(?:`?([^\W\d]\w*)`?\.)?`?([^\W\d]\w*)`?/is', $group_item, $additional)) {
                     list(, $table_alias, $column) = $additional;
                     $group_col = $this->find_column($column, $table_alias, $joined_info, 'GROUP BY clause');
                     if ($group_col === false) {
@@ -1636,8 +1633,8 @@ EOC;
             }
         }
 
-        if (preg_match('/\s+HAVING\s+((?:.+?)(?:(?:(?:(?:\s+)(?:AND|OR)(?:\s+))?(?:.+?)?)*?)?)(?:\s+(?:ORDER\s+BY|OFFSET|FETCH|LIMIT).*)?\Z/is', $the_rest, $additional)) {
-            $the_rest = isset($additional[2]) ? $additional[2] : '';
+        if (preg_match('/\s*HAVING\s+((?:(?!\b(ORDER\s+BY|OFFSET|FETCH|LIMIT)\b).)+)/Ais', $query, $additional, 0, $currentPos)) {
+            $currentPos += strlen($additional[0]);
             if (!isset($joined_info['group_columns'])) { // no GROUP BY
                 $joined_info['group_columns'] = array();
                 $isGrouping = true;
@@ -1650,8 +1647,8 @@ EOC;
             }
         }
 
-        if (preg_match('/\s+ORDER\s+BY\s+(.*?)(\s+(?:OFFSET|FETCH|LIMIT).*)?\Z/is', $the_rest, $additional)) {
-            $the_rest = isset($additional[2]) ? $additional[2] : '';
+        if (preg_match('/\s*ORDER\s+BY\s+((?:(?!\b(OFFSET|FETCH|LIMIT)\b).)+)/Ais', $query, $additional, 0, $currentPos)) {
+            $currentPos += strlen($additional[0]);
             $ORDERBY = explode(',', $additional[1]);
             foreach ($ORDERBY as $order_item) {
                 if (preg_match('/(?:(?:(?:`?([^\W\d]\w*)`?\.)?`?([^\W\d]\w*)`?)|(\d+))(?:\s+(ASC|DESC))?(?:\s+NULLS\s+(FIRST|LAST))?/is', $order_item, $additional)) {
@@ -1662,28 +1659,28 @@ EOC;
                         if ($index === false) {
                             return false;
                         }
+                        $key = array($table_alias, $column);
                     } else {
                         // table column number (starts at 1).
                         $number = $additional[3];
-                        $index = $number - 1;
-                        if (!isset($joined_info['columns'][$index])) {
-                            return $this->set_error('ORDER BY: Invalid column number: '.$number);
-                        }
+                        $key = $number - 1;
                     }
 
                     $ascend = !empty($additional[4]) ? !strcasecmp('ASC', $additional[4]) : true;
                     $nulls_first = !empty($additional[5]) ? !strcasecmp('FIRST', $additional[5]) : true;
-                    $tosort[] = array('key' => $index, 'ascend' => $ascend, 'nullsFirst' => $nulls_first);
+                    $tosort[] = array('key' => $key, 'ascend' => $ascend, 'nullsFirst' => $nulls_first);
                 }
             }
         }
 
         $limit_start = null;
-        if (preg_match('/\s+OFFSET\s+(\d+)\s+ROWS?\b/is', $the_rest, $additional)) {
+        if (preg_match('/\s*OFFSET\s+(\d+)\s+ROWS?\b/Ais', $query, $additional, 0, $currentPos)) {
+            $currentPos += strlen($additional[0]);
             $limit_start = (int) $additional[1];
         }
 
-        if (preg_match('/\s+FETCH\s+(?:FIRST|NEXT)\s+(?:(\d+)\s+)?ROWS?\s+ONLY\b/is', $the_rest, $additional)) {
+        if (preg_match('/\s*FETCH\s+(?:FIRST|NEXT)\s+(?:(\d+)\s+)?ROWS?\s+ONLY\b/Ais',  $query, $additional, 0, $currentPos)) {
+            $currentPos += strlen($additional[0]);
             $limit_stop = isset($additional[1]) ? (int) $additional[1] : 1;
             if ($limit_start === null) {
                 $limit_start = 0;
@@ -1694,7 +1691,7 @@ EOC;
             $limit = array($limit_start, null);
         }
 
-        if (preg_match('/\s+LIMIT\s+(?:(?:(\d+)\s*,\s*(\-1|\d+))|(?:(\d+)\s+OFFSET\s+(\d+))|(\d+))/is', $the_rest, $additional)) {
+        if (preg_match('/\s*LIMIT\s+(?:(?:(\d+)\s*,\s*(\-1|\d+))|(?:(\d+)\s+OFFSET\s+(\d+))|(\d+))/Ais', $query, $additional, 0, $currentPos)) {
             if ($limit === null) {
                 if (isset($additional[5])) {
                     // LIMIT length
@@ -1717,6 +1714,7 @@ EOC;
 
         if (!$isGrouping && $oneAggregate) {
             $isGrouping = true;
+            $singleRow = true;
         }
 
         $selected_columns = array();
@@ -1744,14 +1742,12 @@ EOC;
                             if ($index === false) {
                                 return false;
                             }
-                            $select_line .= "\$this->trim_quotes(\$entry[$index]), ";
-                            $selected_columns[] = $select_alias;
                         }
 
                         if (!in_array($index, $group_array)) {
                             return $this->set_error("Selected column '{$joined_info['columns'][$index]}' is not a grouped column");
                         }
-                        $select_line .= "\$this->trim_quotes(\$group[0][$index]), ";
+                        $select_line .= "\$group[0][$index], ";
                         $selected_columns[] = $select_alias;
                         break;
                     case 'number':
@@ -1826,7 +1822,7 @@ EOT;
                             $column_names = array_keys($table_columns);
                             foreach ($column_names as $index => $column_name) {
                                 $select_value = $start_index + $index;
-                                $select_line .= "\$this->trim_quotes(\$entry[$select_value]), ";
+                                $select_line .= "\$entry[$select_value], ";
                                 $selected_columns[] = $column_name;
                             }
                         }
@@ -1841,7 +1837,7 @@ EOT;
                         if ($index === false) {
                             return false;
                         }
-                        $select_line .= "\$this->trim_quotes(\$entry[$index]), ";
+                        $select_line .= "\$entry[$index], ";
                         $selected_columns[] = $select_alias;
                     }
                     break;
@@ -1881,6 +1877,23 @@ EOT;
         eval($code);
 
         if (!empty($tosort)) {
+            foreach ($tosort as &$sort) {
+                $key = $sort['key'];
+
+                if (is_int($key)) {
+                    if (!isset($selected_columns[$key])) {
+                        return $this->set_error('ORDER BY: Invalid column number: '.($key + 1));
+                    }
+                } else {
+                    list($table_name, $column_name) = $key;
+                    $index = array_search($column_name, $selected_columns);
+                    if ($index === false) {
+                        return $this->set_error('ORDER BY: column/alias not in the SELECT list: '.$column_name);
+                    }
+                    $sort['key'] = $index;
+                }
+            }
+
             $orderBy = new fSQLOrderByClause($tosort);
             $orderBy->sort($final_set);
         }
@@ -1914,11 +1927,6 @@ EOT;
         }
 
         return $this->create_result_set($selected_columns, $final_set);
-    }
-
-    private function trim_quotes($value)
-    {
-        return $value !== null && is_string($value) ? preg_replace("/^'(.+)'$/s", '\\1', $value) : $value;
     }
 
     private function find_column($column, $table_name, $joined_info, $where)

@@ -507,7 +507,7 @@ class fSQLCachedTable extends fSQLTable
                         $skip = false;
                     }
 
-                    preg_match_all("#((-?\d+(?:\.\d+)?)|'.*?(?<!\\\\)'|NULL);#s", $data, $matches);
+                    preg_match_all("#((-?\d+(?:\.\d+)?)|'(.*?(?<!\\\\))'|NULL);#s", $data, $matches);
                     $numMatches = count($matches[0]);
                     for ($m = 0; $m < $numMatches; ++$m) {
                         if ($matches[1][$m] === 'NULL') {
@@ -524,7 +524,7 @@ class fSQLCachedTable extends fSQLTable
                             $index = (int) $matches[2][$m];
                             $entries[$row][$m] = $index > 0 ? $columnDefs[$m]['restraint'][$index] : '';
                         } else {
-                            $entries[$row][$m] = $matches[1][$m];
+                            $entries[$row][$m] = $matches[3][$m];
                         }
                     }
                 }
@@ -709,13 +709,14 @@ class fSQLSchema
 
     public function create()
     {
-        if($this->name === 'public') {
+        if ($this->name === 'public') {
             return true;
         }
 
         $path = fsql_create_directory($this->path, 'schema', $this->database->environment());
         if ($path !== false) {
             $this->path = $path;
+
             return true;
         } else {
             return false;
@@ -734,7 +735,7 @@ class fSQLSchema
             $this->sequencesFile->drop();
         }
 
-        if($this->name !== 'public') {
+        if ($this->name !== 'public') {
             fsql_delete_directory($this->path);
         }
     }
@@ -794,7 +795,7 @@ class fSQLSchema
     public function listTables()
     {
         $tables = array();
-        if(is_dir($this->path)) {
+        if (is_dir($this->path)) {
             $dir = new DirectoryIterator($this->path);
             foreach ($dir as $file) {
                 $fileName = $file->getFilename();

@@ -118,6 +118,46 @@ class SelectTest extends fSQLBaseTest
         $this->assertEquals(self::$entries1, $results);
     }
 
+    public function testAgregateNoGroupBy()
+    {
+        $table = fSQLCachedTable::create($this->fsql->current_schema(), 'customers', self::$columns1);
+        foreach (self::$entries1 as $entry) {
+            $table->insertRow($entry);
+        }
+        $table->commit();
+
+        $result = $this->fsql->query('SELECT COUNT(lastName) FROM customers');
+        $this->assertTrue($result !== false);
+
+        $this->assertEquals(array(11), $this->fsql->fetch_row($result));
+    }
+
+    public function testGroupBy()
+    {
+        $table = fSQLCachedTable::create($this->fsql->current_schema(), 'customers', self::$columns1);
+        foreach (self::$entries1 as $entry) {
+            $table->insertRow($entry);
+        }
+        $table->commit();
+
+        $result = $this->fsql->query('SELECT city, COUNT(lastName) FROM customers GROUP BY city ORDER BY city');
+        $this->assertTrue($result !== false);
+
+        $expected = array(
+            array('city' => 'baltimore', 'count' => 1),
+            array('city' => 'boston', 'count' => 0),
+            array('city' => 'chicago', 'count' => 1),
+            array('city' => 'derry', 'count' => 2),
+            array('city' => 'london', 'count' => 1),
+            array('city' => 'new york', 'count' => 2),
+            array('city' => 'seattle', 'count' => 2),
+            array('city' => 'springfield', 'count' => 1),
+            array('city' => 'tokyo', 'count' => 1),
+        );
+
+        $this->assertEquals($expected, $this->fsql->fetch_all($result));
+    }
+
     public function testOrderByColumnIndex()
     {
         $table = fSQLCachedTable::create($this->fsql->current_schema(), 'customers', self::$columns1);
@@ -155,11 +195,11 @@ class SelectTest extends fSQLBaseTest
         }
         $table->commit();
 
-        $result = $this->fsql->query('SELECT * FROM customers ORDER BY lastName, firstName');
+        $result = $this->fsql->query('SELECT firstName, lastName FROM customers ORDER BY lastName, firstName');
         $this->assertTrue($result !== false);
 
         $results = $this->fsql->fetch_all($result, FSQL_NUM);
-        $tosort = array(array(2, true, true), array(1, true, true));
+        $tosort = array(array(1, true, true), array(0, true, true));
         $this->assertTrue($this->isArrayKeySorted($results, $tosort));
     }
 
