@@ -25,6 +25,10 @@ define('FSQL_FALSE', 0);
 define('FSQL_NULL', 1);
 define('FSQL_UNKNOWN', 1);
 
+if (!defined('PHP_INT_MIN')) {
+    define('PHP_INT_MIN', ~PHP_INT_MAX);
+}
+
 define('FSQL_INCLUDE_PATH', dirname(__FILE__));
 
 require_once FSQL_INCLUDE_PATH.'/fSQLUtilities.php';
@@ -611,8 +615,7 @@ class fSQLEnvironment
                             $null = 0;
                         } elseif (preg_match('/\s+AUTO_?INCREMENT\b/i', $options)) {
                             $auto = 1;
-                            $intMax = defined('PHP_INT_MAX') ? PHP_INT_MAX : intval('420000000000000000000');
-                            $restraint = array(1, 0, 1, 1, 1, $intMax, 0);
+                            $restraint = array(1, 0, 1, 1, 1, PHP_INT_MAX, 0);
                         }
 
                         if ($auto) {
@@ -756,12 +759,9 @@ class fSQLEnvironment
             return $this->set_error('Increment of zero in identity column defintion is not allowed');
         }
 
-        $intMax = defined('PHP_INT_MAX') ? PHP_INT_MAX : intval('420000000000000000000');
-        $intMin = defined('PHP_INT_MIN') ? PHP_INT_MIN : ~$intMax;
-
         $climbing = $increment > 0;
-        $min = isset($parsed['MINVALUE']) ? (int) $parsed['MINVALUE'] : ($climbing ? 1 : $intMin);
-        $max = isset($parsed['MAXVALUE']) ? (int) $parsed['MAXVALUE'] : ($climbing ? $intMax : -1);
+        $min = isset($parsed['MINVALUE']) ? (int) $parsed['MINVALUE'] : ($climbing ? 1 : PHP_INT_MIN);
+        $max = isset($parsed['MAXVALUE']) ? (int) $parsed['MAXVALUE'] : ($climbing ? PHP_INT_MAX : -1);
         $cycle = isset($parsed['CYCLE']) ? (int) $parsed['CYCLE'] : 0;
 
         if (isset($parsed['START'])) {
@@ -987,7 +987,7 @@ class fSQLEnvironment
                     $always = false;
                     $increment = 1;
                     $min = 1;
-                    $max = defined('PHP_INT_MAX') ? PHP_INT_MAX : intval('420000000000000000000');
+                    $max = PHP_INT_MAX;
                     $cycle = false;
 
                     $entries = $table->getEntries();
@@ -2339,7 +2339,7 @@ EOC;
         if (preg_match("/\AALTER\s+(TABLE|SEQUENCE)\s+(?:(IF\s+EXISTS)\s+)?(.+?)\s*[;]?\Z/is", $query, $matches)) {
             list(, $type, $ifExists, $definition) = $matches;
             $ifExists = !empty($ifExists);
-            if (!strcasecmp($matches[1], 'TABLE')) {
+            if (!strcasecmp($type, 'TABLE')) {
                 return $this->query_alter_table($definition, $ifExists);
             } else {
                 return $this->query_alter_sequence($definition, $ifExists);
@@ -2408,7 +2408,7 @@ EOC;
             $tableObj = $this->find_table($tableNamePieces);
             if ($tableObj === false) {
                 if (!$ifExists) {
-                    return $this->error_table_not_exists($seqNamePieces, 'Table');
+                    return $this->error_table_not_exists($tableNamePieces);
                 } else {
                     return true;
                 }

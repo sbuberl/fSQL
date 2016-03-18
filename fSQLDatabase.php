@@ -1011,15 +1011,12 @@ abstract class fSQLSequenceBase
             }
         }
 
-        $intMax = defined('PHP_INT_MAX') ? PHP_INT_MAX : intval('420000000000000000000');
-        $intMin = defined('PHP_INT_MIN') ? PHP_INT_MIN : ~$intMax;
-
         $climbing = $this->increment > 0;
         if (array_key_exists('MINVALUE', $updates)) {
-            $this->min = isset($updates['MINVALUE']) ? (int) $updates['MINVALUE'] : ($climbing ? 1 : $intMin);
+            $this->min = isset($updates['MINVALUE']) ? (int) $updates['MINVALUE'] : ($climbing ? 1 : PHP_INT_MIN);
         }
         if (array_key_exists('MAXVALUE', $updates)) {
-            $this->max = isset($updates['MAXVALUE']) ? (int) $updates['MAXVALUE'] : ($climbing ? $intMax : -1);
+            $this->max = isset($updates['MAXVALUE']) ? (int) $updates['MAXVALUE'] : ($climbing ? PHP_INT_MAX : -1);
         }
         if (array_key_exists('CYCLE', $updates)) {
             $this->cycle = isset($updates['CYCLE']) ? (int) $updates['CYCLE'] : 0;
