@@ -1,7 +1,7 @@
 <?php
 
 define('FSQL_ASSOC', 1);
-define('FSQL_NUM',  2);
+define('FSQL_NUM', 2);
 define('FSQL_BOTH', 3);
 
 define('FSQL_EXTENSION', '.cgi');
@@ -340,33 +340,33 @@ class fSQLEnvironment
     public function query($query)
     {
         $query = trim($query);
-        list($function) = explode(' ', $query);
+        $function = strstr($query, ' ', true);
         ++$this->query_count;
         $this->error_msg = null;
         switch (strtoupper($function)) {
-            case 'CREATE':        return $this->query_create($query);
-            case 'SELECT':        return $this->query_select($query);
+            case 'CREATE':      return $this->query_create($query);
+            case 'SELECT':      return $this->query_select($query);
             case 'INSERT':
-            case 'REPLACE':    return $this->query_insert($query);
-            case 'UPDATE':        return $this->query_update($query);
-            case 'ALTER':        return $this->query_alter($query);
-            case 'DELETE':        return $this->query_delete($query);
-            case 'BEGIN':        return $this->query_begin($query);
-            case 'START':        return $this->query_start($query);
-            case 'COMMIT':        return $this->query_commit($query);
+            case 'REPLACE':     return $this->query_insert($query);
+            case 'UPDATE':      return $this->query_update($query);
+            case 'ALTER':       return $this->query_alter($query);
+            case 'DELETE':      return $this->query_delete($query);
+            case 'BEGIN':       return $this->query_begin($query);
+            case 'START':       return $this->query_start($query);
+            case 'COMMIT':      return $this->query_commit($query);
             case 'ROLLBACK':    return $this->query_rollback($query);
-            case 'RENAME':    return $this->query_rename($query);
+            case 'RENAME':      return $this->query_rename($query);
             case 'TRUNCATE':    return $this->query_truncate($query);
             case 'DROP':        return $this->query_drop($query);
-            case 'BACKUP':        return $this->query_backup($query);
-            case 'RESTORE':    return $this->query_restore($query);
-            case 'USE':        return $this->query_use($query);
+            case 'BACKUP':      return $this->query_backup($query);
+            case 'RESTORE':     return $this->query_restore($query);
+            case 'USE':         return $this->query_use($query);
             case 'DESC':
             case 'DESCRIBE':    return $this->query_describe($query);
             case 'SHOW':        return $this->query_show($query);
             case 'LOCK':        return $this->query_lock($query);
-            case 'UNLOCK':        return $this->query_unlock($query);
-            case 'MERGE':        return $this->query_merge($query);
+            case 'UNLOCK':      return $this->query_unlock($query);
+            case 'MERGE':       return $this->query_merge($query);
             default:            return $this->set_error('Invalid Query');
         }
     }
@@ -417,23 +417,28 @@ class fSQLEnvironment
 
     private function query_create($query)
     {
-        if (preg_match("/\ACREATE(?:\s+TEMPORARY)?\s+TABLE\s+/is", $query)) {
-            return $this->query_create_table($query);
-        } elseif (preg_match("/\ACREATE\s+(S(?:CHEMA|EQUENCE))\s+/is", $query, $matches)) {
-            if ($matches[1] === 'SCHEMA') {
-                return $this->query_create_schema($query);
+        if (preg_match("/\ACREATE\s+((?:TEMPORARY\s+)?TABLE|(?:S(?:CHEMA|EQUENCE)))\s+(?:(IF\s+NOT\s+EXISTS)\s+)?(.+?)\s*[;]?\Z/is", $query, $matches)) {
+            list(, $type, $ifNotExists, $definition) = $matches;
+            $type = strtoupper($type);
+            $ifNotExists = !empty($ifNotExists);
+            if (substr($type, -5) === 'TABLE') {
+                $temp = !strncmp($type, 'TEMPORARY', 9);
+
+                return $this->query_create_table($definition, $temp, $ifNotExists);
+            } elseif ($type === 'SCHEMA') {
+                return $this->query_create_schema($definition, $ifNotExists);
             } else {
-                return $this->query_create_sequence($query);
+                return $this->query_create_sequence($definition, $ifNotExists);
             }
         } else {
             return $this->set_error('Invalid CREATE query');
         }
     }
 
-    private function query_create_schema($query)
+    private function query_create_schema($definition, $ifNotExists)
     {
-        if (preg_match("/\ACREATE\s+SCHEMA\s+(?:(IF\s+NOT\s+EXISTS)\s+)?(?:`?([^\W\d]\w*)`?\.)?`?([^\W\d]\w*)`?\s*[;]?\Z/is", $query, $matches)) {
-            list(, $ifNotExists, $dbName, $schemaName) = $matches;
+        if (preg_match("/\A(?:`?([^\W\d]\w*)`?\.)?`?([^\W\d]\w*)`?\Z/is", $definition, $matches)) {
+            list(, $dbName, $schemaName) = $matches;
             $db = $this->get_database($dbName);
             if ($db === false) {
                 return false;
@@ -441,7 +446,7 @@ class fSQLEnvironment
 
             $schema = $db->getSchema($schemaName);
             if ($schema !== false) {
-                if (empty($ifNotExists)) {
+                if (!$ifNotExists) {
                     return $this->set_error("Schema {$schema->fullName()} already exists");
                 } else {
                     return true;
@@ -454,10 +459,10 @@ class fSQLEnvironment
         }
     }
 
-    private function query_create_sequence($query)
+    private function query_create_sequence($definition, $ifNotExists)
     {
-        if (preg_match("/\ACREATE\s+SEQUENCE\s+(?:(IF\s+NOT\s+EXISTS)\s+)?(`?(?:[^\W\d]\w*`?\.`?){0,2}[^\W\d]\w*`?)(.+?)\s*[;]?\Z/is", $query, $matches)) {
-            list(, $ifNotExists, $fullSequenceName, $valuesList) = $matches;
+        if (preg_match("/\A(`?(?:[^\W\d]\w*`?\.`?){0,2}[^\W\d]\w*`?)\s+(.+)\Z/is", $definition, $matches)) {
+            list(, $fullSequenceName, $valuesList) = $matches;
             $seqNamePieces = $this->parse_relation_name($fullSequenceName);
             if ($seqNamePieces === false) {
                 return false;
@@ -471,7 +476,7 @@ class fSQLEnvironment
             $sequenceName = $seqNamePieces[2];
             $sequence = $schema->getRelation($sequenceName);
             if ($sequence !== false) {
-                if (empty($ifNotExists)) {
+                if (!$ifNotExists) {
                     return $this->set_error("Relation {$fullSequenceName} already exists");
                 } else {
                     return true;
@@ -497,10 +502,10 @@ class fSQLEnvironment
         }
     }
 
-    private function query_create_table($query)
+    private function query_create_table($definition, $temporary, $ifNotExists)
     {
-        if (preg_match("/\ACREATE(?:\s+(TEMPORARY))?\s+TABLE\s+(?:(IF\s+NOT\s+EXISTS)\s+)?(`?(?:[^\W\d]\w*`?\.`?){0,2}[^\W\d]\w*`?)(?:\s*\((.+)\)|\s+LIKE\s+(`?(?:[^\W\d]\w*`?\.`?){0,2}[^\W\d]\w*`?)(?:\s+([\w\s}]+))?)\s*[;]?/is", $query, $matches)) {
-            list(, $temporary, $ifnotexists, $full_table_name, $column_list) = $matches;
+        if (preg_match("/\A(`?(?:[^\W\d]\w*`?\.`?){0,2}[^\W\d]\w*`?)(?:\s*\((.+)\)|\s+LIKE\s+(`?(?:[^\W\d]\w*`?\.`?){0,2}[^\W\d]\w*`?)(?:\s+([\w\s}]+))?)\s*[;]?/is", $definition, $matches)) {
+            list(, $full_table_name, $column_list) = $matches;
 
             $table_name_pieces = $this->parse_relation_name($full_table_name);
             if ($table_name_pieces === false) {
@@ -516,16 +521,14 @@ class fSQLEnvironment
 
             $table = $schema->getRelation($table_name);
             if ($table !== false) {
-                if (empty($ifnotexists)) {
+                if (!$ifNotExists) {
                     return $this->set_error("Relation $full_table_name already exists");
                 } else {
                     return true;
                 }
             }
 
-            $temporary = !empty($temporary) ? true : false;
-
-            if (!isset($matches[5])) {
+            if (!isset($matches[3])) {
                 preg_match_all("/(?:(?:CONSTRAINT\s+(?:`?[^\W\d]\w*`?\s+)?)?(KEY|INDEX|PRIMARY\s+KEY|UNIQUE)(?:\s+`?([^\W\d]\w*)`?)?\s*\(`?(.+?)`?\))|(?:`?([^\W\d]\w*?)`?(?:\s+((?:TINY|MEDIUM|LONG)?(?:TEXT|BLOB)|(?:VAR)?(?:CHAR|BINARY)|INTEGER|(?:TINY|SMALL|MEDIUM|BIG)?INT|FLOAT|REAL|DOUBLE(?: PRECISION)?|BIT|BOOLEAN|DEC(?:IMAL)?|NUMERIC|DATE(?:TIME)?|TIME(?:STAMP)?|YEAR|ENUM|SET)(?:\((.+?)\))?)\s*(UNSIGNED\s+)?(?:GENERATED\s+(BY\s+DEFAULT|ALWAYS)\s+AS\s+IDENTITY(?:\s*\((.*?)\))?)?(.*?)?(?:,|\)|$))/is", trim($column_list), $Columns);
 
                 if (!$Columns) {
@@ -647,8 +650,8 @@ class fSQLEnvironment
                     }
                 }
             } else {
-                $like_clause = isset($matches[6]) ? $matches[6] : '';
-                $like_columns = $this->query_create_table_like($matches[5], $like_clause);
+                $like_clause = isset($matches[4]) ? $matches[4] : '';
+                $like_columns = $this->query_create_table_like($matches[3], $like_clause);
                 if ($like_columns === false) {
                     return false;
                 }
@@ -2333,21 +2336,23 @@ EOC;
 
     private function query_alter($query)
     {
-        if (preg_match("/\AALTER\s+(TABLE|SEQUENCE)\s+/is", $query, $matches)) {
+        if (preg_match("/\AALTER\s+(TABLE|SEQUENCE)\s+(?:(IF\s+EXISTS)\s+)?(.+?)\s*[;]?\Z/is", $query, $matches)) {
+            list(, $type, $ifExists, $definition) = $matches;
+            $ifExists = !empty($ifExists);
             if (!strcasecmp($matches[1], 'TABLE')) {
-                return $this->query_alter_table($query);
+                return $this->query_alter_table($definition, $ifExists);
             } else {
-                return $this->query_alter_sequence($query);
+                return $this->query_alter_sequence($definition, $ifExists);
             }
         } else {
             return $this->set_error('Invalid ALTER query');
         }
     }
 
-    private function query_alter_sequence($query)
+    private function query_alter_sequence($definition, $ifExists)
     {
-        if (preg_match("/\AALTER\s+SEQUENCE\s+(?:(IF\s+EXISTS)\s+)?(`?(?:[^\W\d]\w*`?\.`?){0,2}[^\W\d]\w*`?)\s+(.+?)\s*[;]?\Z/is", $query, $matches)) {
-            list(, $ifExists, $fullSequenceName, $valuesList) = $matches;
+        if (preg_match("/\A(`?(?:[^\W\d]\w*`?\.`?){0,2}[^\W\d]\w*`?)\s+(.+?)\s*[;]?\Z/is", $definition, $matches)) {
+            list(, $fullSequenceName, $valuesList) = $matches;
 
             $seqNamePieces = $this->parse_relation_name($fullSequenceName);
 
@@ -2359,7 +2364,7 @@ EOC;
             $sequenceName = $seqNamePieces[2];
             $sequence = $schema->getRelation($sequenceName);
             if ($sequence === false) {
-                if (empty($ifExists)) {
+                if (!$ifExists) {
                     return $this->error_relation_not_exists($seqNamePieces, 'Sequence');
                 } else {
                     return true;
@@ -2394,15 +2399,19 @@ EOC;
         }
     }
 
-    private function query_alter_table($query)
+    private function query_alter_table($definition, $ifExists)
     {
-        if (preg_match("/\AALTER\s+TABLE\s+(`?(?:[^\W\d]\w*`?\.`?){0,2}[^\W\d]\w*`?)\s+(.*)/is", $query, $matches)) {
+        if (preg_match("/\A(`?(?:[^\W\d]\w*`?\.`?){0,2}[^\W\d]\w*`?)\s+(.*)/is", $definition, $matches)) {
             list(, $fullTableName, $changes) = $matches;
 
             $tableNamePieces = $this->parse_relation_name($fullTableName);
             $tableObj = $this->find_table($tableNamePieces);
             if ($tableObj === false) {
-                return false;
+                if (!$ifExists) {
+                    return $this->error_table_not_exists($seqNamePieces, 'Table');
+                } else {
+                    return true;
+                }
             } elseif ($tableObj->isReadLocked()) {
                 return $this->error_table_read_lock($tableNamePieces);
             }

@@ -19,7 +19,7 @@ class CreateSequenceTest extends fSQLBaseTest
     public function testWrongDB()
     {
         $dbName = 'wrongDB';
-        $result = $this->fsql->query("CREATE SEQUENCE $dbName.public.userids MINVALUE=11;");
+        $result = $this->fsql->query("CREATE SEQUENCE $dbName.public.userids MINVALUE 11;");
         $this->assertFalse($result);
         $this->assertEquals("Database $dbName not found", trim($this->fsql->error()));
     }
@@ -29,7 +29,7 @@ class CreateSequenceTest extends fSQLBaseTest
         $fullName = 'db1.public.userids';
         $this->sequences->addSequence('userids', 1, 1, 1, 10000, false);
 
-        $result = $this->fsql->query("CREATE SEQUENCE $fullName MINVALUE=12;");
+        $result = $this->fsql->query("CREATE SEQUENCE $fullName MINVALUE 12;");
         $this->assertFalse($result);
         $this->assertEquals("Relation $fullName already exists", trim($this->fsql->error()));
     }
@@ -38,7 +38,7 @@ class CreateSequenceTest extends fSQLBaseTest
     {
         $this->sequences->addSequence('userids', 1, 1, 1, 10000, false);
 
-        $result = $this->fsql->query('CREATE SEQUENCE IF NOT EXISTS userids MINVALUE=13;');
+        $result = $this->fsql->query('CREATE SEQUENCE IF NOT EXISTS userids MINVALUE 13;');
         $this->assertTrue($result);
         $this->assertNotNull($this->sequences->getSequence('userids'));
     }
