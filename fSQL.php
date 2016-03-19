@@ -29,7 +29,7 @@ if (!defined('PHP_INT_MIN')) {
     define('PHP_INT_MIN', ~PHP_INT_MAX);
 }
 
-define('FSQL_INCLUDE_PATH', dirname(__FILE__));
+define('FSQL_INCLUDE_PATH', __DIR__);
 
 require_once FSQL_INCLUDE_PATH.'/fSQLUtilities.php';
 require_once FSQL_INCLUDE_PATH.'/fSQLDatabase.php';
@@ -2617,41 +2617,61 @@ EOC;
 
     private function query_drop($query)
     {
-        if (preg_match("/\ADROP(?:\s+(TEMPORARY))?\s+TABLE(?:\s+(IF\s+EXISTS))?\s+(.*)\s*[;]?\Z/is", $query, $matches)) {
-            $temporary = !empty($matches[1]);
-            $ifexists = !empty($matches[2]);
-            $tables = explode(',', $matches[3]);
+        if (preg_match("/\ADROP\s+((?:TEMPORARY\s+)?TABLE|(?:S(?:CHEMA|EQUENCE)|DATABASE))\s+(?:(IF\s+EXISTS)\s+)?(.+?)\s*[;]?\Z/is", $query, $matches)) {
+            list(, $type, $ifExists, $namesList) = $matches;
+            $type = strtolower($type);
+            $ifExists = !empty($ifExists);
+            if (substr($type, -5) === 'TABLE') {
+                $type = 'table';
+            }
+            $dropFunction = array($this, 'query_drop_'.$type);
+            $names = preg_split('/\s*,\s*/', $namesList);
 
-            foreach ($tables as $table) {
-                if (preg_match("/(`?(?:[^\W\d]\w*`?\.`?){0,2}[^\W\d]\w*`?)/is", $table, $table_parts)) {
-                    $table_name_pieces = $this->parse_relation_name($table_parts[1]);
-                    $schema = $this->find_schema($table_name_pieces[0], $table_name_pieces[1]);
-                    if ($schema == false) {
-                        return false;
-                    }
-
-                    $table_name = $table_name_pieces[2];
-                    $table = $schema->getTable($table_name);
-                    if ($table->isReadLocked()) {
-                        return $this->error_table_read_lock($table_name_pieces);
-                    }
-
-                    $existed = $schema->dropTable($table_name);
-                    if (!$ifexists && !$existed) {
-                        return $this->error_table_not_exists($table_name_pieces);
-                    }
-                } else {
-                    return $this->set_error('Parse error in table listing');
-                }
+            foreach ($names as $name) {
+                $result = $this->$dropFunction($name, $ifExists);
+                if ($result === false)
+                    return false;
             }
 
             return true;
-        } elseif (preg_match("/\ADROP\s+DATABASE(?:\s+(IF\s+EXISTS))?\s+`?([^\W\d]\w*)`?\s*[;]?\Z/is", $query, $matches)) {
-            $ifexists = !empty($matches[1]);
-            $db_name = $matches[2];
+        } else {
+            return $this->set_error('Invalid DROP query');
+        }
+    }
+
+    private function query_drop_table($name, $ifExists)
+    {
+        if (preg_match("/\A(`?(?:[^\W\d]\w*`?\.`?){0,2}[^\W\d]\w*`?)\Z/is", $name, $matches)) {
+            $table_name_pieces = $this->parse_relation_name($matches[1]);
+            $schema = $this->find_schema($table_name_pieces[0], $table_name_pieces[1]);
+            if ($schema == false) {
+                return false;
+            }
+
+            $table_name = $table_name_pieces[2];
+            $table = $schema->getTable($table_name);
+            if ($table->isReadLocked()) {
+                return $this->error_table_read_lock($table_name_pieces);
+            }
+
+            $existed = $schema->dropTable($table_name);
+            if (!$ifExists && !$existed) {
+                return $this->error_table_not_exists($table_name_pieces);
+            }
+
+            return true;
+        } else {
+            return $this->set_error('Parse error in table listing');
+        }
+    }
+
+    private function query_drop_database($name, $ifExists)
+    {
+        if (preg_match("/\A`?([^\W\d]\w*)`?\Z/is", $name, $matches)) {
+            $db_name = $matches[1];
 
             if (!isset($this->databases[$db_name])) {
-                if (!$ifexists) {
+                if (!$ifExists) {
                     return $this->set_error("Database '{$db_name}' does not exist");
                 } else {
                     return true;
@@ -2661,23 +2681,37 @@ EOC;
             $db = $this->databases[$db_name];
             $db->drop();
             unset($this->databases[$db_name]);
-        } elseif (preg_match('/\ADROP\s+SCHEMA(?:\s+(IF\s+EXISTS))?\s+(?:`?([^\W\d]\w*)`?\.)?`?([^\W\d]\w*)`?\s*[;]?\Z/is', $query, $matches)) {
-            $ifexists = !empty($matches[1]);
-            $dbName = $matches[2];
-            $schemaName = $matches[3];
-            $schema = $this->find_schema($dbName, $schemaName);
 
-            if ($schema === false) {
-                if (!$ifexists) {
-                    return $this->error_schema_not_exist($dbName, $schemaName);
+            return true;
+        } else {
+            return $this->set_error('Parse error in databse listing');
+        }
+    }
+
+    private function query_drop_schema($name, $ifExists)
+    {
+        if (preg_match("/\A`?([^\W\d]\w*)`?\Z/is", $name, $matches)) {
+            $db_name = $matches[1];
+
+            if (!isset($this->databases[$db_name])) {
+                if (!$ifExists) {
+                    return $this->set_error("Database '{$db_name}' does not exist");
                 } else {
                     return true;
                 }
             }
 
-            $db = $schema->database();
-            $db->dropSchema($schemaName);
-        } elseif (preg_match("/\ADROP\s+SEQUENCE(?:\s+(IF\s+EXISTS))?\s+(`?(?:[^\W\d]\w*`?\.`?){0,2}[^\W\d]\w*`?)\s*[;]?\Z/is", $query, $matches)) {
+            $db = $this->databases[$db_name];
+            $db->drop();
+            unset($this->databases[$db_name]);
+        } else {
+            return $this->set_error('Parse error in schema listing');
+        }
+    }
+
+    private function query_drop_sequence($name, $ifExists)
+    {
+        if (preg_match("/\A(`?(?:[^\W\d]\w*`?\.`?){0,2}[^\W\d]\w*`?)\Z/is", $query, $matches)) {
             list(, $ifExists, $fullSequenceName) = $matches;
 
             $seqNamePieces = $this->parse_relation_name($fullSequenceName);
@@ -2690,7 +2724,7 @@ EOC;
             $sequence = $schema->getSequence($sequenceName);
 
             if ($sequence === false) {
-                if (empty($ifExists)) {
+                if (!$ifExists) {
                     return $this->set_error("Sequence {$fullSequenceName} does not exist");
                 } else {
                     return true;
@@ -2702,7 +2736,7 @@ EOC;
 
             return true;
         } else {
-            return $this->set_error('Invalid DROP query');
+            return $this->set_error('Parse error in sequence listing');
         }
     }
 

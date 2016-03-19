@@ -189,8 +189,7 @@ class fSQLFile
 
             return true;
         } elseif ($this->lock === 0 && $this->handle === null) {/* New lock */
-            touch($this->filepath); // make sure it exists
-            $this->handle = fopen($this->filepath, 'r+b');
+            $this->handle = fopen($this->filepath, 'c+b');
             if ($this->handle) {
                 flock($this->handle, LOCK_EX);
                 $this->lock = 2;
