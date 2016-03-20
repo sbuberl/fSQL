@@ -1,8 +1,11 @@
 <?php
 
-require_once dirname(__FILE__).'/fSQLBaseTest.php';
+require_once __DIR__.'/BaseTest.php';
 
-class fSQLSchemaTest extends fSQLBaseTest
+use FSQL\Database\Schema;
+use FSQL\Environment;
+
+class SchemaTest extends BaseTest
 {
     private static $columns = array(
         'id' => array('type' => 'i', 'auto' => '0', 'default' => 0, 'key' => 'p', 'null' => '0', 'restraint' => array()),
@@ -21,7 +24,7 @@ class fSQLSchemaTest extends fSQLBaseTest
         parent::setUp();
         $this->subDir = parent::$tempDir.'sub/';
         mkdir($this->subDir);
-        $fsql = new fSQLEnvironment();
+        $fsql = new Environment();
         $fsql->define_db('db1', parent::$tempDir);
         $this->db = $fsql->get_database('db1');
     }
@@ -30,7 +33,7 @@ class fSQLSchemaTest extends fSQLBaseTest
     {
         $name = 'shazam';
         $path = 'blah/blah';
-        $schema = new fSQLSchema($this->db, 'public');
+        $schema = new Schema($this->db, 'public');
 
         $this->assertEquals('public', $schema->name());
         $this->assertEquals($this->db->path(), $schema->path());
@@ -39,7 +42,7 @@ class fSQLSchemaTest extends fSQLBaseTest
 
     public function testConstructor()
     {
-        $schema = new fSQLSchema($this->db, 'myschema');
+        $schema = new Schema($this->db, 'myschema');
 
         $this->assertEquals('myschema', $schema->name());
         $this->assertEquals($this->db->path().'myschema/', $schema->path());
@@ -49,38 +52,38 @@ class fSQLSchemaTest extends fSQLBaseTest
     public function testCreateTable()
     {
         $name = 'customers';
-        $schema = new fSQLSchema($this->db, 'myschema');
+        $schema = new Schema($this->db, 'myschema');
         $schema->create();
 
         $table = $schema->createTable($name, self::$columns, false);
-        $this->assertInstanceOf('fSQLCachedTable', $table);
+        $this->assertFalse($table->temporary());
         $this->assertEquals($name, $table->name());
     }
 
     public function testCreateTableTemp()
     {
         $name = 'customers';
-        $schema = new fSQLSchema($this->db, 'myschema');
+        $schema = new Schema($this->db, 'myschema');
         $schema->create();
 
         $table = $schema->createTable($name, self::$columns, true);
-        $this->assertInstanceOf('fSQLTempTable', $table);
+        $this->assertTrue($table->temporary());
         $this->assertEquals($name, $table->name());
     }
 
     public function testGetSequences()
     {
-        $schema = new fSQLSchema($this->db, 'myschema');
+        $schema = new Schema($this->db, 'myschema');
         $schema->create();
 
         $sequences = $schema->getSequences();
         $this->assertNotNull($sequences);
-        $this->assertInstanceOf('fSQLSequencesFile', $sequences);
+        $this->assertInstanceOf('FSQL\Database\SequencesFile', $sequences);
     }
 
     public function testListTablesNone()
     {
-        $schema = new fSQLSchema($this->db, 'myschema');
+        $schema = new Schema($this->db, 'myschema');
         $schema->create();
 
         $tables = $schema->listTables();
@@ -90,7 +93,7 @@ class fSQLSchemaTest extends fSQLBaseTest
     // skips temp tables like mySQL does
     public function testListTables()
     {
-        $schema = new fSQLSchema($this->db, 'myschema');
+        $schema = new Schema($this->db, 'myschema');
         $schema->create();
 
         $schema->createTable('temp1', self::$columns, true);
@@ -104,7 +107,7 @@ class fSQLSchemaTest extends fSQLBaseTest
 
     public function testDrop()
     {
-        $schema = new fSQLSchema($this->db, 'myschema');
+        $schema = new Schema($this->db, 'myschema');
         $schema->create();
 
         $table = $schema->createTable('blah', self::$columns, false);
@@ -120,43 +123,43 @@ class fSQLSchemaTest extends fSQLBaseTest
 
     public function testGetTableEmpty()
     {
-        $schema = new fSQLSchema($this->db, 'myschema');
+        $schema = new Schema($this->db, 'myschema');
         $schema->create();
 
         $table = $schema->getTable('myTable');
-        $this->assertInstanceOf('fSQLCachedTable', $table);
+        $this->assertFalse($table->temporary());
         $this->assertEquals('myTable', $table->name());
     }
 
     public function testGetTableTemp()
     {
         $name = 'temp1';
-        $schema = new fSQLSchema($this->db, 'myschema');
+        $schema = new Schema($this->db, 'myschema');
         $schema->create();
         $schema->createTable($name, self::$columns, true);
 
         $table = $schema->getTable($name);
-        $this->assertInstanceOf('fSQLTempTable', $table);
+        $this->assertTrue($table->temporary());
         $this->assertEquals($name, $table->name());
     }
 
     public function testGetTable()
     {
         $name = 'table1';
-        $schema = new fSQLSchema($this->db, 'myschema');
+        $schema = new Schema($this->db, 'myschema');
         $schema->create();
 
         $schema->createTable($name, self::$columns, false);
         $schema->createTable('table2', self::$columns, false);
 
         $table = $schema->getTable($name);
-        $this->assertInstanceOf('fSQLCachedTable', $table);
+        $this->assertInstanceOf('FSQL\Database\CachedTable', $table);
         $this->assertEquals($name, $table->name());
     }
 
     public function testRenameDoesntExist()
     {
-        $schema = new fSQLSchema($this->db, 'myschema');
+        $schema = new Schema($this->db, 'myschema');
         $schema->create();
 
         $passed = $schema->renameTable('answer42', 'else', $schema);
@@ -167,7 +170,7 @@ class fSQLSchemaTest extends fSQLBaseTest
     {
         $from = 'blah';
         $to = 'else';
-        $schema = new fSQLSchema($this->db, 'myschema');
+        $schema = new Schema($this->db, 'myschema');
         $schema->create();
         $schema->createTable($from, self::$columns, false);
 
@@ -183,7 +186,7 @@ class fSQLSchemaTest extends fSQLBaseTest
     {
         $from = 'blah';
         $to = 'else';
-        $schema = new fSQLSchema($this->db, 'myschema');
+        $schema = new Schema($this->db, 'myschema');
         $schema->create();
 
         $schema->createTable($from, self::$columns, true);
@@ -200,11 +203,11 @@ class fSQLSchemaTest extends fSQLBaseTest
         $from = 'temp1';
         $to = 'something';
 
-        $schema = new fSQLSchema($this->db, 'myschema');
+        $schema = new Schema($this->db, 'myschema');
         $schema->create();
         $schema->createTable($from, self::$columns, true);
 
-        $schema2 = new fSQLSchema($this->db, 'other');
+        $schema2 = new Schema($this->db, 'other');
         $schema2->create();
 
         $passed = $schema->renameTable($from, $to, $schema2);
@@ -217,7 +220,7 @@ class fSQLSchemaTest extends fSQLBaseTest
 
     public function testDropTableDoesntExist()
     {
-        $schema = new fSQLSchema($this->db, 'myschema');
+        $schema = new Schema($this->db, 'myschema');
         $schema->create();
 
         $passed = $schema->dropTable('answer42');
@@ -227,7 +230,7 @@ class fSQLSchemaTest extends fSQLBaseTest
     public function testDropTable()
     {
         $name = 'blah';
-        $schema = new fSQLSchema($this->db, 'myschema');
+        $schema = new Schema($this->db, 'myschema');
         $schema->create();
 
         $schema->createTable($name, self::$columns, false);
@@ -240,7 +243,7 @@ class fSQLSchemaTest extends fSQLBaseTest
     public function testDropTableTemp()
     {
         $name = 'blah';
-        $schema = new fSQLSchema($this->db, 'myschema');
+        $schema = new Schema($this->db, 'myschema');
         $schema->create();
         $schema->createTable($name, self::$columns, true);
         $passed = $schema->dropTable($name);

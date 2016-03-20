@@ -1,8 +1,11 @@
 <?php
 
-require_once dirname(__FILE__).'/fSQLBaseTest.php';
+require_once __DIR__.'/BaseTest.php';
 
-class SelectTest extends fSQLBaseTest
+use FSQL\Database\CachedTable;
+use FSQL\Environment;
+
+class SelectTest extends BaseTest
 {
     private $fsql;
 
@@ -40,7 +43,7 @@ class SelectTest extends fSQLBaseTest
     public function setUp()
     {
         parent::setUp();
-        $this->fsql = new fSQLEnvironment();
+        $this->fsql = new Environment();
         $this->fsql->define_db('db1', parent::$tempDir);
         $this->fsql->select_db('db1');
     }
@@ -105,7 +108,7 @@ class SelectTest extends fSQLBaseTest
 
     public function testSelectAll()
     {
-        $table = fSQLCachedTable::create($this->fsql->current_schema(), 'customers', self::$columns1);
+        $table = CachedTable::create($this->fsql->current_schema(), 'customers', self::$columns1);
         foreach (self::$entries1 as $entry) {
             $table->insertRow($entry);
         }
@@ -120,7 +123,7 @@ class SelectTest extends fSQLBaseTest
 
     public function testAgregateNoGroupBy()
     {
-        $table = fSQLCachedTable::create($this->fsql->current_schema(), 'customers', self::$columns1);
+        $table = CachedTable::create($this->fsql->current_schema(), 'customers', self::$columns1);
         foreach (self::$entries1 as $entry) {
             $table->insertRow($entry);
         }
@@ -134,7 +137,7 @@ class SelectTest extends fSQLBaseTest
 
     public function testGroupBy()
     {
-        $table = fSQLCachedTable::create($this->fsql->current_schema(), 'customers', self::$columns1);
+        $table = CachedTable::create($this->fsql->current_schema(), 'customers', self::$columns1);
         foreach (self::$entries1 as $entry) {
             $table->insertRow($entry);
         }
@@ -160,7 +163,7 @@ class SelectTest extends fSQLBaseTest
 
     public function testOrderByColumnIndex()
     {
-        $table = fSQLCachedTable::create($this->fsql->current_schema(), 'customers', self::$columns1);
+        $table = CachedTable::create($this->fsql->current_schema(), 'customers', self::$columns1);
         foreach (self::$entries1 as $entry) {
             $table->insertRow($entry);
         }
@@ -176,7 +179,7 @@ class SelectTest extends fSQLBaseTest
 
     public function testOrderByColumnIndexBad()
     {
-        $table = fSQLCachedTable::create($this->fsql->current_schema(), 'customers', self::$columns1);
+        $table = CachedTable::create($this->fsql->current_schema(), 'customers', self::$columns1);
         foreach (self::$entries1 as $entry) {
             $table->insertRow($entry);
         }
@@ -189,7 +192,7 @@ class SelectTest extends fSQLBaseTest
 
     public function testOrderByColumnName()
     {
-        $table = fSQLCachedTable::create($this->fsql->current_schema(), 'customers', self::$columns1);
+        $table = CachedTable::create($this->fsql->current_schema(), 'customers', self::$columns1);
         foreach (self::$entries1 as $entry) {
             $table->insertRow($entry);
         }
@@ -205,7 +208,7 @@ class SelectTest extends fSQLBaseTest
 
     public function testOrderByColumnNameBad()
     {
-        $table = fSQLCachedTable::create($this->fsql->current_schema(), 'customers', self::$columns1);
+        $table = CachedTable::create($this->fsql->current_schema(), 'customers', self::$columns1);
         foreach (self::$entries1 as $entry) {
             $table->insertRow($entry);
         }
@@ -218,7 +221,7 @@ class SelectTest extends fSQLBaseTest
 
     public function testOrderByDescAsc()
     {
-        $table = fSQLCachedTable::create($this->fsql->current_schema(), 'customers', self::$columns1);
+        $table = CachedTable::create($this->fsql->current_schema(), 'customers', self::$columns1);
         foreach (self::$entries1 as $entry) {
             $table->insertRow($entry);
         }
@@ -234,7 +237,7 @@ class SelectTest extends fSQLBaseTest
 
     public function testOrderByNullsFirstLast()
     {
-        $table = fSQLCachedTable::create($this->fsql->current_schema(), 'customers', self::$columns1);
+        $table = CachedTable::create($this->fsql->current_schema(), 'customers', self::$columns1);
         foreach (self::$entries1 as $entry) {
             $table->insertRow($entry);
         }
@@ -250,7 +253,7 @@ class SelectTest extends fSQLBaseTest
 
     public function testOffsetOnly()
     {
-        $table = fSQLCachedTable::create($this->fsql->current_schema(), 'customers', self::$columns1);
+        $table = CachedTable::create($this->fsql->current_schema(), 'customers', self::$columns1);
         foreach (self::$entries1 as $entry) {
             $table->insertRow($entry);
         }
@@ -266,7 +269,7 @@ class SelectTest extends fSQLBaseTest
 
     public function testOffsetFetchFirstNoLength()
     {
-        $table = fSQLCachedTable::create($this->fsql->current_schema(), 'customers', self::$columns1);
+        $table = CachedTable::create($this->fsql->current_schema(), 'customers', self::$columns1);
         foreach (self::$entries1 as $entry) {
             $table->insertRow($entry);
         }
@@ -281,7 +284,7 @@ class SelectTest extends fSQLBaseTest
 
     public function testOffsetFetchFirstLength()
     {
-        $table = fSQLCachedTable::create($this->fsql->current_schema(), 'customers', self::$columns1);
+        $table = CachedTable::create($this->fsql->current_schema(), 'customers', self::$columns1);
         foreach (self::$entries1 as $entry) {
             $table->insertRow($entry);
         }
@@ -296,7 +299,7 @@ class SelectTest extends fSQLBaseTest
 
     public function testFetchFirstLength()
     {
-        $table = fSQLCachedTable::create($this->fsql->current_schema(), 'customers', self::$columns1);
+        $table = CachedTable::create($this->fsql->current_schema(), 'customers', self::$columns1);
         foreach (self::$entries1 as $entry) {
             $table->insertRow($entry);
         }
@@ -311,7 +314,7 @@ class SelectTest extends fSQLBaseTest
 
     public function testOffsetAndLimit()
     {
-        $table = fSQLCachedTable::create($this->fsql->current_schema(), 'customers', self::$columns1);
+        $table = CachedTable::create($this->fsql->current_schema(), 'customers', self::$columns1);
         foreach (self::$entries1 as $entry) {
             $table->insertRow($entry);
         }
@@ -324,7 +327,7 @@ class SelectTest extends fSQLBaseTest
 
     public function testFetchFirstAndLimit()
     {
-        $table = fSQLCachedTable::create($this->fsql->current_schema(), 'customers', self::$columns1);
+        $table = CachedTable::create($this->fsql->current_schema(), 'customers', self::$columns1);
         foreach (self::$entries1 as $entry) {
             $table->insertRow($entry);
         }
@@ -337,7 +340,7 @@ class SelectTest extends fSQLBaseTest
 
     public function testLimitLengthOnly()
     {
-        $table = fSQLCachedTable::create($this->fsql->current_schema(), 'customers', self::$columns1);
+        $table = CachedTable::create($this->fsql->current_schema(), 'customers', self::$columns1);
         foreach (self::$entries1 as $entry) {
             $table->insertRow($entry);
         }
@@ -352,7 +355,7 @@ class SelectTest extends fSQLBaseTest
 
     public function testLimitThenOffset()
     {
-        $table = fSQLCachedTable::create($this->fsql->current_schema(), 'customers', self::$columns1);
+        $table = CachedTable::create($this->fsql->current_schema(), 'customers', self::$columns1);
         foreach (self::$entries1 as $entry) {
             $table->insertRow($entry);
         }
@@ -367,7 +370,7 @@ class SelectTest extends fSQLBaseTest
 
     public function testLimitCommas()
     {
-        $table = fSQLCachedTable::create($this->fsql->current_schema(), 'customers', self::$columns1);
+        $table = CachedTable::create($this->fsql->current_schema(), 'customers', self::$columns1);
         foreach (self::$entries1 as $entry) {
             $table->insertRow($entry);
         }

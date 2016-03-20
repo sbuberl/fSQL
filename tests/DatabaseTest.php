@@ -1,8 +1,11 @@
 <?php
 
-require_once dirname(__FILE__).'/fSQLBaseTest.php';
+require_once __DIR__.'/BaseTest.php';
 
-class fSQLDatabaseTest extends fSQLBaseTest
+use FSQL\Database\Database;
+use FSQL\Environment;
+
+class DatabaseTest extends BaseTest
 {
     private static $columns = array(
         'id' => array('type' => 'i', 'auto' => '0', 'default' => 0, 'key' => 'p', 'null' => '0', 'restraint' => array()),
@@ -18,14 +21,14 @@ class fSQLDatabaseTest extends fSQLBaseTest
     public function setUp()
     {
         parent::setUp();
-        $this->fsql = new fSQLEnvironment();
+        $this->fsql = new Environment();
     }
 
     public function testConstructor()
     {
         $name = 'shazam';
         $path = 'blah/blah';
-        $db = new fSQLDatabase($this->fsql, $name, $path);
+        $db = new Database($this->fsql, $name, $path);
 
         $this->assertEquals($name, $db->name());
         $this->assertEquals($path, $db->path());
@@ -35,7 +38,7 @@ class fSQLDatabaseTest extends fSQLBaseTest
     public function testDefineSchema()
     {
         $name = 'mySchema';
-        $db = new fSQLDatabase($this->fsql, 'db1', parent::$tempDir);
+        $db = new Database($this->fsql, 'db1', parent::$tempDir);
         $db->create();
 
         $passed = $db->defineSchema($name);
@@ -45,7 +48,7 @@ class fSQLDatabaseTest extends fSQLBaseTest
 
     public function testListSchemas()
     {
-        $db = new fSQLDatabase($this->fsql, 'shazam', parent::$tempDir);
+        $db = new Database($this->fsql, 'shazam', parent::$tempDir);
         $db->create();
 
         $db->defineSchema('schema1');
@@ -57,7 +60,7 @@ class fSQLDatabaseTest extends fSQLBaseTest
 
     public function testDrop()
     {
-        $db = new fSQLDatabase($this->fsql, 'shazam', parent::$tempDir);
+        $db = new Database($this->fsql, 'shazam', parent::$tempDir);
         $db->create();
 
         $schema = $db->defineSchema('testing');
@@ -70,7 +73,7 @@ class fSQLDatabaseTest extends fSQLBaseTest
 
     public function GetSchemaNonExist()
     {
-        $db = new fSQLDatabase($this->fsql, 'shazam', parent::$tempDir);
+        $db = new Database($this->fsql, 'shazam', parent::$tempDir);
         $db->create();
 
         $schema = $db->getSchema('blah');
@@ -80,11 +83,11 @@ class fSQLDatabaseTest extends fSQLBaseTest
     public function testGetSchema()
     {
         $name = 'schemaA';
-        $db = new fSQLDatabase($this->fsql, 'shazam', parent::$tempDir);
+        $db = new Database($this->fsql, 'shazam', parent::$tempDir);
         $db->create();
         $db->defineSchema($name);
 
         $schema = $db->getSchema($name);
-        $this->assertInstanceOf('fSQLSchema', $schema);
+        $this->assertInstanceOf('FSQL\Database\Schema', $schema);
     }
 }

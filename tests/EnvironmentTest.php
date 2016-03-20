@@ -1,15 +1,17 @@
 <?php
 
-require_once dirname(__FILE__).'/fSQLBaseTest.php';
+require_once __DIR__.'/BaseTest.php';
 
-class fSQLTest extends fSQLBaseTest
+use FSQL\Environment;
+
+class Test extends BaseTest
 {
     private $fsql;
 
     public function setUp()
     {
         parent::setUp();
-        $this->fsql = new fSQLEnvironment();
+        $this->fsql = new Environment();
     }
 
     public function tearDown()

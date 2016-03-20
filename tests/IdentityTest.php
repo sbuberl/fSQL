@@ -1,8 +1,12 @@
 <?php
 
-require_once dirname(__FILE__).'/fSQLSequenceBaseTest.php';
+require_once __DIR__.'/SequenceBaseTest.php';
 
-class fSQLIdentityTest extends fSQLSequenceBaseTest
+use FSQL\Database\CachedTable;
+use FSQL\Database\Identity;
+use FSQL\Environment;
+
+class IdentityTest extends SequenceBaseTest
 {
     private static $columns = array(
         'id' => array('type' => 'i', 'auto' => 1, 'default' => 0, 'key' => 'p', 'null' => 0, 'restraint' => array(3, 0, 1, 1, 1, 10000, 0)),
@@ -16,11 +20,11 @@ class fSQLIdentityTest extends fSQLSequenceBaseTest
     public function setUp()
     {
         parent::setUp();
-        $fsql = new fSQLEnvironment();
+        $fsql = new Environment();
         $fsql->define_db('db1', parent::$tempDir);
         $schema = $fsql->get_database('db1')->getSchema('public');
-        $table = fSQLCachedTable::create($schema, 'blah', self::$columns);
-        $this->sequence = new fSQLIdentity($table, 'id');
+        $table = CachedTable::create($schema, 'blah', self::$columns);
+        $this->sequence = new Identity($table, 'id');
     }
 
     public function testGetColumnName()

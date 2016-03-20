@@ -1,8 +1,12 @@
 <?php
 
-require_once dirname(__FILE__).'/fSQLBaseTest.php';
+require_once __DIR__.'/BaseTest.php';
 
-class fSQLSequenceFileTest extends fSQLBaseTest
+use FSQL\Database\Database;
+use FSQL\Database\SequencesFile;
+use FSQL\Environment;
+
+class SequenceFileTest extends BaseTest
 {
     private $schema;
     private $sequences;
@@ -10,12 +14,12 @@ class fSQLSequenceFileTest extends fSQLBaseTest
     public function setUp()
     {
         parent::setUp();
-        $fsql = new fSQLEnvironment();
-        $database = new fSQLDatabase($fsql, 'db1', parent::$tempDir);
+        $fsql = new Environment();
+        $database = new Database($fsql, 'db1', parent::$tempDir);
         $database->create();
 
         $this->schema = $database->getSchema('public');
-        $this->sequences = new fSQLSequencesFile($this->schema);
+        $this->sequences = new SequencesFile($this->schema);
     }
 
     public function testConstructor()

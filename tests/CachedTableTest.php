@@ -1,8 +1,11 @@
 <?php
 
-require_once dirname(__FILE__).'/fSQLBaseTest.php';
+require_once __DIR__.'/BaseTest.php';
 
-class fSQLCachedTablest extends fSQLBaseTest
+use FSQL\Environment;
+use FSQL\Database\CachedTable;
+
+class CachedTablest extends BaseTest
 {
     private static $columns = array(
         'id' => array('type' => 'i', 'auto' => 1, 'default' => 0, 'key' => 'p', 'null' => 0, 'restraint' => array(3, 0, 1, 1, 1, 10000, 0)),
@@ -29,7 +32,7 @@ class fSQLCachedTablest extends fSQLBaseTest
     public function setUp()
     {
         parent::setUp();
-        $fsql = new fSQLEnvironment();
+        $fsql = new Environment();
         $fsql->define_db('db1', parent::$tempDir);
         $this->schema = $fsql->get_database('db1')->getSchema('public');
     }
@@ -37,7 +40,7 @@ class fSQLCachedTablest extends fSQLBaseTest
     public function testConstructor()
     {
         $tableName = 'garbage';
-        $table = new fSQLCachedTable($this->schema, $tableName);
+        $table = new CachedTable($this->schema, $tableName);
         $this->assertEquals($tableName, $table->name());
         $this->assertEquals($this->schema, $table->schema());
     }
@@ -45,7 +48,7 @@ class fSQLCachedTablest extends fSQLBaseTest
     public function testCreate()
     {
         $tableName = 'blah';
-        $table = fSQLCachedTable::create($this->schema, $tableName, self::$columns);
+        $table = CachedTable::create($this->schema, $tableName, self::$columns);
         $this->assertNotNull($table);
         $this->assertEquals($tableName, $table->name());
         $this->assertEquals($this->schema, $table->schema());
@@ -54,40 +57,40 @@ class fSQLCachedTablest extends fSQLBaseTest
     public function testFullName()
     {
         $tableName = 'garbage';
-        $table = new fSQLCachedTable($this->schema, $tableName);
+        $table = new CachedTable($this->schema, $tableName);
         $this->assertEquals($this->schema->fullName().'.'.$tableName, $table->fullName());
     }
 
     public function testExists()
     {
-        $table = new fSQLCachedTable($this->schema, 'newTable');
+        $table = new CachedTable($this->schema, 'newTable');
         $this->assertFalse($table->exists());
 
-        $createdTable = fSQLCachedTable::create($this->schema, 'blah', self::$columns);
+        $createdTable = CachedTable::create($this->schema, 'blah', self::$columns);
         $this->assertTrue($createdTable->exists());
     }
 
     public function testTemporary()
     {
-        $table = new fSQLCachedTable($this->schema, 'newTable');
+        $table = new CachedTable($this->schema, 'newTable');
         $this->assertFalse($table->temporary());
     }
 
     public function testGetColumns()
     {
-        $table = fSQLCachedTable::create($this->schema, 'blah', self::$columns);
+        $table = CachedTable::create($this->schema, 'blah', self::$columns);
         $this->assertEquals($table->getColumns(), self::$columns);
     }
 
     public function testGetColumnNames()
     {
-        $table = fSQLCachedTable::create($this->schema, 'blah', self::$columns);
+        $table = CachedTable::create($this->schema, 'blah', self::$columns);
         $this->assertEquals($table->getColumnNames(), array_keys(self::$columns));
     }
 
     public function testSetColumns()
     {
-        $table = fSQLCachedTable::create($this->schema, 'blah', self::$columns2);
+        $table = CachedTable::create($this->schema, 'blah', self::$columns2);
         $this->assertEquals($table->getColumns(), self::$columns2);
 
         $table->setColumns(self::$columns);
@@ -96,13 +99,13 @@ class fSQLCachedTablest extends fSQLBaseTest
 
     public function testGetEntriesEmpty()
     {
-        $table = fSQLCachedTable::create($this->schema, 'blah', self::$columns);
+        $table = CachedTable::create($this->schema, 'blah', self::$columns);
         $this->assertEmpty($table->getEntries());
     }
 
     public function testInsertRow()
     {
-        $table = fSQLCachedTable::create($this->schema, 'blah', self::$columns);
+        $table = CachedTable::create($this->schema, 'blah', self::$columns);
         $table->insertRow(self::$entries[0]);
         $table->insertRow(self::$entries[1]);
 
@@ -113,7 +116,7 @@ class fSQLCachedTablest extends fSQLBaseTest
     {
         $update = array(1 => 'jsmith', 4 => 10000000.0);
 
-        $table = fSQLCachedTable::create($this->schema, 'blah', self::$columns);
+        $table = CachedTable::create($this->schema, 'blah', self::$columns);
         $table->insertRow(self::$entries[0]);
         $table->insertRow(self::$entries[1]);
 
@@ -124,7 +127,7 @@ class fSQLCachedTablest extends fSQLBaseTest
 
     public function testDeleteRow()
     {
-        $table = fSQLCachedTable::create($this->schema, 'blah', self::$columns);
+        $table = CachedTable::create($this->schema, 'blah', self::$columns);
         $table->insertRow(self::$entries[0]);
         $table->insertRow(self::$entries[1]);
 
@@ -134,7 +137,7 @@ class fSQLCachedTablest extends fSQLBaseTest
 
     public function testRollback()
     {
-        $table = fSQLCachedTable::create($this->schema, 'blah', self::$columns);
+        $table = CachedTable::create($this->schema, 'blah', self::$columns);
         $table->insertRow(self::$entries[0]);
         $table->insertRow(self::$entries[1]);
         $this->assertEquals($table->getEntries(), self::$entries);
@@ -145,13 +148,13 @@ class fSQLCachedTablest extends fSQLBaseTest
 
     public function testCommitNothing()
     {
-        $table = fSQLCachedTable::create($this->schema, 'blah', self::$columns);
+        $table = CachedTable::create($this->schema, 'blah', self::$columns);
         $table->commit();
     }
 
     public function testCommit()
     {
-        $table = fSQLCachedTable::create($this->schema, 'blah', self::$columns);
+        $table = CachedTable::create($this->schema, 'blah', self::$columns);
         $table->insertRow(self::$entries[0]);
         $table->commit();
 
@@ -163,7 +166,7 @@ class fSQLCachedTablest extends fSQLBaseTest
     public function testDrop()
     {
         $tableName = 'blah';
-        $table = fSQLCachedTable::create($this->schema, $tableName, self::$columns);
+        $table = CachedTable::create($this->schema, $tableName, self::$columns);
         $dataFile = $table->dataFile->getPath();
         $table->drop();
         $this->assertFalse(file_exists($dataFile));
@@ -171,7 +174,7 @@ class fSQLCachedTablest extends fSQLBaseTest
 
     public function testTruncate()
     {
-        $table = fSQLCachedTable::create($this->schema, 'blah', self::$columns);
+        $table = CachedTable::create($this->schema, 'blah', self::$columns);
         $table->insertRow(self::$entries[0]);
         $table->insertRow(self::$entries[1]);
         $table->commit();
@@ -184,29 +187,29 @@ class fSQLCachedTablest extends fSQLBaseTest
 
     public function testGetIdentityNone()
     {
-        $table = fSQLCachedTable::create($this->schema, 'blah', self::$columns2);
+        $table = CachedTable::create($this->schema, 'blah', self::$columns2);
         $identity = $table->getIdentity();
         $this->assertNull($identity);
     }
 
     public function testGetIdentity()
     {
-        $table = fSQLCachedTable::create($this->schema, 'blah', self::$columns);
+        $table = CachedTable::create($this->schema, 'blah', self::$columns);
         $identity = $table->getIdentity();
         $this->assertNotNull($identity);
-        $this->assertInstanceOf('fSQLIdentity', $identity);
+        $this->assertInstanceOf('FSQL\Database\Identity', $identity);
     }
 
     public function testDropIdentityNone()
     {
-        $table = fSQLCachedTable::create($this->schema, 'blah', self::$columns);
+        $table = CachedTable::create($this->schema, 'blah', self::$columns);
         $table->dropIdentity();
         $this->assertNull($table->getIdentity());
     }
 
     public function testDropIdentity()
     {
-        $table = fSQLCachedTable::create($this->schema, 'blah', self::$columns);
+        $table = CachedTable::create($this->schema, 'blah', self::$columns);
         $table->dropIdentity();
         $this->assertNull($table->getIdentity());
 

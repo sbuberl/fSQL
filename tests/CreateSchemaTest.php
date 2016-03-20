@@ -1,15 +1,17 @@
 <?php
 
-require_once dirname(__FILE__).'/fSQLBaseTest.php';
+require_once __DIR__.'/BaseTest.php';
 
-class CreateSchemaTest extends fSQLBaseTest
+use FSQL\Environment;
+
+class CreateSchemaTest extends BaseTest
 {
     private $fsql;
 
     public function setUp()
     {
         parent::setUp();
-        $this->fsql = new fSQLEnvironment();
+        $this->fsql = new Environment();
         $this->fsql->define_db('db1', parent::$tempDir);
         $this->fsql->select_db('db1');
     }

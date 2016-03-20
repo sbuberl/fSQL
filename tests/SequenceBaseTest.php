@@ -1,8 +1,8 @@
 <?php
 
-require_once dirname(__FILE__).'/fSQLBaseTest.php';
+require_once __DIR__.'/BaseTest.php';
 
-abstract class fSQLSequenceBaseTest extends fSQLBaseTest
+abstract class SequenceBaseTest extends BaseTest
 {
     protected $sequence;
 

@@ -1,8 +1,11 @@
 <?php
 
-require_once dirname(__FILE__).'/fSQLBaseTest.php';
+require_once __DIR__.'/BaseTest.php';
 
-class fSQLFunctionsTest extends fSQLBaseTest
+use FSQL\Environment;
+use FSQL\Functions;
+
+class FunctionsTest extends BaseTest
 {
     private $fsql;
     private $functions;
@@ -10,16 +13,16 @@ class fSQLFunctionsTest extends fSQLBaseTest
     public function setUp()
     {
         parent::setUp();
-        $this->fsql = new fSQLEnvironment();
+        $this->fsql = new Environment();
         $this->fsql->define_db('db', parent::$tempDir);
         $this->fsql->select_db('db');
-        $this->functions = new fSQLFunctions($this->fsql);
+        $this->functions = new Functions($this->fsql);
     }
 
     public function testCurrentCatalogNotSet()
     {
-        $fsql = new fSQLEnvironment();
-        $functions = new fSQLFunctions($fsql);
+        $fsql = new Environment();
+        $functions = new Functions($fsql);
         $this->assertNull($functions->current_catalog());
     }
 
@@ -30,8 +33,8 @@ class fSQLFunctionsTest extends fSQLBaseTest
 
     public function testCurrentSchemaNotSet()
     {
-        $fsql = new fSQLEnvironment();
-        $functions = new fSQLFunctions($fsql);
+        $fsql = new Environment();
+        $functions = new Functions($fsql);
         $this->assertNull($functions->current_schema());
     }
 

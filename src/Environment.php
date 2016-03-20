@@ -1,5 +1,7 @@
 <?php
 
+namespace FSQL;
+
 define('FSQL_ASSOC', 1);
 define('FSQL_NUM', 2);
 define('FSQL_BOTH', 3);
@@ -31,11 +33,13 @@ if (!defined('PHP_INT_MIN')) {
 
 define('FSQL_INCLUDE_PATH', __DIR__);
 
-require_once FSQL_INCLUDE_PATH.'/fSQLUtilities.php';
-require_once FSQL_INCLUDE_PATH.'/fSQLDatabase.php';
-require_once FSQL_INCLUDE_PATH.'/fSQLFunctions.php';
+require 'vendor/autoload.php';
 
-class fSQLEnvironment
+use FSQL\Database\Database;
+use FSQL\Database\Table;
+use FSQL\Database\Sequence;
+
+class Environment
 {
     private $updatedTables = array();
     private $lockedTables = array();
@@ -55,7 +59,7 @@ class fSQLEnvironment
 
     public function __construct()
     {
-        $this->functions = new fSQLFunctions($this);
+        $this->functions = new Functions($this);
     }
 
     public function __destruct()
@@ -68,7 +72,7 @@ class fSQLEnvironment
         list($usec, $sec) = explode(' ', microtime());
         srand((float) $sec + ((float) $usec * 100000));
 
-        $db = new fSQLDatabase($this, $name, $path);
+        $db = new Database($this, $name, $path);
         if ($db->create()) {
             $this->databases[$name] = $db;
 
@@ -239,7 +243,7 @@ class fSQLEnvironment
     {
         $table = $this->find_relation($name_pieces);
         if ($table !== false) {
-            if (!($table instanceof fSQLTable)) {
+            if (!($table instanceof Table)) {
                 $name = $this->build_relation_name($name_pieces);
 
                 return $this->set_error("Relation {$name} is not a table");
@@ -916,17 +920,17 @@ class fSQLEnvironment
             $check_names = 0;
         }
         // SET syntax
-        else if(preg_match("/^SET\s+(.+)/is", $the_rest, $matches)) {
+        elseif (preg_match("/^SET\s+(.+)/is", $the_rest, $matches)) {
             $SET = $this->parseSetClause($matches[1], $tableColumns);
-            $Columns= array();
+            $Columns = array();
             $data_values = array();
 
-            foreach($SET as $set) {
+            foreach ($SET as $set) {
                 $Columns[] = $set[0];
                 $data_values[] = $set[1];
             }
 
-            $get_data_from = implode(",", $data_values);
+            $get_data_from = implode(',', $data_values);
         } else {
             return $this->set_error('Invalid Query');
         }
@@ -1897,7 +1901,7 @@ EOT;
                 }
             }
 
-            $orderBy = new fSQLOrderByClause($tosort);
+            $orderBy = new OrderByClause($tosort);
             $orderBy->sort($final_set);
         }
 
@@ -2371,7 +2375,7 @@ EOC;
                 }
             }
 
-            if (!($sequence instanceof fSQLSequence)) {
+            if (!($sequence instanceof Sequence)) {
                 $fullName = $this->build_relation_name($seqNamePieces);
 
                 return $this->set_error("Relation {$fullName} is not a sequence");
@@ -2629,8 +2633,9 @@ EOC;
 
             foreach ($names as $name) {
                 $result = $this->$dropFunction($name, $ifExists);
-                if ($result === false)
+                if ($result === false) {
                     return false;
+                }
             }
 
             return true;

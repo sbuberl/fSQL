@@ -1,0 +1,23 @@
+{
+    "name": "fsql/fsql",
+    "description": "Library for running SQL queries on flat files",
+    "homepage": "http://www.fsql.org",
+    "support": {
+        "issues": "https://github.com/sbuberl/fSQL/issues",
+        "source": "https://github.com/sbuberl/fSQL"
+    },
+    "authors": [
+        {
+            "name": "Steve Buberl",
+            "email": "sbuberl@gmail.com"
+        }
+    ],
+    "require": {
+        "php": ">=5.3"
+    },
+    "autoload": {
+        "psr-4": {
+            "FSQL\\": "src/"
+        }
+    }
+}

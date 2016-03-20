@@ -1,8 +1,11 @@
 <?php
 
-require_once dirname(__FILE__).'/fSQLBaseTest.php';
+require_once __DIR__.'/BaseTest.php';
 
-class CreateTableTest extends fSQLBaseTest
+use FSQL\Environment;
+use FSQL\Database\CachedTable;
+
+class CreateTableTest extends BaseTest
 {
     private $fsql;
 
@@ -17,7 +20,7 @@ class CreateTableTest extends fSQLBaseTest
     public function setUp()
     {
         parent::setUp();
-        $this->fsql = new fSQLEnvironment();
+        $this->fsql = new Environment();
         $this->fsql->define_db('db1', parent::$tempDir);
         $this->fsql->select_db('db1');
     }
@@ -31,7 +34,7 @@ class CreateTableTest extends fSQLBaseTest
 
     public function testLike()
     {
-        $original = fSQLCachedTable::create($this->fsql->current_schema(), 'students', self::$columns1);
+        $original = CachedTable::create($this->fsql->current_schema(), 'students', self::$columns1);
         $this->assertTrue($original !== false);
 
         $result = $this->fsql->query('CREATE TABLE people LIKE students;');
@@ -52,7 +55,7 @@ class CreateTableTest extends fSQLBaseTest
 
     public function testLikeExcluding()
     {
-        $original = fSQLCachedTable::create($this->fsql->current_schema(), 'students', self::$columns1);
+        $original = CachedTable::create($this->fsql->current_schema(), 'students', self::$columns1);
         $this->assertTrue($original !== false);
 
         $result = $this->fsql->query('CREATE TABLE people LIKE students EXCLUDING IDENTITY EXCLUDING DEFAULTS');
@@ -73,7 +76,7 @@ class CreateTableTest extends fSQLBaseTest
 
     public function testLikeIncluding()
     {
-        $original = fSQLCachedTable::create($this->fsql->current_schema(), 'students', self::$columns1);
+        $original = CachedTable::create($this->fsql->current_schema(), 'students', self::$columns1);
         $this->assertTrue($original !== false);
 
         $result = $this->fsql->query('CREATE TABLE people LIKE students INCLUDING IDENTITY INCLUDING DEFAULTS;');

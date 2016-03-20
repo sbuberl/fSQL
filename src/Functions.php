@@ -1,12 +1,14 @@
 <?php
 
+namespace FSQL;
+
 define('FSQL_FUNC_REGISTERED', 0);
 define('FSQL_FUNC_NORMAL', 1);
 define('FSQL_FUNC_CUSTOM_PARSE', 2);
 define('FSQL_FUNC_BUILTIN_ID', 4);
 define('FSQL_FUNC_AGGREGATE', 8);
 
-class fSQLFunctions
+class Functions
 {
     private $allowed = array('abs', 'acos', 'asin', 'atan2', 'atan', 'ceil', 'cos', 'crc32', 'exp', 'floor',
        'ltrim', 'md5', 'pi', 'pow', 'rand', 'rtrim', 'round', 'sha1', 'sin', 'soundex', 'sqrt', 'strcmp', 'tan', );
@@ -64,7 +66,7 @@ class fSQLFunctions
 
     private $environment;
 
-    public function __construct(fSQLEnvironment $fsql)
+    public function __construct(Environment $fsql)
     {
         $this->environment = $fsql;
     }
