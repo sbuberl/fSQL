@@ -2,7 +2,7 @@
 
 namespace FSQL;
 
-class MicrotimeLockFile extends File
+class MicrotimeLockFile extends LockableFile
 {
     private $loadTime = null;
     private $lastReadStamp = null;
@@ -29,7 +29,7 @@ class MicrotimeLockFile extends File
     {
         $this->acquireRead();
 
-        $this->lastReadStamp = fread($this->handle, 20);
+        $this->lastReadStamp = fread($this->getHandle(), 20);
         $modified = $this->loadTime === null || $this->loadTime < $this->lastReadStamp;
 
         $this->releaseRead();
@@ -41,7 +41,7 @@ class MicrotimeLockFile extends File
     {
         $this->acquireRead();
 
-        $this->lastReadStamp = fread($this->handle, 20);
+        $this->lastReadStamp = fread($this->getHandle(), 20);
         $modified = $this->loadTime === null || $this->loadTime >= $this->lastReadStamp;
 
         $this->releaseRead();
@@ -55,8 +55,9 @@ class MicrotimeLockFile extends File
 
         list($msec, $sec) = explode(' ', microtime());
         $this->loadTime = $sec.$msec;
-        ftruncate($this->handle, 0);
-        fwrite($this->handle, $this->loadTime);
+        $handle = $this->getHandle();
+        ftruncate($handle, 0);
+        fwrite($handle, $this->loadTime);
 
         $this->releaseWrite();
     }

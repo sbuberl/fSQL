@@ -78,7 +78,7 @@ class Schema
         if (!$temporary) {
             return CachedTable::create($this, $table_name, $columns);
         } else {
-            $table = new TempTable($this, $table_name, $columns);
+            $table = TempTable::create($this, $table_name, $columns);
             $this->loadedTables[$table_name] = $table;
 
             return $table;

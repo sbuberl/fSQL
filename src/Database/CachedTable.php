@@ -3,6 +3,7 @@
 namespace FSQL\Database;
 
 use FSQL\File;
+use FSQL\LockableFile;
 use FSQL\MicrotimeLockFile;
 
 class CachedTable extends Table
@@ -20,15 +21,15 @@ class CachedTable extends Table
         $path_to_schema = $this->schema->path();
         $columns_path = $path_to_schema.$table_name.'.columns';
         $data_path = $path_to_schema.$table_name.'.data';
-        $this->columnsLockFile = new MicrotimeLockFile($columns_path.'.lock.cgi');
-        $this->columnsFile = new File($columns_path.'.cgi');
-        $this->dataLockFile = new MicrotimeLockFile($data_path.'.lock.cgi');
-        $this->dataFile = new File($data_path.'.cgi');
+        $this->columnsLockFile = new MicrotimeLockFile(new File($columns_path.'.lock.cgi'));
+        $this->columnsFile = new LockableFile(new File($columns_path.'.cgi'));
+        $this->dataLockFile = new MicrotimeLockFile(new File($data_path.'.lock.cgi'));
+        $this->dataFile = new LockableFile(new File($data_path.'.cgi'));
     }
 
     public static function create(Schema $schema, $table_name, array $columnDefs)
     {
-        $table = new self($schema, $table_name);
+        $table = new static($schema, $table_name);
         $table->columns = $columnDefs;
 
         // create the columns lock

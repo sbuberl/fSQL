@@ -3,6 +3,7 @@
 namespace FSQL\Database;
 
 use FSQL\File;
+use FSQL\LockableFile;
 use FSQL\MicrotimeLockFile;
 
 class SequencesFile
@@ -17,8 +18,8 @@ class SequencesFile
         $this->schema = $schema;
         $path = $schema->path().'sequences';
         $this->sequences = array();
-        $this->file = new File($path.'.cgi');
-        $this->lockFile = new MicrotimeLockFile($path.'.lock.cgi');
+        $this->file = new LockableFile(new File($path.'.cgi'));
+        $this->lockFile = new MicrotimeLockFile(new File($path.'.lock.cgi'));
     }
 
     public function create()

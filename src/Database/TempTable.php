@@ -2,52 +2,23 @@
 
 namespace FSQL\Database;
 
-class TempTable extends Table
-{
-    public function __construct(Schema $schema, $tableName, array $columnDefs)
-    {
-        parent::__construct($schema, $tableName);
-        $this->columns = $columnDefs;
-        $this->entries = array();
-    }
+use FSQL\LockableFile;
+use FSQL\MicrotimeLockFile;
+use FSQL\TempFile;
 
-    public function exists()
+class TempTable extends CachedTable
+{
+    public function __construct(Schema $schema, $tableName)
     {
-        return true;
+        Table::__construct($schema, $tableName);
+        $this->columnsLockFile = new MicrotimeLockFile(new TempFile());
+        $this->columnsFile = new LockableFile(new TempFile());
+        $this->dataLockFile = new MicrotimeLockFile(new TempFile());
+        $this->dataFile = new LockableFile(new TempFile());
     }
 
     public function temporary()
     {
         return true;
-    }
-
-    public function drop()
-    {
-    }
-
-    public function truncate()
-    {
-        $this->entries = array();
-    }
-
-    /* Unecessary for temporary tables */
-    public function commit()
-    {
-    }
-    public function rollback()
-    {
-    }
-    public function isReadLocked()
-    {
-        return false;
-    }
-    public function readLock()
-    {
-    }
-    public function writeLock()
-    {
-    }
-    public function unlock()
-    {
     }
 }
