@@ -235,7 +235,7 @@ class CachedTablest extends BaseTest
         $table->insertRow(self::$entries[0]);
         $table->insertRow(self::$entries[1]);
 
-        $cursor = $table->getCursor();
+        $cursor = $table->newCursor();
         $this->assertInstanceOf('FSQL\Database\TableCursor', $cursor);
         $this->assertTrue($cursor->valid());
         $this->assertEquals(0, $cursor->key());

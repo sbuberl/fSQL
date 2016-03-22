@@ -2303,11 +2303,10 @@ EOT;
 
                 $code = <<<EOC
             for(\$cursor->rewind(); \$cursor->valid(); \$cursor->next()) {
-                \$k = \$cursor->key();
                 \$entry = \$cursor->current();
                 if({$where})
                 {
-                    \$table->deleteRow(\$k);
+                    \$table->deleteRow(\$cursor->key());
                     \$this->affected++;
                 }
             }
@@ -2317,7 +2316,7 @@ EOC;
             } else {
                 $c = 0;
                 for ($cursor->rewind(); $cursor->valid(); $cursor->next()) {
-                    $table->deleteRow($k);
+                    $table->deleteRow($cursor->key());
                     ++$c;
                 }
                 $this->affected = $c;
