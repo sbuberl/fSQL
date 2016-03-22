@@ -26,7 +26,7 @@ class Sequence extends SequenceBase implements Relation
 
     public function fullName()
     {
-        return $this->file->schema()->name().'.'.$this->name;
+        return $this->file->schema()->fullName().'.'.$this->name;
     }
 
     public function load()

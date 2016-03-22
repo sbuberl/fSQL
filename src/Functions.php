@@ -470,7 +470,7 @@ class Functions
                 return 0;
             }
         } else {
-            return null;
+            return;
         }
     }
 
@@ -492,7 +492,6 @@ class Functions
                 return substr($string, $pos);
             }
         }
-        return null;
     }
 
     public function trim($string, $charlist = ' ')

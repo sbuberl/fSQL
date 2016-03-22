@@ -1040,10 +1040,10 @@ class Environment
             if ($columnDef['key'] == 'p' || $columnDef['key'] == 'u') {
                 if ($replace) {
                     $delete = array();
-                    $tableCursor->first();
+                    $tableCursor->rewind();
                     $n = 0;
-                    while (!$tableCursor->isDone()) {
-                        $row = $tableCursor->getRow();
+                    while ($tableCursor->valid()) {
+                        $row = $tableCursor->current();
                         if ($row[$colIndex] == $newentry[$colIndex]) {
                             $delete[] = $n;
                         }
@@ -1057,9 +1057,9 @@ class Environment
                         }
                     }
                 } else {
-                    $tableCursor->first();
-                    while (!$tableCursor->isDone()) {
-                        $row = $tableCursor->getRow();
+                    $tableCursor->rewind();
+                    while ($tableCursor->valid()) {
+                        $row = $tableCursor->current();
                         if ($row[$colIndex] == $newentry[$colIndex]) {
                             if (empty($ignore)) {
                                 return $this->set_error("Duplicate value for unique column '{$col_name}'");
@@ -1143,8 +1143,7 @@ class Environment
             $updated_key_columns = array_intersect(array_keys($updates), $unique_key_columns);
             $key_lookup = array();
             if (!empty($updated_key_columns)) {
-                for ($rowId = $cursor->first(); !$cursor->isDone(); $rowId = $cursor->next()) {
-                    $entry = $cursor->getRow();
+                foreach ($cursor as $rowId => $entry) {
                     foreach ($updated_key_columns as $unique) {
                         if (!isset($key_lookup[$unique])) {
                             $key_lookup[$unique] = array();
@@ -1184,10 +1183,10 @@ EOV;
             }
 
             $updateCode = <<<EOC
-for( \$rowId = \$cursor->first(); !\$cursor->isDone(); \$rowId = \$cursor->next())
+foreach( \$cursor->rewind(); \$cursor->valid(); \$cursor->next())
 {
     \$updates = $updates;
-    \$entry = \$updates + \$cursor->getRow();
+    \$entry = \$updates + \$cursor->current();
 $code
 }
 return true;
@@ -1376,8 +1375,7 @@ EOC;
             $affected = 0;
             $srcCursor = $src_table->getCursor();
             $destCursor = $src_table->getCursor();
-            for ($srcRowId = $srcCursor->first(); !$srcCursor->isDone(); $srcRowId = $srcCursor->next()) {
-                $entry = $srcCursor->getRow();
+            foreach ($srcCursor as $srcRowId => $entry) {
                 $destRowId = $joinMatches[$srcRowId];
                 if ($destRowId === false) {
                     $newRow = eval($insertCode);
@@ -2304,8 +2302,9 @@ EOT;
                 }
 
                 $code = <<<EOC
-            for(\$k = \$cursor->first(); !\$cursor->isDone(); \$k = \$cursor->next()) {
-                \$entry = \$cursor->getRow();
+            for(\$cursor->rewind(); \$cursor->valid(); \$cursor->next()) {
+                \$k = \$cursor->key();
+                \$entry = \$cursor->current();
                 if({$where})
                 {
                     \$table->deleteRow(\$k);
@@ -2317,7 +2316,7 @@ EOC;
                 eval($code);
             } else {
                 $c = 0;
-                for ($k = $cursor->first(); !$cursor->isDone(); $k = $cursor->next()) {
+                for ($cursor->rewind(); $cursor->valid(); $cursor->next()) {
                     $table->deleteRow($k);
                     ++$c;
                 }
@@ -3253,7 +3252,7 @@ EOC;
         return $new_join_data;
     }
 
-    public function fetch_all($id, $type = 1)
+    public function fetch_all($id, $type = FSQL_ASSOC)
     {
         if ($id && isset($this->cursors[$id]) && isset($this->data[$id])) {
             $data = $this->data[$id];
@@ -3279,7 +3278,7 @@ EOC;
         }
     }
 
-    public function fetch_array($id, $type = 1)
+    public function fetch_array($id, $type = FSQL_ASSOC)
     {
         if (!$id || !isset($this->cursors[$id]) || !isset($this->data[$id][$this->cursors[$id][0]])) {
             return false;

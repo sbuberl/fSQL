@@ -49,6 +49,16 @@ class SchemaTest extends BaseTest
         $this->assertEquals($this->db, $schema->database());
     }
 
+    public function testCreateFailed()
+    {
+        touch(parent::$tempDir.'myschema');
+
+        $schema = new Schema($this->db, 'myschema');
+
+        $passed = $schema->create();
+        $this->assertFalse($passed);
+    }
+
     public function testCreateTable()
     {
         $name = 'customers';

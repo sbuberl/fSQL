@@ -71,13 +71,24 @@ class DatabaseTest extends BaseTest
         $this->assertEquals(array('public'), $db->listSchemas());
     }
 
-    public function GetSchemaNonExist()
+    public function testGetSchemaNonExist()
     {
         $db = new Database($this->fsql, 'shazam', parent::$tempDir);
         $db->create();
 
         $schema = $db->getSchema('blah');
         $this->assertFalse($schema);
+    }
+
+    public function testGetSchemaNotInList()
+    {
+        $db = new Database($this->fsql, 'shazam', parent::$tempDir);
+        $db->create();
+
+        mkdir(parent::$tempDir.'other');
+
+        $schema = $db->getSchema('other');
+        $this->assertTrue($schema !== false);
     }
 
     public function testGetSchema()
@@ -89,5 +100,18 @@ class DatabaseTest extends BaseTest
 
         $schema = $db->getSchema($name);
         $this->assertInstanceOf('FSQL\Database\Schema', $schema);
+    }
+
+    public function testDropSchema()
+    {
+        $db = new Database($this->fsql, 'shazam', parent::$tempDir);
+        $db->create();
+
+        $schema = $db->defineSchema('testing');
+        $schema2 = $db->defineSchema('stuff');
+        $this->assertNotEmpty($db->listSchemas());
+
+        $db->dropSchema('testing');
+        $this->assertEquals(array('public', 'stuff'), $db->listSchemas());
     }
 }

@@ -216,4 +216,28 @@ class CachedTablest extends BaseTest
         $columns = $table->getColumns();
         $this->assertEmpty($columns['id']['restraint']);
     }
+
+    public function testGetCursor()
+    {
+        $table = CachedTable::create($this->schema, 'blah', self::$columns);
+        $table->insertRow(self::$entries[0]);
+        $table->insertRow(self::$entries[1]);
+
+        $cursor = $table->getCursor();
+        $this->assertInstanceOf('FSQL\Database\TableCursor', $cursor);
+        $this->assertTrue($cursor->valid());
+        $this->assertEquals(0, $cursor->key());
+    }
+
+    public function testNewCursor()
+    {
+        $table = CachedTable::create($this->schema, 'blah', self::$columns);
+        $table->insertRow(self::$entries[0]);
+        $table->insertRow(self::$entries[1]);
+
+        $cursor = $table->getCursor();
+        $this->assertInstanceOf('FSQL\Database\TableCursor', $cursor);
+        $this->assertTrue($cursor->valid());
+        $this->assertEquals(0, $cursor->key());
+    }
 }

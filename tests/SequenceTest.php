@@ -9,14 +9,16 @@ use FSQL\Environment;
 
 class SequenceTest extends SequenceBaseTest
 {
+    private $schema;
+
     public function setUp()
     {
         parent::setUp();
         $fsql = new Environment();
         $database = new Database($fsql, 'db1', parent::$tempDir);
         $database->create();
-        $schema = $database->getSchema('public');
-        $sequences = new SequencesFile($schema);
+        $this->schema = $database->getSchema('public');
+        $sequences = new SequencesFile($this->schema);
         $sequences->create();
         $this->sequence = new Sequence('ids', $sequences);
     }
@@ -24,5 +26,18 @@ class SequenceTest extends SequenceBaseTest
     public function testName()
     {
         $this->assertEquals('ids', $this->sequence->name());
+    }
+
+    public function testFullName()
+    {
+        $this->assertEquals($this->schema->fullName().'.ids', $this->sequence->fullName());
+    }
+
+    public function testDrop()
+    {
+        $this->sequence->drop();
+
+        $sequence = $this->schema->getSequence('ids');
+        $this->assertFalse($sequence);
     }
 }

@@ -102,12 +102,7 @@ class Schema
 
     public function getSequence($name)
     {
-        $sequence = $this->sequencesFile->getSequence($name);
-        if ($sequence !== false) {
-            return $sequence;
-        }
-
-        return false;
+        return $this->sequencesFile->getSequence($name);
     }
 
     public function getTable($table_name)

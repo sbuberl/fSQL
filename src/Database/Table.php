@@ -64,7 +64,7 @@ abstract class Table implements Relation
             $this->cursor = new TableCursor($this->entries);
         }
 
-        $this->cursor->first();
+        $this->cursor->rewind();
 
         return $this->cursor;
     }

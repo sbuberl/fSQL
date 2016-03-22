@@ -2,66 +2,65 @@
 
 namespace FSQL\Database;
 
-class TableCursor
+class TableCursor implements \SeekableIterator, \Countable
 {
     private $entries;
-    private $num_rows;
-    private $pos;
+    private $numRows;
+    private $currentRowId;
 
     public function __construct(array &$entries)
     {
         $this->entries = &$entries;
-        $this->first();
+        $this->rewind();
     }
 
-    public function first()
+    public function count()
     {
-        $this->num_rows = count($this->entries);
-        $this->pos = 0;
-
-        return $this->pos;
+        return $this->numRows;
     }
 
-    public function getPosition()
+    public function rewind()
     {
-        return $this->pos;
+        $this->numRows = count($this->entries);
+        $this->updateRowId(reset($this->entries));
     }
 
-    public function getRow()
+    public function key()
     {
-        if ($this->pos >= 0 && $this->pos < $this->num_rows) {
-            return $this->entries[$this->pos];
+        return $this->currentRowId;
+    }
+
+    public function current()
+    {
+        return $this->currentRowId !== false ? $this->entries[$this->currentRowId] : false;
+    }
+
+    public function valid()
+    {
+        return $this->currentRowId !== false;
+    }
+
+    public function next()
+    {
+        $this->updateRowId(next($this->entries));
+    }
+
+    public function seek($pos)
+    {
+        if ($pos >= 0 && $pos < count($this->entries)) {
+            reset($this->entries);
+            for ($i = 0; $i < $pos; $i++, next($this->entries)) {
+            }
+            $this->currentRowId = key($this->entries);
+
+            return $this->currentRowId;
         } else {
             return false;
         }
     }
 
-    public function isDone()
+    private function updateRowId($result)
     {
-        return $this->pos < 0 || $this->pos >= $this->num_rows;
-    }
-
-    public function last()
-    {
-        $this->pos = $this->num_rows - 1;
-    }
-
-    public function previous()
-    {
-        --$this->pos;
-    }
-
-    public function next()
-    {
-        ++$this->pos;
-
-        return $this->pos;
-    }
-
-    public function seek($pos)
-    {
-        if ($pos >= 0 & $pos < count($this->entries)) {
-            $this->pos = $pos;
-        }
+        $this->currentRowId = $result !== false ? key($this->entries) : false;
     }
 }
