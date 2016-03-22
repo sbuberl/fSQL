@@ -2,8 +2,8 @@
 
 require_once __DIR__.'/BaseTest.php';
 
-use FSQL\Environment;
 use FSQL\Database\CachedTable;
+use FSQL\Environment;
 
 class CreateTableTest extends BaseTest
 {

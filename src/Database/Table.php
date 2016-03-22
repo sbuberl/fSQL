@@ -124,7 +124,10 @@ abstract class Table implements Relation
     abstract public function rollback();
 
     abstract public function isReadLocked();
+
     abstract public function readLock();
+
     abstract public function writeLock();
+
     abstract public function unlock();
 }

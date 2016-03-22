@@ -244,7 +244,7 @@ class CachedTable extends Table
                 $entries = array();
 
                 $columnDefs = array_values($this->getColumns());
-                for ($i = 0;  $i < $num_entries; ++$i) {
+                for ($i = 0; $i < $num_entries; ++$i) {
                     $line = rtrim(fgets($dataHandle, 4096));
 
                     if (!$skip) {

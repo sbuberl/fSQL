@@ -36,8 +36,8 @@ define('FSQL_INCLUDE_PATH', __DIR__);
 require 'vendor/autoload.php';
 
 use FSQL\Database\Database;
-use FSQL\Database\Table;
 use FSQL\Database\Sequence;
+use FSQL\Database\Table;
 
 class Environment
 {
@@ -1686,7 +1686,7 @@ EOC;
             $limit_start = (int) $additional[1];
         }
 
-        if (preg_match('/\s*FETCH\s+(?:FIRST|NEXT)\s+(?:(\d+)\s+)?ROWS?\s+ONLY\b/Ais',  $query, $additional, 0, $currentPos)) {
+        if (preg_match('/\s*FETCH\s+(?:FIRST|NEXT)\s+(?:(\d+)\s+)?ROWS?\s+ONLY\b/Ais', $query, $additional, 0, $currentPos)) {
             $currentPos += strlen($additional[0]);
             $limit_stop = isset($additional[1]) ? (int) $additional[1] : 1;
             if ($limit_start === null) {
@@ -1943,7 +1943,7 @@ EOT;
                 return $this->set_error("Unknown table name/alias in $where: $table_name");
             }
 
-            $index = array_search($column,  array_keys($joined_info['tables'][$table_name])) + $joined_info['offsets'][$table_name];
+            $index = array_search($column, array_keys($joined_info['tables'][$table_name])) + $joined_info['offsets'][$table_name];
             if ($index === false || $index === null) {
                 return $this->set_error("Unknown column in $where: $column");
             }
@@ -2073,7 +2073,7 @@ EOT;
                     $table_columns = $join_info['tables'][$table_name];
                     if (isset($table_columns[ $column ])) {
                         if (isset($join_info['offsets'][$table_name])) {
-                            $colIndex = array_search($column,  array_keys($table_columns)) + $join_info['offsets'][$table_name];
+                            $colIndex = array_search($column, array_keys($table_columns)) + $join_info['offsets'][$table_name];
                             if ($where_type === FSQL_WHERE_HAVING) { // column/alias in grouping clause
                                 if (in_array($colIndex, $join_info['group_columns'])) {
                                     $expr = "\$group[0][$colIndex]";
@@ -3307,10 +3307,12 @@ EOC;
     {
         return $this->fetch_array($results, FSQL_ASSOC);
     }
+
     public function fetch_row($results)
     {
         return $this->fetch_array($results, FSQL_NUM);
     }
+
     public function fetch_both($results)
     {
         return $this->fetch_array($results, FSQL_BOTH);

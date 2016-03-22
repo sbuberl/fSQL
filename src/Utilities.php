@@ -29,7 +29,7 @@ final class Utilities
             } else {
                 return $environment->set_error("Unable to create directory '$path'.  Please make the directory manually or check the permissions of the parent directory.");
             }
-        } elseif (!is_readable($realpath) || !is_writeable($realpath)) {
+        } elseif (!is_readable($realpath) || !is_writable($realpath)) {
             @chmod($realpath, 0777);
         }
 
@@ -37,7 +37,7 @@ final class Utilities
             $realpath .= '/';
         }
 
-        if (is_dir($realpath) && is_readable($realpath) && is_writeable($realpath)) {
+        if (is_dir($realpath) && is_readable($realpath) && is_writable($realpath)) {
             return $realpath;
         } else {
             return $environment->set_error("Path to directory for $type is not valid.  Please correct the path or create the directory and check that is readable and writable.");

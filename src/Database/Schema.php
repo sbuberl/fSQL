@@ -146,7 +146,7 @@ class Schema
         $oldTable = $this->getTable($old_table_name);
         if ($oldTable->exists()) {
             if (!$oldTable->temporary()) {
-                $newTable = $new_schema->createTable($new_table_name,  $oldTable->getColumns());
+                $newTable = $new_schema->createTable($new_table_name, $oldTable->getColumns());
                 copy($oldTable->dataFile->getPath(), $newTable->dataFile->getPath());
                 copy($oldTable->dataLockFile->getPath(), $newTable->dataLockFile->getPath());
                 $this->dropTable($old_table_name);

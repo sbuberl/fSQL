@@ -211,18 +211,21 @@ class Functions
             return log($arg2) / log($arg1);
         }
     }
+
     public function log2($arg)
     {
         $arg = $this->trimQuotes($arg);
 
         return $this->log(2, $arg);
     }
+
     public function log10($arg)
     {
         $arg = $this->trimQuotes($arg);
 
         return $this->log(10, $arg);
     }
+
     public function mod($one, $two)
     {
         $one = $this->trimQuotes($one);
@@ -230,6 +233,7 @@ class Functions
 
         return $one % $two;
     }
+
     public function sign($number)
     {
         $number = $this->trimQuotes($number);
@@ -241,6 +245,7 @@ class Functions
             return -1;
         }
     }
+
     public function truncate($number, $places)
     {
         $number = $this->trimQuotes($number);
@@ -346,7 +351,7 @@ class Functions
         $i = null;
 
         if ($flag === 'constant' && $column !== null) {
-            $i = $column * sizeof($data);
+            $i = $column * count($data);
         } else {
             foreach ($data as $entry) {
                 $i += $entry[$column];
@@ -371,6 +376,7 @@ class Functions
             return;
         }
     }
+
     public function concat()
     {
         $args = func_get_args();
@@ -378,6 +384,7 @@ class Functions
 
         return call_user_func_array(array($this, 'concat_ws'), $args);
     }
+
     public function elt($return)
     {
         if (func_num_args() > 1 && $return >= 1 && $return <= func_num_args()) {
@@ -386,6 +393,7 @@ class Functions
             return;
         }
     }
+
     public function locate($string, $find, $start = null)
     {
         if ($start) {
@@ -398,18 +406,22 @@ class Functions
             return $pos;
         }
     }
+
     public function lpad($string, $length, $pad)
     {
         return str_pad($string, $length, $pad, STR_PAD_LEFT);
     }
+
     public function left($string, $end)
     {
         return substr($string, 0, $end);
     }
+
     public function right($string, $end)
     {
         return substr($string, -$end);
     }
+
     public function substring_index($string, $delim, $count)
     {
         $array = array();
@@ -446,8 +458,6 @@ class Functions
                 return substr_replace($string, $other, $start);
             }
         }
-
-        return;
     }
 
     public function position($substring, $string)
@@ -460,7 +470,7 @@ class Functions
                 return 0;
             }
         } else {
-            return;
+            return null;
         }
     }
 
@@ -482,8 +492,7 @@ class Functions
                 return substr($string, $pos);
             }
         }
-
-        return;
+        return null;
     }
 
     public function trim($string, $charlist = ' ')
@@ -496,26 +505,32 @@ class Functions
     {
         return $this->from_unixtime(time());
     }
+
     public function curdate()
     {
         return $this->from_unixtime(time(), '%Y-%m-%d');
     }
+
     public function curtime()
     {
         return $this->from_unixtime(time(), '%H:%M:%S');
     }
+
     public function dayofweek($date)
     {
         return $this->from_unixtime($date, '%w');
     }
+
     public function weekday($date)
     {
         return $this->from_unixtime($date, '%u');
     }
+
     public function dayofyear($date)
     {
         return round($this->from_unixtime($date, '%j'));
     }
+
     public function unix_timestamp($date = null)
     {
         if (!$date) {
@@ -524,6 +539,7 @@ class Functions
             return strtotime(str_replace('-', '/', $date));
         }
     }
+
     public function from_unixtime($timestamp, $format = '%Y-%m-%d %H:%M:%S')
     {
         if (!is_int($timestamp)) {
