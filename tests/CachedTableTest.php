@@ -3,6 +3,7 @@
 require_once __DIR__.'/BaseTest.php';
 
 use FSQL\Database\CachedTable;
+use FSQL\Database\TempTable;
 use FSQL\Environment;
 
 class CachedTablest extends BaseTest
@@ -54,6 +55,15 @@ class CachedTablest extends BaseTest
         $this->assertEquals($this->schema, $table->schema());
     }
 
+    public function testCreateTemp()
+    {
+        $tableName = 'blah';
+        $table = TempTable::create($this->schema, $tableName, self::$columns);
+        $this->assertNotNull($table);
+        $this->assertEquals($tableName, $table->name());
+        $this->assertEquals($this->schema, $table->schema());
+    }
+
     public function testFullName()
     {
         $tableName = 'garbage';
@@ -68,12 +78,18 @@ class CachedTablest extends BaseTest
 
         $createdTable = CachedTable::create($this->schema, 'blah', self::$columns);
         $this->assertTrue($createdTable->exists());
+
+        $tempTable = TempTable::create($this->schema, 'blah2', self::$columns);
+        $this->assertTrue($tempTable->exists());
     }
 
     public function testTemporary()
     {
         $table = new CachedTable($this->schema, 'newTable');
         $this->assertFalse($table->temporary());
+
+        $tempTable = TempTable::create($this->schema, 'blah2', self::$columns);
+        $this->assertTrue($tempTable->temporary());
     }
 
     public function testGetColumns()
