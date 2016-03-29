@@ -48,9 +48,6 @@ class Environment
     private $currentSchema = null;
     private $error_msg = null;
     private $query_count = 0;
-    private $cursors = array();
-    private $columns = array();
-    private $data = array();
     private $join_lambdas = array();
     private $affected = 0;
     private $insert_id = 0;
@@ -296,15 +293,6 @@ class Environment
     public function insert_id()
     {
         return $this->insert_id;
-    }
-
-    public function num_rows($id)
-    {
-        if (isset($this->data[$id])) {
-            return count($this->data[$id]);
-        } else {
-            return 0;
-        }
     }
 
     public function query_count()
@@ -1931,7 +1919,7 @@ EOT;
             $final_set = $results;
         }
 
-        return $this->create_result_set($selected_columns, $final_set);
+        return new ResultSet($selected_columns, $final_set);
     }
 
     private function find_column($column, $table_name, $joined_info, $where)
@@ -2851,7 +2839,7 @@ EOC;
                 $columns[] = 'Table_type';
             }
 
-            return $this->create_result_set($columns, $data);
+            return new ResultSet($columns, $data);
         } elseif (preg_match("/\ASHOW\s+DATABASES\s*[;]?\s*\Z/is", $query, $matches)) {
             foreach ($this->list_dbs() as $db) {
                 $data[] = array($db);
@@ -2859,7 +2847,7 @@ EOC;
 
             $columns = array('Name');
 
-            return $this->create_result_set($columns, $data);
+            return new ResultSet($columns, $data);
         } elseif (preg_match('/\ASHOW\s+(FULL\s+)?COLUMNS\s+(?:FROM|IN)\s+`?([^\W\d]\w*)`?(?:\s+(?:FROM|IN)\s+(?:`?([^\W\d]\w*)`?\.`?)?([^\W\d]\w*)`?)?([^\W\d]\w*)`?)?\s*[;]?\s*\Z/is', $query, $matches)) {
             $db_name = !empty($matches[3]) ? $matches[3] : null;
             $schema_name = isset($matches[4]) ? $matches[4] : null;
@@ -2915,7 +2903,7 @@ EOC;
             array_push($columns, 'Privileges', 'Comment');
         }
 
-        return $this->create_result_set($columns, $data);
+        return new ResultSet($columns, $data);
     }
 
     private function query_describe($query)
@@ -2976,16 +2964,6 @@ EOC;
         } else {
             return $this->set_error('Invalid UNLOCK query');
         }
-    }
-
-    public function create_result_set($columns, $data)
-    {
-        $rs_id = !empty($this->data) ? max(array_keys($this->data)) + 1 : 1;
-        $this->columns[$rs_id] = $columns;
-        $this->cursors[$rs_id] = array(0, 0);
-        $this->data[$rs_id] = $data;
-
-        return $rs_id;
     }
 
     private function parse_value($columnDef, $value)
@@ -3251,139 +3229,69 @@ EOC;
         return $new_join_data;
     }
 
-    public function fetch_all($id, $type = FSQL_ASSOC)
+    public function fetch_all(ResultSet $results, $type = FSQL_ASSOC)
     {
-        if ($id && isset($this->cursors[$id]) && isset($this->data[$id])) {
-            $data = $this->data[$id];
-            if ($type === FSQL_NUM) {
-                return $data;
-            }
-
-            $result_array = array();
-            $columns = $this->columns[$id];
-            if ($type === FSQL_ASSOC) {
-                foreach ($data as $entry) {
-                    $result_array[] = array_combine($columns, $entry);
-                }
-            } else {
-                foreach ($data as $entry) {
-                    $result_array[] = array_merge($entry, array_combine($columns, $entry));
-                }
-            }
-
-            return $result_array;
-        } else {
-            return $this->set_error('Bad results id passed in');
-        }
+        return $results->fetchAll($type);
     }
 
-    public function fetch_array($id, $type = FSQL_ASSOC)
+    public function fetch_array(ResultSet $results, $type = FSQL_ASSOC)
     {
-        if (!$id || !isset($this->cursors[$id]) || !isset($this->data[$id][$this->cursors[$id][0]])) {
-            return false;
-        }
-
-        $entry = $this->data[$id][$this->cursors[$id][0]];
-        if (!$entry) {
-            return false;
-        }
-
-        $columnNames = $this->columns[$id];
-
-        ++$this->cursors[$id][0];
-
-        if ($type === FSQL_ASSOC) {
-            return array_combine($columnNames, $entry);
-        } elseif ($type === FSQL_NUM) {
-            return $entry;
-        } else {
-            return array_merge($entry, array_combine($columnNames, $entry));
-        }
+        return $results->fetchArray($type);
     }
 
-    public function fetch_assoc($results)
+    public function fetch_assoc(ResultSet $results)
     {
-        return $this->fetch_array($results, FSQL_ASSOC);
+        return $results->fetchAssoc();
     }
 
-    public function fetch_row($results)
+    public function fetch_row(ResultSet $results)
     {
-        return $this->fetch_array($results, FSQL_NUM);
+        return $results->fetchRow();
     }
 
-    public function fetch_both($results)
+    public function fetch_both(ResultSet $results)
     {
-        return $this->fetch_array($results, FSQL_BOTH);
+        return $results->fetchBoth();
     }
 
-    public function fetch_single($results, $column = 0)
+    public function fetch_single(ResultSet $results, $column = 0)
     {
-        $type = is_numeric($column) ? FSQL_NUM : FSQL_ASSOC;
-        $row = $this->fetch_array($results, $type);
-
-        return $row !== false ? $row[$column] : false;
+        return $results->fetchSingle($column);
     }
 
-    public function fetch_object($results)
+    public function fetch_object(ResultSet $results)
     {
-        $row = $this->fetch_array($results, FSQL_ASSOC);
-
-        if ($row === false) {
-            return false;
-        }
-
-        $obj = new stdClass();
-
-        foreach ($row as $key => $value) {
-            $obj->{$key} = $value;
-        }
-
-        return $obj;
+        return $results->fetchObject();
     }
 
-    public function data_seek($id, $i)
+    public function data_seek(ResultSet $results, $i)
     {
-        if (!$id || !isset($this->cursors[$id][0])) {
-            return $this->set_error('Bad results id passed in');
-        } else {
-            $this->cursors[$id][0] = $i;
-
-            return true;
-        }
+        return $results->dataSeek($i);
     }
 
-    public function num_fields($id)
+    public function num_rows(ResultSet $results)
     {
-        if (!$id || !isset($this->columns[$id])) {
-            return $this->set_error('Bad results id passed in');
-        } else {
-            return count($this->columns[$id]);
-        }
+        return $results->numRows();
     }
 
-    public function fetch_field($id, $i = null)
+    public function num_fields(ResultSet $results)
     {
-        if (!$id || !isset($this->columns[$id]) || !isset($this->cursors[$id][1])) {
-            return $this->set_error('Bad results id passed in');
-        } else {
-            if ($i === null) {
-                $i = 0;
-            }
-
-            if (!isset($this->columns[$id][$i])) {
-                return false;
-            }
-
-            $field = new stdClass();
-            $field->name = $this->columns[$id][$i];
-
-            return $field;
-        }
+        return $results->numFields();
     }
 
-    public function free_result($id)
+    public function fetch_field(ResultSet $results)
     {
-        unset($this->columns[$id], $this->data[$id], $this->cursors[$id]);
+        return $results->fetchField();
+    }
+
+    public function field_seek(ResultSet $results, $i)
+    {
+        return $results->fieldSeek($i);
+    }
+
+    public function free_result(ResultSet $results)
+    {
+        // No-op for backwards compat
     }
 
     private function typecode_to_name($type)
