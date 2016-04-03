@@ -1978,7 +1978,7 @@ EOT;
             if ($table_name) {
                 if (isset($join_info['tables'][$table_name])) {
                     $table_columns = $join_info['tables'][$table_name];
-                    if (isset($table_columns[ $column ])) {
+                    if (isset($table_columns[$column])) {
                         if (isset($join_info['offsets'][$table_name])) {
                             $colIndex = array_search($column, array_keys($table_columns)) + $join_info['offsets'][$table_name];
                             if ($where_type === FSQL_WHERE_HAVING) { // column/alias in grouping clause
