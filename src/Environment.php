@@ -38,6 +38,7 @@ require 'vendor/autoload.php';
 use FSQL\Database\Database;
 use FSQL\Database\Sequence;
 use FSQL\Database\Table;
+use FSQL\Statements\CreateTableLike;
 
 class Environment
 {
@@ -420,11 +421,17 @@ class Environment
             if (substr($type, -5) === 'TABLE') {
                 $temp = !strncmp($type, 'TEMPORARY', 9);
 
-                return $this->query_create_table($definition, $temp, $ifNotExists);
+                $query = $this->query_create_table($definition, $temp, $ifNotExists);
             } elseif ($type === 'SCHEMA') {
-                return $this->query_create_schema($definition, $ifNotExists);
+                $query = $this->query_create_schema($definition, $ifNotExists);
             } else {
-                return $this->query_create_sequence($definition, $ifNotExists);
+                $query = $this->query_create_sequence($definition, $ifNotExists);
+            }
+
+            if ($query !== false) {
+                return $query->execute();
+            } else {
+                return false;
             }
         } else {
             return $this->set_error('Invalid CREATE query');
@@ -435,21 +442,8 @@ class Environment
     {
         if (preg_match("/\A(?:`?([^\W\d]\w*)`?\.)?`?([^\W\d]\w*)`?\Z/is", $definition, $matches)) {
             list(, $dbName, $schemaName) = $matches;
-            $db = $this->get_database($dbName);
-            if ($db === false) {
-                return false;
-            }
 
-            $schema = $db->getSchema($schemaName);
-            if ($schema !== false) {
-                if (!$ifNotExists) {
-                    return $this->set_error("Schema {$schema->fullName()} already exists");
-                } else {
-                    return true;
-                }
-            }
-
-            return $db->defineSchema($schemaName) !== false;
+            return new Statements\CreateSchema($this, array($dbName, $schemaName), $ifNotExists);
         } else {
             return $this->set_error('Invalid CREATE SCHEMA query');
         }
@@ -464,35 +458,14 @@ class Environment
                 return false;
             }
 
-            $schema = $this->find_schema($seqNamePieces[0], $seqNamePieces[1]);
-            if ($schema === false) {
-                return false;
-            }
-
-            $sequenceName = $seqNamePieces[2];
-            $sequence = $schema->getRelation($sequenceName);
-            if ($sequence !== false) {
-                if (!$ifNotExists) {
-                    return $this->set_error("Relation {$fullSequenceName} already exists");
-                } else {
-                    return true;
-                }
-            }
-
             $parsed = $this->parse_sequence_options($valuesList);
             if ($parsed === false) {
                 return false;
             }
 
-            list($start, $increment, $min, $max, $cycle) = $this->load_create_sequence($parsed);
+            $initialValues = $this->load_create_sequence($parsed);
 
-            $sequences = $schema->getSequences();
-            if (!$sequences->exists()) {
-                $sequences->create();
-            }
-            $sequences->addSequence($sequenceName, $start, $increment, $min, $max, $cycle);
-
-            return true;
+            return new Statements\CreateSequence($this, $seqNamePieces, $ifNotExists, $initialValues);
         } else {
             return $this->set_error('Invalid CREATE SEQUENCE query');
         }
@@ -506,22 +479,6 @@ class Environment
             $table_name_pieces = $this->parse_relation_name($full_table_name);
             if ($table_name_pieces === false) {
                 return false;
-            }
-
-            $table_name = $table_name_pieces[2];
-
-            $schema = $this->find_schema($table_name_pieces[0], $table_name_pieces[1]);
-            if ($schema === false) {
-                return false;
-            }
-
-            $table = $schema->getRelation($table_name);
-            if ($table !== false) {
-                if (!$ifNotExists) {
-                    return $this->set_error("Relation $full_table_name already exists");
-                } else {
-                    return true;
-                }
             }
 
             if (!isset($matches[3])) {
@@ -644,25 +601,28 @@ class Environment
                         $new_columns[$name] = array('type' => $type, 'auto' => $auto, 'default' => $default, 'key' => $key, 'null' => $null, 'restraint' => $restraint);
                     }
                 }
+
+                return new Statements\CreateTable($this, $table_name_pieces, $ifNotExists, $temporary, $new_columns);
             } else {
-                $like_clause = isset($matches[4]) ? $matches[4] : '';
-                $like_columns = $this->query_create_table_like($matches[3], $like_clause);
-                if ($like_columns === false) {
+                $likeClause = isset($matches[4]) ? $matches[4] : '';
+                $likeTablePieces = $this->parse_relation_name($matches[3]);
+                if ($likeTablePieces === false) {
                     return false;
                 }
 
-                $new_columns = $like_columns;
+                $likeOptions = $this->parse_table_like_clause($likeClause);
+                if ($likeOptions === false) {
+                    return false;
+                }
+
+                return new Statements\CreateTableLike($this, $table_name_pieces, $ifNotExists, $temporary, $likeTablePieces, $likeOptions);
             }
-
-            $schema->createTable($table_name, $new_columns, $temporary);
-
-            return true;
         } else {
             return $this->set_error('Invalid CREATE TABLE query');
         }
     }
 
-    private function get_type_default_value($type, $null)
+    public function get_type_default_value($type, $null)
     {
         if ($null) {
             return 'NULL';
@@ -675,48 +635,9 @@ class Environment
         }
     }
 
-    private function query_create_table_like($likeFullTableName, $likeClause)
-    {
-        $likeTablePieces = $this->parse_relation_name($likeFullTableName);
-        $likeOptions = $this->parse_table_like_clause($likeClause);
-        if ($likeOptions === false) {
-            return false;
-        }
-
-        $likeTable = $this->find_table($likeTablePieces);
-        if ($likeTable !== false) {
-            $likeColumns = $likeTable->getColumns();
-        } else {
-            return false;
-        }
-
-        foreach ($likeOptions as $type => $including) {
-            if ($type === 1) {  // IDENTITY
-                $identity = $likeTable->getIdentity();
-                if ($identity !== false) {
-                    $identityColumn = $identity->getColumnName();
-                    if ($including) {
-                        $likeColumns[$identityColumn]['restraint'][0] = $likeColumns[$identityColumn]['restraint'][2];
-                    } else {
-                        $likeColumns[$identityColumn]['auto'] = 0;
-                        $likeColumns[$identityColumn]['restraint'] = array();
-                    }
-                }
-            } else {    // DEFAULTS
-                if (!$including) {
-                    foreach ($likeColumns as &$likeColumn) {
-                        $likeColumn['default'] = $this->get_type_default_value($likeColumn['type'], $likeColumn['null']);
-                    }
-                }
-            }
-        }
-
-        return $likeColumns;
-    }
-
     private function parse_table_like_clause($likeClause)
     {
-        $results = array(1 => false, 2 => false);
+        $results = array(CreateTableLike::IDENTITY => false, CreateTableLike::DEFAULTS => false);
         $optionsWords = preg_split('/\s+/', strtoupper($likeClause), -1, PREG_SPLIT_NO_EMPTY);
         $wordCount = count($optionsWords);
         for ($i = 0; $i < $wordCount; ++$i) {
@@ -731,9 +652,9 @@ class Environment
 
             $word = $optionsWords[++$i];
             if ($word === 'IDENTITY') {
-                $type = 1;
+                $type = CreateTableLike::IDENTITY;
             } elseif ($word === 'DEFAULTS') {
-                $type = 2;
+                $type = CreateTableLike::DEFAULTS;
             } else {
                 return $this->set_error('Unknown option after '.$firstWord.': '.$word);
             }
