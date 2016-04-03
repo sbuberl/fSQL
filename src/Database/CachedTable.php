@@ -82,7 +82,7 @@ class CachedTable extends Table
 
     public function exists()
     {
-        return file_exists($this->columnsFile->getPath());
+        return $this->columnsFile->exists();
     }
 
     public function temporary()

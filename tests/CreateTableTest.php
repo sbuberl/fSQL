@@ -25,7 +25,7 @@ class CreateTableTest extends BaseTest
         $this->fsql->select_db('db1');
     }
 
-    public function testLikeTableNotxExist()
+    public function testLikeTableNotExist()
     {
         $result = $this->fsql->query('CREATE TABLE people LIKE students;');
         $this->assertFalse($result);
