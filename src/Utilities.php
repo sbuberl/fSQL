@@ -4,6 +4,9 @@ namespace FSQL;
 
 final class Utilities
 {
+    /**
+     * @codeCoverageIgnore
+     */
     private function __construct()
     {
     }

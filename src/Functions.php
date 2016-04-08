@@ -2,61 +2,61 @@
 
 namespace FSQL;
 
-define('FSQL_FUNC_REGISTERED', 0);
-define('FSQL_FUNC_NORMAL', 1);
-define('FSQL_FUNC_CUSTOM_PARSE', 2);
-define('FSQL_FUNC_BUILTIN_ID', 4);
-define('FSQL_FUNC_AGGREGATE', 8);
-
 class Functions
 {
+    const REGISTERED = 0;
+    const NORMAL = 1;
+    const CUSTOM_PARSE = 2;
+    const BUILTIN_ID = 4;
+    const AGGREGATE = 8;
+
     private $allowed = array('abs', 'acos', 'asin', 'atan2', 'atan', 'ceil', 'cos', 'crc32', 'exp', 'floor',
        'ltrim', 'md5', 'pi', 'pow', 'rand', 'rtrim', 'round', 'sha1', 'sin', 'soundex', 'sqrt', 'strcmp', 'tan', );
 
     private $custom = array(
-        'any' => FSQL_FUNC_AGGREGATE,
-        'avg' => FSQL_FUNC_AGGREGATE,
-        'concat' => FSQL_FUNC_NORMAL,
-        'concat_ws' => FSQL_FUNC_NORMAL,
-        'count' => FSQL_FUNC_AGGREGATE,
-        'curdate' => FSQL_FUNC_NORMAL,
-        'current_catalog' => FSQL_FUNC_NORMAL,
-        'current_schema' => FSQL_FUNC_NORMAL,
-        'curtime' => FSQL_FUNC_NORMAL,
-        'currval' => FSQL_FUNC_NORMAL,
-        'dayofweek' => FSQL_FUNC_NORMAL,
-        'dayofyear' => FSQL_FUNC_NORMAL,
-        'elt' => FSQL_FUNC_NORMAL,
-        'every' => FSQL_FUNC_AGGREGATE,
-        'extract' => FSQL_FUNC_CUSTOM_PARSE,
-        'from_unixtime' => FSQL_FUNC_NORMAL,
-        'last_insert_id' => FSQL_FUNC_NORMAL,
-        'left' => FSQL_FUNC_NORMAL,
-        'locate' => FSQL_FUNC_NORMAL,
-        'log' => FSQL_FUNC_NORMAL,
-        'log2' => FSQL_FUNC_NORMAL,
-        'log10' => FSQL_FUNC_NORMAL,
-        'lpad' => FSQL_FUNC_NORMAL,
-        'max' => FSQL_FUNC_AGGREGATE,
-        'min' => FSQL_FUNC_AGGREGATE,
-        'mod' => FSQL_FUNC_NORMAL,
-        'month' => FSQL_FUNC_NORMAL,
-        'nextval' => FSQL_FUNC_NORMAL,
-        'now' => FSQL_FUNC_NORMAL,
-        'overlay' => FSQL_FUNC_CUSTOM_PARSE,
-        'position' => FSQL_FUNC_CUSTOM_PARSE,
-        'repeat' => FSQL_FUNC_NORMAL,
-        'right' => FSQL_FUNC_NORMAL,
-        'row_count' => FSQL_FUNC_NORMAL,
-        'sign' => FSQL_FUNC_NORMAL,
-        'substring' => FSQL_FUNC_CUSTOM_PARSE,
-        'substring_index' => FSQL_FUNC_NORMAL,
-        'sum' => FSQL_FUNC_AGGREGATE,
-        'trim' => FSQL_FUNC_CUSTOM_PARSE,
-        'truncate' => FSQL_FUNC_NORMAL,
-        'unix_timestamp' => FSQL_FUNC_NORMAL,
-        'weekday' => FSQL_FUNC_NORMAL,
-        'year' => FSQL_FUNC_NORMAL,
+        'any' => self::AGGREGATE,
+        'avg' => self::AGGREGATE,
+        'concat' => self::NORMAL,
+        'concat_ws' => self::NORMAL,
+        'count' => self::AGGREGATE,
+        'curdate' => self::NORMAL,
+        'current_catalog' => self::NORMAL,
+        'current_schema' => self::NORMAL,
+        'curtime' => self::NORMAL,
+        'currval' => self::NORMAL,
+        'dayofweek' => self::NORMAL,
+        'dayofyear' => self::NORMAL,
+        'elt' => self::NORMAL,
+        'every' => self::AGGREGATE,
+        'extract' => self::CUSTOM_PARSE,
+        'from_unixtime' => self::NORMAL,
+        'last_insert_id' => self::NORMAL,
+        'left' => self::NORMAL,
+        'locate' => self::NORMAL,
+        'log' => self::NORMAL,
+        'log2' => self::NORMAL,
+        'log10' => self::NORMAL,
+        'lpad' => self::NORMAL,
+        'max' => self::AGGREGATE,
+        'min' => self::AGGREGATE,
+        'mod' => self::NORMAL,
+        'month' => self::NORMAL,
+        'nextval' => self::NORMAL,
+        'now' => self::NORMAL,
+        'overlay' => self::CUSTOM_PARSE,
+        'position' => self::CUSTOM_PARSE,
+        'repeat' => self::NORMAL,
+        'right' => self::NORMAL,
+        'row_count' => self::NORMAL,
+        'sign' => self::NORMAL,
+        'substring' => self::CUSTOM_PARSE,
+        'substring_index' => self::NORMAL,
+        'sum' => self::AGGREGATE,
+        'trim' => self::CUSTOM_PARSE,
+        'truncate' => self::NORMAL,
+        'unix_timestamp' => self::NORMAL,
+        'weekday' => self::NORMAL,
+        'year' => self::NORMAL,
     );
 
     private $renamed = array('conv' => 'base_convert', 'ceiling' => 'ceil', 'database' => 'current_catalog', 'degrees' => 'rad2deg',
@@ -78,14 +78,14 @@ class Functions
             if (isset($this->custom[$newName])) {
                 $type = $this->custom[$newName];
             } else {
-                $type = FSQL_FUNC_REGISTERED;
+                $type = self::REGISTERED;
             }
 
             return array($newName, $type);
         } elseif (isset($this->custom[$function])) {
             return array($function, $this->custom[$function]);
         } elseif (in_array($function, $this->allowed)) {
-            return array($function, FSQL_FUNC_REGISTERED);
+            return array($function, self::REGISTERED);
         } else {
             return false;
         }

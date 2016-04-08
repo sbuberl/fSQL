@@ -26,23 +26,23 @@ class ResultSetTest extends BaseTest
         $empty = array();
         $results = new ResultSet(array('myColumn'), $empty);
 
-        $this->assertEquals($empty, $results->fetchAll(FSQL_NUM));
-        $this->assertEquals($empty, $results->fetchAll(FSQL_ASSOC));
-        $this->assertEquals($empty, $results->fetchAll(FSQL_BOTH));
+        $this->assertEquals($empty, $results->fetchAll(ResultSet::FETCH_NUM));
+        $this->assertEquals($empty, $results->fetchAll(ResultSet::FETCH_ASSOC));
+        $this->assertEquals($empty, $results->fetchAll(ResultSet::FETCH_BOTH));
     }
 
     public function testFetchAll()
     {
         $results = new ResultSet(self::$columns, self::$entries);
 
-        $this->assertEquals(self::$entries, $results->fetchAll(FSQL_NUM));
+        $this->assertEquals(self::$entries, $results->fetchAll(ResultSet::FETCH_NUM));
 
-        $assocResult = $results->fetchAll(FSQL_ASSOC);
+        $assocResult = $results->fetchAll(ResultSet::FETCH_ASSOC);
         foreach ($assocResult as $entry) {
             $this->assertEquals(array_combine(self::$columns, $entry), $entry);
         }
 
-        $bothResult = $results->fetchAll(FSQL_BOTH);
+        $bothResult = $results->fetchAll(ResultSet::FETCH_BOTH);
         foreach ($assocResult as $entry) {
             $this->assertEquals(array_merge($entry, array_combine(self::$columns, $entry)), $entry);
         }

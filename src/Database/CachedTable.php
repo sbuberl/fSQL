@@ -5,6 +5,7 @@ namespace FSQL\Database;
 use FSQL\File;
 use FSQL\LockableFile;
 use FSQL\MicrotimeLockFile;
+use FSQL\Types;
 
 class CachedTable extends Table
 {
@@ -68,7 +69,7 @@ class CachedTable extends Table
             }
 
             $restraint = '';
-            if ($type === FSQL_TYPE_ENUM) {
+            if ($type === Types::ENUM) {
                 $restraint = "'".implode("','", $column['restraint'])."'";
             } elseif ($auto) {
                 $restraint = implode(',', $column['restraint']);
@@ -160,9 +161,9 @@ class CachedTable extends Table
                     $default = $matches[5];
                     $null = (int) $matches[7];
 
-                    if ($type === FSQL_TYPE_INTEGER) {
+                    if ($type === Types::INTEGER) {
                         $default = (int) $default;
-                    } elseif ($type === FSQL_TYPE_FLOAT) {
+                    } elseif ($type === Types::FLOAT) {
                         $default = (float) $default;
                     } elseif ($default{0} == "'" && substr($default, -1) == "'") {
                         $default = substr($default, 1, -1);
@@ -173,7 +174,7 @@ class CachedTable extends Table
                     if ($auto === 1 && !empty($restraintString)) {
                         list($current, $always, $start, $increment, $min, $max, $cycle) = explode(',', $restraintString);
                         $restraint = array((int) $current, (int) $always, (int) $start, (int) $increment, (int) $min, (int) $max, (int) $cycle);
-                    } elseif ($type === FSQL_TYPE_ENUM && preg_match_all("/'(.*?(?<!\\\\))'/", $restraintString, $enumMatches) !== false) {
+                    } elseif ($type === Types::ENUM && preg_match_all("/'(.*?(?<!\\\\))'/", $restraintString, $enumMatches) !== false) {
                         $restraint = $enumMatches[1];
                     } else {
                         $restraint = array();
@@ -278,7 +279,7 @@ class CachedTable extends Table
                                 $number = (int) $number;
                             }
                             $entries[$row][$m] = $number;
-                        } elseif ($columnDefs[$m]['type'] === FSQL_TYPE_ENUM) {
+                        } elseif ($columnDefs[$m]['type'] === Types::ENUM) {
                             $index = (int) $matches[2][$m];
                             $entries[$row][$m] = $index > 0 ? $columnDefs[$m]['restraint'][$index] : '';
                         } else {
@@ -349,7 +350,7 @@ class CachedTable extends Table
             foreach ($entry as $key => $value) {
                 if ($value === null) {
                     $value = 'NULL';
-                } elseif ($columnDefs[$key]['type'] === FSQL_TYPE_ENUM) {
+                } elseif ($columnDefs[$key]['type'] === Types::ENUM) {
                     $value = (int) array_search($value, $columnDefs[$key]['restraint']);
                 } elseif (is_string($value)) {
                     $value = "'$value'";

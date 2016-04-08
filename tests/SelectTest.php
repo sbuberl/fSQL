@@ -4,6 +4,7 @@ require_once __DIR__.'/BaseTest.php';
 
 use FSQL\Database\CachedTable;
 use FSQL\Environment;
+use FSQL\ResultSet;
 
 class SelectTest extends BaseTest
 {
@@ -117,7 +118,7 @@ class SelectTest extends BaseTest
         $result = $this->fsql->query('SELECT * FROM customers');
         $this->assertTrue($result !== false);
 
-        $results = $this->fsql->fetch_all($result, FSQL_NUM);
+        $results = $this->fsql->fetch_all($result, ResultSet::FETCH_NUM);
         $this->assertEquals(self::$entries1, $results);
     }
 
@@ -172,7 +173,7 @@ class SelectTest extends BaseTest
         $result = $this->fsql->query('SELECT * FROM customers ORDER BY 3, 2');
         $this->assertTrue($result !== false);
 
-        $results = $this->fsql->fetch_all($result, FSQL_NUM);
+        $results = $this->fsql->fetch_all($result, ResultSet::FETCH_NUM);
         $tosort = array(array(2, true, true), array(1, true, true));
         $this->assertTrue($this->isArrayKeySorted($results, $tosort));
     }
@@ -201,7 +202,7 @@ class SelectTest extends BaseTest
         $result = $this->fsql->query('SELECT firstName, lastName FROM customers ORDER BY lastName, firstName');
         $this->assertTrue($result !== false);
 
-        $results = $this->fsql->fetch_all($result, FSQL_NUM);
+        $results = $this->fsql->fetch_all($result, ResultSet::FETCH_NUM);
         $tosort = array(array(1, true, true), array(0, true, true));
         $this->assertTrue($this->isArrayKeySorted($results, $tosort));
     }
@@ -230,7 +231,7 @@ class SelectTest extends BaseTest
         $result = $this->fsql->query('SELECT * FROM customers ORDER BY lastName ASC, firstName DESC');
         $this->assertTrue($result !== false);
 
-        $results = $this->fsql->fetch_all($result, FSQL_NUM);
+        $results = $this->fsql->fetch_all($result, ResultSet::FETCH_NUM);
         $tosort = array(array(2, true, true), array(1, false, true));
         $this->assertTrue($this->isArrayKeySorted($results, $tosort));
     }
@@ -246,7 +247,7 @@ class SelectTest extends BaseTest
         $result = $this->fsql->query('SELECT * FROM customers ORDER BY lastName NULLS FIRST, firstName NULLS LAST');
         $this->assertTrue($result !== false);
 
-        $results = $this->fsql->fetch_all($result, FSQL_NUM);
+        $results = $this->fsql->fetch_all($result, ResultSet::FETCH_NUM);
         $tosort = array(array(2, true, true), array(1, true, false));
         $this->assertTrue($this->isArrayKeySorted($results, $tosort));
     }
@@ -262,7 +263,7 @@ class SelectTest extends BaseTest
         $result = $this->fsql->query('SELECT * FROM customers OFFSET 5 ROWS');
         $this->assertTrue($result !== false);
 
-        $results = $this->fsql->fetch_all($result, FSQL_NUM);
+        $results = $this->fsql->fetch_all($result, ResultSet::FETCH_NUM);
 
         $this->assertEquals(array_slice(self::$entries1, 5), $results);
     }
@@ -278,7 +279,7 @@ class SelectTest extends BaseTest
         $result = $this->fsql->query('SELECT * FROM customers OFFSET 5 ROWS FETCH FIRST ROW ONLY');
         $this->assertTrue($result !== false);
 
-        $results = $this->fsql->fetch_all($result, FSQL_NUM);
+        $results = $this->fsql->fetch_all($result, ResultSet::FETCH_NUM);
         $this->assertEquals(array_slice(self::$entries1, 5, 1), $results);
     }
 
@@ -293,7 +294,7 @@ class SelectTest extends BaseTest
         $result = $this->fsql->query('SELECT * FROM customers OFFSET 5 ROWS FETCH FIRST 3 ROWS ONLY');
         $this->assertTrue($result !== false);
 
-        $results = $this->fsql->fetch_all($result, FSQL_NUM);
+        $results = $this->fsql->fetch_all($result, ResultSet::FETCH_NUM);
         $this->assertEquals(array_slice(self::$entries1, 5, 3), $results);
     }
 
@@ -308,7 +309,7 @@ class SelectTest extends BaseTest
         $result = $this->fsql->query('SELECT * FROM customers FETCH NEXT 3 ROWS ONLY');
         $this->assertTrue($result !== false);
 
-        $results = $this->fsql->fetch_all($result, FSQL_NUM);
+        $results = $this->fsql->fetch_all($result, ResultSet::FETCH_NUM);
         $this->assertEquals(array_slice(self::$entries1, 0, 3), $results);
     }
 
@@ -349,7 +350,7 @@ class SelectTest extends BaseTest
         $result = $this->fsql->query('SELECT * FROM customers LIMIT 5');
         $this->assertTrue($result !== false);
 
-        $results = $this->fsql->fetch_all($result, FSQL_NUM);
+        $results = $this->fsql->fetch_all($result, ResultSet::FETCH_NUM);
         $this->assertEquals(array_slice(self::$entries1, 0, 5), $results);
     }
 
@@ -364,7 +365,7 @@ class SelectTest extends BaseTest
         $result = $this->fsql->query('SELECT * FROM customers LIMIT 4 OFFSET 3');
         $this->assertTrue($result !== false);
 
-        $results = $this->fsql->fetch_all($result, FSQL_NUM);
+        $results = $this->fsql->fetch_all($result, ResultSet::FETCH_NUM);
         $this->assertEquals(array_slice(self::$entries1, 3, 4), $results);
     }
 
@@ -379,7 +380,7 @@ class SelectTest extends BaseTest
         $result = $this->fsql->query('SELECT * FROM customers LIMIT 3, 4');
         $this->assertTrue($result !== false);
 
-        $results = $this->fsql->fetch_all($result, FSQL_NUM);
+        $results = $this->fsql->fetch_all($result, ResultSet::FETCH_NUM);
         $this->assertEquals(array_slice(self::$entries1, 3, 4), $results);
     }
 }

@@ -2,26 +2,6 @@
 
 namespace FSQL;
 
-define('FSQL_ASSOC', 1);
-define('FSQL_NUM', 2);
-define('FSQL_BOTH', 3);
-
-define('FSQL_EXTENSION', '.cgi');
-
-define('FSQL_TYPE_DATE', 'd');
-define('FSQL_TYPE_DATETIME', 'dt');
-define('FSQL_TYPE_ENUM', 'e');
-define('FSQL_TYPE_FLOAT', 'f');
-define('FSQL_TYPE_INTEGER', 'i');
-define('FSQL_TYPE_STRING', 's');
-define('FSQL_TYPE_TIME', 't');
-
-define('FSQL_WHERE_NORMAL', 2);
-define('FSQL_WHERE_NORMAL_AGG', 3);
-define('FSQL_WHERE_ON', 4);
-define('FSQL_WHERE_HAVING', 8);
-define('FSQL_WHERE_HAVING_AGG', 9);
-
 define('FSQL_TRUE', 3);
 define('FSQL_FALSE', 0);
 define('FSQL_NULL', 1);
@@ -42,6 +22,12 @@ use FSQL\Statements\CreateTableLike;
 
 class Environment
 {
+    private static $WHERE_NORMAL = 2;
+    private static $WHERE_NORMAL_AGG = 3;
+    private static $WHERE_ON = 4;
+    private static $WHERE_HAVING = 8;
+    private static $WHERE_HAVING_AGG = 9;
+
     private $updatedTables = array();
     private $lockedTables = array();
     private $databases = array();
@@ -517,24 +503,24 @@ class Environment
 
                         $type = strtoupper($type);
                         if (in_array($type, array('CHAR', 'VARCHAR', 'BINARY', 'VARBINARY', 'TEXT', 'TINYTEXT', 'MEDIUMTEXT', 'LONGTEXT', 'SET', 'BLOB', 'TINYBLOB', 'MEDIUMBLOB', 'LONGBLOB'))) {
-                            $type = FSQL_TYPE_STRING;
+                            $type = Types::STRING;
                         } elseif (in_array($type, array('BIT', 'TINYINT', 'SMALLINT', 'MEDIUMINT', 'INT', 'INTEGER', 'BIGINT'))) {
-                            $type = FSQL_TYPE_INTEGER;
+                            $type = Types::INTEGER;
                         } elseif (in_array($type, array('FLOAT', 'REAL', 'DOUBLE', 'DOUBLE PRECISION', 'NUMERIC', 'DEC', 'DECIMAL'))) {
-                            $type = FSQL_TYPE_FLOAT;
+                            $type = Types::FLOAT;
                         } else {
                             switch ($type) {
                                 case 'DATETIME':
-                                    $type = FSQL_TYPE_DATETIME;
+                                    $type = Types::DATETIME;
                                     break;
                                 case 'DATE':
-                                    $type = FSQL_TYPE_DATE;
+                                    $type = Types::DATE;
                                     break;
                                 case 'ENUM':
-                                    $type = FSQL_TYPE_ENUM;
+                                    $type = Types::ENUM;
                                     break;
                                 case 'TIME':
-                                    $type = FSQL_TYPE_TIME;
+                                    $type = Types::TIME;
                                     break;
                                 default:
                                     break;
@@ -568,7 +554,7 @@ class Environment
                         }
 
                         if ($auto) {
-                            if ($type !== FSQL_TYPE_INTEGER && $type !== FSQL_TYPE_FLOAT) {
+                            if ($type !== Types::INTEGER && $type !== Types::FLOAT) {
                                 return $this->set_error('Identity columns and autoincrement only allowed on numeric columns');
                             } elseif ($hasIdentity) {
                                 return $this->set_error('A table can only have one identity column.');
@@ -576,7 +562,7 @@ class Environment
                             $hasIdentity = true;
                         }
 
-                        if ($type === FSQL_TYPE_ENUM) {
+                        if ($type === Types::ENUM) {
                             preg_match_all("/'(.*?(?<!\\\\))'/", $Columns[6][$c], $values);
                             $restraint = $values[1];
                         }
@@ -626,9 +612,9 @@ class Environment
     {
         if ($null) {
             return 'NULL';
-        } elseif ($type === FSQL_TYPE_STRING) {
+        } elseif ($type === Types::STRING) {
             return '';
-        } elseif ($type === FSQL_TYPE_FLOAT) {
+        } elseif ($type === Types::FLOAT) {
             return 0.0;
         } else {
             return 0;
@@ -1024,7 +1010,7 @@ class Environment
 
             $where = null;
             if (isset($matches[4])) {
-                $where = $this->build_where($matches[4], array('tables' => array($table_name => $columns), 'offsets' => array($table_name => 0), 'columns' => $columnNames));
+                $where = $this->build_where($matches[4], array('tables' => array($table_name => $columns), 'offsets' => array($table_name => 0), 'columns' => $columnNames), self::$WHERE_NORMAL);
                 if (!$where) {
                     return $this->set_error('Invalid WHERE clause: '.$this->error_msg);
                 }
@@ -1186,7 +1172,7 @@ EOC;
             $new_offset = count($joined_info['columns']);
             $joined_info['columns'] = array_merge($joined_info['columns'], $dest_table_column_names);
 
-            $conditional = $this->build_where($on_clause, $joined_info, FSQL_WHERE_ON);
+            $conditional = $this->build_where($on_clause, $joined_info, self::$WHERE_ON);
             if (!$conditional) {
                 return $this->set_error('Invalid ON clause: '.$this->error_msg);
             }
@@ -1216,7 +1202,7 @@ EOC;
 
                     $updateCode = '';
                     foreach ($sets as $set) {
-                        $valueExpr = $this->build_expression($set[1], $joined_info, FSQL_WHERE_NORMAL);
+                        $valueExpr = $this->build_expression($set[1], $joined_info, self::$WHERE_NORMAL);
                         if ($valueExpr === false) {
                             return false;
                         }
@@ -1226,7 +1212,7 @@ EOC;
                     $updateCode = 'return array('.substr($updateCode, 0, -2).');';
 
                     if (!empty($andClause)) {
-                        $updateAndExpr = $this->build_where($andClause, $joined_info, FSQL_WHERE_NORMAL);
+                        $updateAndExpr = $this->build_where($andClause, $joined_info, self::$WHERE_NORMAL);
                         if (!$updateAndExpr) {
                             return $this->set_error('Invalid AND clause: '.$this->error_msg);
                         }
@@ -1254,7 +1240,7 @@ EOC;
 
                     $insertCode = '';
                     foreach ($valuesList as $value) {
-                        $valueExpr = $this->build_expression($value, $joined_info, FSQL_WHERE_NORMAL);
+                        $valueExpr = $this->build_expression($value, $joined_info, self::$WHERE_NORMAL);
                         if ($valueExpr === false) {
                             return false;
                         }
@@ -1263,7 +1249,7 @@ EOC;
                     $insertCode = 'return array('.substr($insertCode, 0, -2).');';
 
                     if (!empty($andClause)) {
-                        $insertAndExpr = $this->build_where($andClause, $joined_info, FSQL_WHERE_NORMAL);
+                        $insertAndExpr = $this->build_where($andClause, $joined_info, self::$WHERE_NORMAL);
                         if (!$insertAndExpr) {
                             return $this->set_error('Invalid AND clause: '.$this->error_msg);
                         }
@@ -1351,7 +1337,7 @@ EOC;
                 $function_name = strtolower($colmatches[5]);
                 $type = 'function';
                 list($alias, $function_type) = $this->lookup_function($function_name);
-                if ($function_type & FSQL_FUNC_AGGREGATE) {
+                if ($function_type & Functions::AGGREGATE) {
                     $oneAggregate = true;
                 }
             } elseif (!empty($colmatches[7])) {  // column
@@ -1452,7 +1438,7 @@ EOC;
                             $new_offset = count($joined_info['columns']);
                             $joined_info['columns'] = array_merge($joined_info['columns'], $join_table_column_names);
 
-                            $conditional = $this->build_where($conditions, $joined_info, FSQL_WHERE_ON);
+                            $conditional = $this->build_where($conditions, $joined_info, self::$WHERE_ON);
                             if (!$conditional) {
                                 return $this->set_error('Invalid ON/USING clause: '.$this->error_msg);
                             }
@@ -1514,7 +1500,7 @@ EOC;
 
         if (preg_match('/\s*WHERE\s+((?:(?!\b(HAVING|(?:GROUP|ORDER)s+BY|OFFSET|FETCH|LIMIT)\b).)+)/Ais', $query, $additional, 0, $currentPos)) {
             $currentPos += strlen($additional[0]);
-            $where = $this->build_where($additional[1], $joined_info);
+            $where = $this->build_where($additional[1], $joined_info, self::$WHERE_NORMAL);
             if (!$where) {
                 return $this->set_error('Invalid WHERE clause: '.$this->error_msg);
             }
@@ -1555,7 +1541,7 @@ EOC;
                 $singleRow = true;
             }
 
-            $having = $this->build_where($additional[1], $joined_info, FSQL_WHERE_HAVING);
+            $having = $this->build_where($additional[1], $joined_info, self::$WHERE_HAVING);
             if (!$having) {
                 return $this->set_error('Invalid HAVING clause: '.$this->error_msg);
             }
@@ -1670,7 +1656,7 @@ EOC;
                         $selected_columns[] = $select_alias;
                         break;
                     case 'function':
-                        $expr = $this->build_expression($select_value, $joined_info);
+                        $expr = $this->build_expression($select_value, $joined_info, self::$WHERE_NORMAL);
                         if ($expr === false) {
                             return false;
                         }
@@ -1890,7 +1876,7 @@ EOT;
         return $result;
     }
 
-    private function build_expression($exprStr, $join_info, $where_type = FSQL_WHERE_NORMAL)
+    private function build_expression($exprStr, $join_info, $where_type)
     {
         $expr = false;
 
@@ -1908,13 +1894,13 @@ EOT;
             }
 
             list($function, $type) = $functionInfo;
-            $isAggregate = $type & FSQL_FUNC_AGGREGATE;
+            $isAggregate = $type & Functions::AGGREGATE;
 
             if ($isAggregate) {
                 $paramExprs[] = '$group';
             }
 
-            if ($type & FSQL_FUNC_CUSTOM_PARSE) {
+            if ($type & Functions::CUSTOM_PARSE) {
                 $originalFunction = $function;
                 $parseFunction = "parse_{$function}_function";
                 $parsedData = $this->$parseFunction($join_info, $where_type | 1, $params);
@@ -1965,7 +1951,7 @@ EOT;
 
             $final_param_list = implode(',', $paramExprs);
 
-            if ($type != FSQL_FUNC_REGISTERED) {
+            if ($type != Functions::REGISTERED) {
                 $expr = "\$this->functions->$function($final_param_list)";
             } else {
                 $expr = "$function($final_param_list)";
@@ -1981,14 +1967,14 @@ EOT;
                     if (isset($table_columns[$column])) {
                         if (isset($join_info['offsets'][$table_name])) {
                             $colIndex = array_search($column, array_keys($table_columns)) + $join_info['offsets'][$table_name];
-                            if ($where_type === FSQL_WHERE_HAVING) { // column/alias in grouping clause
+                            if ($where_type === self::$WHERE_HAVING) { // column/alias in grouping clause
                                 if (in_array($colIndex, $join_info['group_columns'])) {
                                     $expr = "\$group[0][$colIndex]";
                                 } else {
                                     return $this->set_error("Column $column is not a grouped column");
                                 }
                             } else {
-                                $expr = ($where_type & FSQL_WHERE_ON) ? "\$left_entry[$colIndex]" : "\$entry[$colIndex]";
+                                $expr = ($where_type & self::$WHERE_ON) ? "\$left_entry[$colIndex]" : "\$entry[$colIndex]";
                             }
                         } else {
                             $colIndex = array_search($column, array_keys($table_columns));
@@ -1997,7 +1983,7 @@ EOT;
                     } else {
                         return $this->set_error("Unknown column $column for table $table_name");
                     }
-                } elseif ($where_type & FSQL_WHERE_ON && $table_name === '{{left}}') {
+                } elseif ($where_type & self::$WHERE_ON && $table_name === '{{left}}') {
                     $colIndex = $this->find_exactly_one($joined_info, $column, 'expression');
                     if ($colIndex === false) {
                         return false;
@@ -2019,14 +2005,14 @@ EOT;
                 if ($colIndex === false) {
                     return false;
                 }
-                if ($where_type === FSQL_WHERE_HAVING) { // column/alias in grouping clause
+                if ($where_type === self::$WHERE_HAVING) { // column/alias in grouping clause
                     if (in_array($colIndex, $join_info['group_columns'])) {
                         $expr = "\$group[0][$colIndex]";
                     } else {
                         return $this->set_error("Column $column is not a grouped column");
                     }
                 } else {
-                    $expr = ($where_type & FSQL_WHERE_ON) ? "\$left_entry[$colIndex]" : "\$entry[$colIndex]";
+                    $expr = ($where_type & self::$WHERE_ON) ? "\$left_entry[$colIndex]" : "\$entry[$colIndex]";
                 }
             }
         }
@@ -2037,7 +2023,7 @@ EOT;
         // string
         elseif (preg_match("/\A'.*?(?<!\\\\)'\Z/is", $exprStr)) {
             $expr = $exprStr;
-        } elseif (($where_type & FSQL_WHERE_ON) && preg_match('/\A{{left}}\.`?([^\W\d]\w*)`?/is', $exprStr, $matches)) {
+        } elseif (($where_type & self::$WHERE_ON) && preg_match('/\A{{left}}\.`?([^\W\d]\w*)`?/is', $exprStr, $matches)) {
             $colIndex = $this->find_exactly_one($join_info, $column, 'expression');
             if ($colIndex === false) {
                 return false;
@@ -2064,7 +2050,7 @@ EOT;
         return $keys[0];
     }
 
-    private function build_where($statement, $join_info, $where_type = FSQL_WHERE_NORMAL)
+    private function build_where($statement, $join_info, $where_type)
     {
         if ($statement) {
             preg_match_all("/(\A\s*|\s+(?:AND|OR)\s+)(NOT\s+)?(\S+?)(\s*(?:!=|<>|>=|<=>?|>|<|=)\s*|\s+(?:IS(?:\s+NOT)?|(?:NOT\s+)?IN|(?:NOT\s+)?R?LIKE|(?:NOT\s+)?REGEXP)\s+)(\((.*?)\)|'.*?'|\S+)/is", $statement, $WHERE, PREG_SET_ORDER);
@@ -2205,7 +2191,7 @@ EOT;
             }
 
             if (isset($matches[2])) {
-                $where = $this->build_where($matches[2], array('tables' => array($table_name => $columns), 'offsets' => array($table_name => 0), 'columns' => $columnNames));
+                $where = $this->build_where($matches[2], array('tables' => array($table_name => $columns), 'offsets' => array($table_name => 0), 'columns' => $columnNames), self::$WHERE_NORMAL);
                 if (!$where) {
                     return $this->set_error('Invalid WHERE clause: '.$this->error_msg);
                 }
@@ -2434,30 +2420,30 @@ EOC;
     {
         if (strcasecmp($default, 'NULL')) {
             if (preg_match("/\A'(.*)'\Z/is", $default, $matches)) {
-                if ($type == FSQL_TYPE_INTEGER) {
+                if ($type == Types::INTEGER) {
                     $default = (int) $matches[1];
-                } elseif ($type == FSQL_TYPE_FLOAT) {
+                } elseif ($type == Types::FLOAT) {
                     $default = (float) $matches[1];
-                } elseif ($type == FSQL_TYPE_ENUM) {
+                } elseif ($type == Types::ENUM) {
                     if (in_array($default, $restraint)) {
                         $default = array_search($default, $restraint) + 1;
                     } else {
                         $default = 0;
                     }
-                } elseif ($type == FSQL_TYPE_STRING) {
+                } elseif ($type == Types::STRING) {
                     $default = $matches[1];
                 }
             } else {
-                if ($type == FSQL_TYPE_INTEGER) {
+                if ($type == Types::INTEGER) {
                     $default = (int) $default;
-                } elseif ($type == FSQL_TYPE_FLOAT) {
+                } elseif ($type == Types::FLOAT) {
                     $default = (float) $default;
-                } elseif ($type == FSQL_TYPE_ENUM) {
+                } elseif ($type == Types::ENUM) {
                     $default = (int) $default;
                     if ($default < 0 || $default > count($restraint)) {
                         return $this->set_error('Numeric ENUM value out of bounds');
                     }
-                } elseif ($type == FSQL_TYPE_STRING) {
+                } elseif ($type == Types::STRING) {
                     $default = "'".$matches[1]."'";
                 }
             }
@@ -2895,7 +2881,7 @@ EOC;
         }
 
         switch ($columnDef['type']) {
-            case FSQL_TYPE_INTEGER:
+            case Types::INTEGER:
                 if (preg_match("/\A'\s*((?:[\+\-]\s*)?\d+(?:\.\d+)?)\s*'\Z/is", $value, $matches)) {
                     return (int) $matches[1];
                 } elseif (preg_match("/\A(?:[\+\-]\s*)?\d+(?:\.\d+)?\Z/is", $value)) {
@@ -2903,7 +2889,7 @@ EOC;
                 } else {
                     return $this->set_error('Invalid integer value for insert');
                 }
-            case FSQL_TYPE_FLOAT:
+            case Types::FLOAT:
                 if (preg_match("/\A'\s*((?:[\+\-]\s*)?\d+(?:\.\d+)?)\s*'\Z/is", $value, $matches)) {
                     return (float) $matches[1];
                 } elseif (preg_match("/\A(?:[\+\-]\s*)?\d+(?:\.\d+)?\Z/is", $value)) {
@@ -2911,7 +2897,7 @@ EOC;
                 } else {
                     return $this->set_error('Invalid float value for insert');
                 }
-            case FSQL_TYPE_ENUM:
+            case Types::ENUM:
                 if (preg_match("/\A'(.*?(?<!\\\\))'\Z/is", $value, $matches)) {
                     $value = $matches[1];
                 }
@@ -2930,7 +2916,7 @@ EOC;
                 } else {
                     return $columnDef['default'];
                 }
-            case FSQL_TYPE_DATE:
+            case Types::DATE:
                 list($year, $month, $day) = array('0000', '00', '00');
                 if (preg_match("/\A'((?:[1-9]\d)?\d{2})-(0[1-9]|1[0-2])-([0-2]\d|3[0-1])(?: (?:[0-1]\d|2[0-3]):(?:[0-5]\d):(?:[0-5]\d))?'\Z/is", $value, $matches)
                 || preg_match("/\A'((?:[1-9]\d)?\d{2})(0[1-9]|1[0-2])([0-2]\d|3[0-1])(?:(?:[0-1]\d|2[0-3])(?:[0-5]\d)(?:[0-5]\d))?'\Z/is", $value, $matches)) {
@@ -3150,12 +3136,12 @@ EOC;
         return $new_join_data;
     }
 
-    public function fetch_all(ResultSet $results, $type = FSQL_ASSOC)
+    public function fetch_all(ResultSet $results, $type = ResultSet::FETCH_ASSOC)
     {
         return $results->fetchAll($type);
     }
 
-    public function fetch_array(ResultSet $results, $type = FSQL_ASSOC)
+    public function fetch_array(ResultSet $results, $type = ResultSet::FETCH_ASSOC)
     {
         return $results->fetchArray($type);
     }
@@ -3218,14 +3204,14 @@ EOC;
     private function typecode_to_name($type)
     {
         switch ($type) {
-            case FSQL_TYPE_DATE:                return 'DATE';
-            case FSQL_TYPE_DATETIME:            return 'DATETIME';
-            case FSQL_TYPE_ENUM:                return 'ENUM';
-            case FSQL_TYPE_FLOAT:                return 'DOUBLE';
-            case FSQL_TYPE_INTEGER:                return 'INTEGER';
-            case FSQL_TYPE_STRING:                return 'TEXT';
-            case FSQL_TYPE_TIME:                return 'TIME';
-            default:                            return false;
+            case Types::DATE:                return 'DATE';
+            case Types::DATETIME:            return 'DATETIME';
+            case Types::ENUM:                return 'ENUM';
+            case Types::FLOAT:               return 'DOUBLE';
+            case Types::INTEGER:             return 'INTEGER';
+            case Types::STRING:              return 'TEXT';
+            case Types::TIME:                return 'TIME';
+            default:                         return false;
         }
     }
 }
