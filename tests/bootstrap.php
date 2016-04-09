@@ -6,11 +6,11 @@ $cacheFunction = null;
 
 print_r(ini_get_all());
 
-if (extension_loaded('Zend OpCache') && ini_get('opcache.enable')) {
+if (extension_loaded('Zend OpCache') && ini_get('opcache.enable_cli')) {
     if (function_exists('opcache_compile_file')) {
         $cacheFunction = 'opcache_compile_file';
     }
-} elseif (extension_loaded('apc') && ini_get('apc.enabled')) {
+} elseif (extension_loaded('apc') && ini_get('apc.enable_cli')) {
     $cacheFunction = 'apc_compile_file';
 }
 
