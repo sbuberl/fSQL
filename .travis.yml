@@ -10,14 +10,6 @@ php:
 install:
     - composer install -o
 
-before_script:
-    - echo "extension = apc.so" >> ~/.phpenv/versions/5.3/etc/php.ini
-    - echo "apc.enable_cli=1" >> ~/.phpenv/versions/5.3/etc/php.ini
-    - echo "extension = apc.so" >> ~/.phpenv/versions/5.4/etc/php.ini
-    - echo "apc.enable_cli=1" >> ~/.phpenv/versions/5.4/etc/php.ini
-    - echo "opcache.enable_cli=1" >> ~/.phpenv/versions/5.5/etc/php.ini
-    - echo "opcache.enable_cli=1" >> ~/.phpenv/versions/5.6/etc/php.ini
-
 script: phpunit --configuration phpunit.xml --coverage-clover=coverage.xml
 
 after_script:
