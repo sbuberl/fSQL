@@ -4,6 +4,8 @@ require 'vendor/autoload.php';
 
 $cacheFunction = null;
 
+print_r(ini_get_all());
+
 if (extension_loaded('Zend OpCache') && ini_get('opcache.enable')) {
     if (function_exists('opcache_compile_file')) {
         $cacheFunction = 'opcache_compile_file';
