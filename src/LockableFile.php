@@ -23,6 +23,16 @@ class LockableFile
         $this->file->close();
     }
 
+    public function readerCount()
+    {
+        return $this->rcount;
+    }
+
+    public function writerCount()
+    {
+        return $this->wcount;
+    }
+
     public function file()
     {
         return $this->file;
@@ -54,7 +64,7 @@ class LockableFile
             ++$this->rcount;
 
             return true;
-        } elseif ($this->lock === LOCK_UN) {/* New lock */
+        } else { /* New lock */
             if ($this->file->open('rb')) {
                 $this->lock(LOCK_SH);
                 $this->rcount = 1;
@@ -72,12 +82,12 @@ class LockableFile
             ++$this->wcount;
 
             return true;
-        } elseif ($this->lock === LOCK_SH) {/* Upgrade a lock*/
+        } elseif ($this->lock === LOCK_SH) {/* Upgrade a read lock*/
             $this->lock(LOCK_EX);
-            ++$this->wcount;
+            $this->wcount = 1;
 
             return true;
-        } elseif ($this->lock === LOCK_UN) {/* New lock */
+        } else {/* New lock */
             if ($this->file->open('c+b')) {
                 $this->lock(LOCK_EX);
                 $this->wcount = 1;
@@ -105,19 +115,17 @@ class LockableFile
 
     public function releaseWrite()
     {
-        if ($this->lock !== LOCK_UN) {
-            if ($this->lock === LOCK_EX) {/* Write lock */
-                --$this->wcount;
-                if ($this->wcount === 0) {
-                    // no writers left.
+        if ($this->lock === LOCK_EX) {/* Write lock */
+            --$this->wcount;
+            if ($this->wcount === 0) {
+                // no writers left.
 
-                    if ($this->rcount > 0) {
-                        // only readers left.  downgrade lock.
-                        $this->lock(LOCK_SH);
-                    } else {
-                        // no readers or writers left, release lock
-                        $this->close();
-                    }
+                if ($this->rcount > 0) {
+                    // only readers left.  downgrade lock.
+                    $this->lock(LOCK_SH);
+                } else {
+                    // no readers or writers left, release lock
+                    $this->close();
                 }
             }
         }
@@ -135,5 +143,7 @@ class LockableFile
     {
         $this->file->close();
         $this->lock = LOCK_UN;
+        $this->rcount = 0;
+        $this->wcount = 0;
     }
 }

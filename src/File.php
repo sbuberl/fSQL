@@ -40,14 +40,14 @@ class File
 
     public function open($mode)
     {
-        $this->handle = fopen($this->filePath, $mode);
+        $this->handle = @fopen($this->filePath, $mode);
 
         return $this->handle !== false;
     }
 
     public function lock($mode)
     {
-        flock($this->handle, $mode);
+        return flock($this->handle, $mode);
     }
 
     public function close()
