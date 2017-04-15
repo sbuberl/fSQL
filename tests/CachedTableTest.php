@@ -116,7 +116,7 @@ class CachedTablest extends BaseTest
     public function testGetEntriesEmpty()
     {
         $table = CachedTable::create($this->schema, 'blah', self::$columns);
-        $this->assertEmpty($table->getEntries());
+        $this->assertSame(array(), $table->getEntries());
     }
 
     public function testInsertRow()
