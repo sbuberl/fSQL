@@ -226,7 +226,7 @@ class CachedTable extends Table
         if ($this->dataLockFile->wasModified()) {
             $this->dataLockFile->accept();
 
-            $entries = null;
+            $entries = array();
             $this->dataFile->acquireRead();
             $dataHandle = $this->dataFile->getHandle();
 
@@ -242,7 +242,6 @@ class CachedTable extends Table
 
             if ($num_entries != 0) {
                 $skip = false;
-                $entries = array();
 
                 $columnDefs = array_values($this->getColumns());
                 for ($i = 0; $i < $num_entries; ++$i) {
