@@ -527,7 +527,7 @@ class Environment
                             }
                         }
 
-                        if (preg_match("/not\s+null/i", $options)) {
+                        if (preg_match("/\bnot\s+null\b/i", $options)) {
                             $null = 0;
                         } else {
                             $null = 1;
@@ -548,7 +548,7 @@ class Environment
                             array_unshift($restraint, $start, $always);
 
                             $null = 0;
-                        } elseif (preg_match('/\s+AUTO_?INCREMENT\b/i', $options)) {
+                        } elseif (preg_match('/\bAUTO_?INCREMENT\b/i', $options)) {
                             $auto = 1;
                             $restraint = array(1, 0, 1, 1, 1, PHP_INT_MAX, 0);
                         }
@@ -577,7 +577,7 @@ class Environment
                             $default = $this->get_type_default_value($type, $null);
                         }
 
-                        if (preg_match('/(PRIMARY KEY|UNIQUE(?: KEY)?)/is', $options, $keymatches)) {
+                        if (preg_match('/(PRIMARY\s+KEY|UNIQUE(?:\s+KEY)?)/is', $options, $keymatches)) {
                             $keytype = strtolower($keymatches[1]);
                             $key = $keytype{0};
                         } else {
@@ -2425,6 +2425,7 @@ EOC;
                 } elseif ($type == Types::FLOAT) {
                     $default = (float) $matches[1];
                 } elseif ($type == Types::ENUM) {
+                    $default = $matches[1];
                     if (in_array($default, $restraint)) {
                         $default = array_search($default, $restraint) + 1;
                     } else {
