@@ -159,7 +159,7 @@ class CachedTablest extends BaseTest
         $this->assertEquals($table->getEntries(), self::$entries);
 
         $table->rollback();
-        $this->assertEmpty($table->getEntries());
+        $this->assertSame(array(), $table->getEntries());
     }
 
     public function testCommitNothing()
@@ -198,7 +198,7 @@ class CachedTablest extends BaseTest
 
         $table->truncate();
         $this->assertTrue($table->exists());
-        $this->assertEmpty($table->getEntries());
+        $this->assertSame(array(), $table->getEntries());
     }
 
     public function testGetIdentityNone()
@@ -230,7 +230,7 @@ class CachedTablest extends BaseTest
         $this->assertNull($table->getIdentity());
 
         $columns = $table->getColumns();
-        $this->assertEmpty($columns['id']['restraint']);
+        $this->assertSame(array(), $columns['id']['restraint']);
     }
 
     public function testGetCursor()
