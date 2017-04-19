@@ -109,7 +109,11 @@ class Schema
     {
         if (!isset($this->loadedTables[$table_name])) {
             $table = new CachedTable($this, $table_name);
-            $this->loadedTables[$table_name] = $table;
+            if($table->exists())
+            {
+                $this->loadedTables[$table_name] = $table;
+            }
+            return $table;
         }
 
         return $this->loadedTables[$table_name];
