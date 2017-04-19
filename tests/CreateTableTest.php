@@ -40,6 +40,29 @@ class CreateTableTest extends BaseTest
             'uniform' => array('type' => 'e', 'auto' => 0, 'default' => null, 'key' => 'n', 'null' => 1, 'restraint' => array('S','M','L','XL')),
         );
         $this->assertEquals($expected, $table->getColumns());
+        $this->assertFalse($table->temporary());
+    }
+
+    public function testCreateTableTemp()
+    {
+
+        $result = $this->fsql->query("CREATE TEMPORARY TABLE students (id INTEGER, firstName TEXT, lastName TEXT, zip INT, gpa DOUBLE, uniform ENUM('S','M','L','XL'))");
+        $this->assertTrue($result);
+
+        $table = $this->fsql->current_schema()->getTable('students');
+        $expected = array(
+            'id' => array('type' => 'i', 'auto' => 0, 'default' => null, 'key' => 'n', 'null' => 1, 'restraint' => array()),
+            'firstName' => array('type' => 's', 'auto' => 0, 'default' => null, 'key' => 'n', 'null' => 1, 'restraint' => array()),
+            'lastName' => array('type' => 's', 'auto' => 0, 'default' => null, 'key' => 'n', 'null' => 1, 'restraint' => array()),
+            'zip' => array('type' => 'i', 'auto' => 0, 'default' => null, 'key' => 'n', 'null' => 1, 'restraint' => array()),
+            'gpa' => array('type' => 'f', 'auto' => 0, 'default' => null, 'key' => 'n', 'null' => 1, 'restraint' => array()),
+            'uniform' => array('type' => 'e', 'auto' => 0, 'default' => null, 'key' => 'n', 'null' => 1, 'restraint' => array('S','M','L','XL')),
+        );
+
+        $taleColumns = $table->getColumns();
+
+        $this->assertEquals($expected, $table->getColumns());
+        $this->assertTrue($table->temporary());
     }
 
     public function testCreateTableColumnNameRepeat()
