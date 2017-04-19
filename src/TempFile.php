@@ -13,6 +13,11 @@ class TempFile extends File
         $this->handle = $handle;
     }
 
+    public function __destruct()
+    {
+        parent::close();
+    }
+
     public function exists()
     {
         return true;
