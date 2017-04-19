@@ -141,11 +141,12 @@ class CachedTable extends Table
             $this->columnsFile->acquireRead();
             $columnsHandle = $this->columnsFile->getHandle();
 
+            fseek($columnsHandle, 0, SEEK_SET);
+
             $line = fgets($columnsHandle);
             if (!preg_match("/^(\d+)/", $line, $matches)) {
                 $this->columnsFile->releaseRead();
                 $this->columnsLockFile->releaseRead();
-
                 return false;
             }
 
@@ -186,7 +187,6 @@ class CachedTable extends Table
                 } else {
                     $this->columnsFile->releaseRead();
                     $this->columnsLockFile->releaseRead();
-
                     return false;
                 }
             }
@@ -230,6 +230,7 @@ class CachedTable extends Table
             $this->dataFile->acquireRead();
             $dataHandle = $this->dataFile->getHandle();
 
+            fseek($dataHandle, 0, SEEK_SET);
             $line = fgets($dataHandle);
             if (!preg_match("/^(\d+)/", $line, $matches)) {
                 $this->dataFile->releaseRead();
