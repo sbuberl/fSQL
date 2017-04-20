@@ -341,8 +341,6 @@ class Environment
             case 'RENAME':      return $this->query_rename($query);
             case 'TRUNCATE':    return $this->query_truncate($query);
             case 'DROP':        return $this->query_drop($query);
-            case 'BACKUP':      return $this->query_backup($query);
-            case 'RESTORE':     return $this->query_restore($query);
             case 'USE':         return $this->query_use($query);
             case 'DESC':
             case 'DESCRIBE':    return $this->query_describe($query);
@@ -2662,62 +2660,6 @@ EOC;
         }
 
         return true;
-    }
-
-    private function query_backup($query)
-    {
-        if (preg_match("/\ABACKUP\s+TABLE\s+(.*?)\s+TO\s+'(.*?)'\s*[;]?\Z/is", $query, $matches)) {
-            if (substr($matches[2], -1) != '/') {
-                $matches[2] .= '/';
-            }
-
-            $tables = explode(',', $matches[1]);
-            foreach ($tables as $table) {
-                if (preg_match("/(`?(?:[^\W\d]\w*`?\.`?){0,2}[^\W\d]\w*`?)/is", $table, $table_name_matches)) {
-                    $table_name_pieces = $this->parse_relation_name($table_name_matches[1]);
-                    $tableObj = $this->find_table($table_name_pieces);
-                    if ($tableObj === false) {
-                        return false;
-                    } elseif ($tableObj->temporary()) {
-                        return $this->set_error('Can not backup a temporary table');
-                    }
-
-                    $tableObj->copyTo($matches[2]);
-                } else {
-                    return $this->set_error('Parse error in table listing');
-                }
-            }
-        } else {
-            return $this->set_error('Invalid BACKUP query');
-        }
-    }
-
-    private function query_restore($query)
-    {
-        if (preg_match("/\ARESTORE\s+TABLE\s+(.*?)\s+FROM\s+'(.*?)'\s*[;]?\Z/is", $query, $matches)) {
-            if (substr($matches[2], -1) != '/') {
-                $matches[2] .= '/';
-            }
-
-            $tables = explode(',', $matches[1]);
-            foreach ($tables as $table) {
-                if (preg_match("/(`?(?:[^\W\d]\w*`?\.`?){0,2}[^\W\d]\w*`?)/is", $table, $table_name_matches)) {
-                    $table_name_pieces = $this->parse_relation_name($table_name_matches[1]);
-                    $tableObj = $this->find_table($table_name_pieces);
-                    if ($tableObj === false) {
-                        return false;
-                    } elseif ($tableObj->temporary()) {
-                        return $this->set_error('Can not restore a temporary table');
-                    }
-
-                    $tableObj->copyFrom($matches[2]);
-                } else {
-                    return $this->set_error('Parse error in table listing');
-                }
-            }
-        } else {
-            return $this->set_error('Invalid RESTORE Query');
-        }
     }
 
     private function query_show($query)

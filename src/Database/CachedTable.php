@@ -114,24 +114,6 @@ class CachedTable extends Table
         $this->entries = array();
     }
 
-    public function copyTo($destination)
-    {
-        $destName = $destination.$this->name;
-        copy($this->columnsFile->getPath(), $destName.'.columns.cgi');
-        copy($this->columnsLockFile->getPath(), $destName.'.columns.lock.cgi');
-        copy($this->dataFile->getPath(), $destName.'.data.cgi');
-        copy($this->dataLockFile->getPath(), $destName.'.data.lock.cgi');
-    }
-
-    public function copyFrom($source)
-    {
-        $sourceName = $source.$this->name;
-        copy($sourceName.'.columns.cgi', $this->columnsFile->getPath());
-        copy($sourceName.'.columns.lock.cgi', $this->columnsLockFile->getPath());
-        copy($sourceName.'.data.cgi', $this->dataFile->getPath());
-        copy($sourceName.'.data.lock.cgi', $this->dataLockFile->getPath());
-    }
-
     public function getColumns()
     {
         $this->columnsLockFile->acquireRead();
