@@ -4,8 +4,8 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#composer-lock-the-lock-file",
         "This file is @generated automatically"
     ],
-    "hash": "a04688da9e06607fad05703c1f56eb06",
-    "content-hash": "b655cff63bdc74b5da369fdde61eb9d0",
+    "hash": "35ef986a10c56896354af39fa765d521",
+    "content-hash": "d39fac091c78017c62e2a047ff27a855",
     "packages": [],
     "packages-dev": [
         {
@@ -1214,32 +1214,40 @@
         },
         {
             "name": "symfony/yaml",
-            "version": "v2.6.0",
-            "target-dir": "Symfony/Component/Yaml",
+            "version": "v3.2.7",
             "source": {
                 "type": "git",
-                "url": "https://github.com/symfony/Yaml.git",
-                "reference": "51c845cf3e4bfc182d1d5c05ed1c7338361d86f8"
+                "url": "https://github.com/symfony/yaml.git",
+                "reference": "62b4cdb99d52cb1ff253c465eb1532a80cebb621"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/symfony/Yaml/zipball/51c845cf3e4bfc182d1d5c05ed1c7338361d86f8",
-                "reference": "51c845cf3e4bfc182d1d5c05ed1c7338361d86f8",
+                "url": "https://api.github.com/repos/symfony/yaml/zipball/62b4cdb99d52cb1ff253c465eb1532a80cebb621",
+                "reference": "62b4cdb99d52cb1ff253c465eb1532a80cebb621",
                 "shasum": ""
             },
             "require": {
-                "php": ">=5.3.3"
+                "php": ">=5.5.9"
+            },
+            "require-dev": {
+                "symfony/console": "~2.8|~3.0"
+            },
+            "suggest": {
+                "symfony/console": "For validating YAML files using the lint command"
             },
             "type": "library",
             "extra": {
                 "branch-alias": {
-                    "dev-master": "2.6-dev"
+                    "dev-master": "3.2-dev"
                 }
             },
             "autoload": {
-                "psr-0": {
+                "psr-4": {
                     "Symfony\\Component\\Yaml\\": ""
-                }
+                },
+                "exclude-from-classmap": [
+                    "/Tests/"
+                ]
             },
             "notification-url": "https://packagist.org/downloads/",
             "license": [
@@ -1247,17 +1255,17 @@
             ],
             "authors": [
                 {
-                    "name": "Symfony Community",
-                    "homepage": "http://symfony.com/contributors"
-                },
-                {
                     "name": "Fabien Potencier",
                     "email": "fabien@symfony.com"
+                },
+                {
+                    "name": "Symfony Community",
+                    "homepage": "https://symfony.com/contributors"
                 }
             ],
             "description": "Symfony Yaml Component",
-            "homepage": "http://symfony.com",
-            "time": "2014-11-20 13:24:23"
+            "homepage": "https://symfony.com",
+            "time": "2017-03-20 09:45:15"
         },
         {
             "name": "webmozart/assert",
@@ -1316,7 +1324,7 @@
     "prefer-stable": false,
     "prefer-lowest": false,
     "platform": {
-        "php": ">=5.3"
+        "php": ">=5.6"
     },
     "platform-dev": []
 }
