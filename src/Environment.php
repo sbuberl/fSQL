@@ -502,7 +502,7 @@ class Environment
                         }
 
                         $type = strtoupper($type);
-                        if (in_array($type, array('CHAR', 'VARCHAR', 'BINARY', 'VARBINARY', 'TEXT', 'TINYTEXT', 'MEDIUMTEXT', 'LONGTEXT', 'SET', 'BLOB', 'TINYBLOB', 'MEDIUMBLOB', 'LONGBLOB'))) {
+                        if (in_array($type, array('CHAR', 'VARCHAR', 'BINARY', 'VARBINARY', 'TEXT', 'TINYTEXT', 'MEDIUMTEXT', 'LONGTEXT', 'BLOB', 'TINYBLOB', 'MEDIUMBLOB', 'LONGBLOB'))) {
                             $type = Types::STRING;
                         } elseif (in_array($type, array('BIT', 'TINYINT', 'SMALLINT', 'MEDIUMINT', 'INT', 'INTEGER', 'BIGINT'))) {
                             $type = Types::INTEGER;
@@ -523,7 +523,7 @@ class Environment
                                     $type = Types::TIME;
                                     break;
                                 default:
-                                    break;
+                                    return $this->set_error("Column '{$name}' has unknown type '{$type}'");
                             }
                         }
 
