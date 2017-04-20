@@ -25,7 +25,42 @@ class CreateTableTest extends BaseTest
         $this->fsql->select_db('db1');
     }
 
-    public function testCreateTableTypesOnly()
+    public function testAlreadyExists()
+    {
+        $schema = $this->fsql->current_schema();
+
+        CachedTable::create($schema, "students", self::$columns1);
+
+        $result = $this->fsql->query("CREATE TABLE students (id INTEGER, firstName TEXT, lastName TEXT, zip INT, gpa DOUBLE, uniform ENUM('S','M','L','XL'))");
+        $this->assertFalse($result);
+        $this->assertEquals('Relation db1.public.students already exists', trim($this->fsql->error()));
+    }
+
+    public function testIfNotExists()
+    {
+        $schema = $this->fsql->current_schema();
+
+        CachedTable::create($schema, "students", self::$columns1);
+
+        $result = $this->fsql->query("CREATE TABLE IF NOT EXISTS students (id INTEGER, firstName TEXT, lastName TEXT, zip INT, gpa DOUBLE, uniform ENUM('S','M','L','XL'))");
+        $this->assertTrue($result);;
+    }
+
+    public function testColumnNameRepeat()
+    {
+        $result = $this->fsql->query("CREATE TABLE students (id INTEGER, firstName TEXT, lastName TEXT, zip INT, gpa DOUBLE, id VARCHAR, uniform ENUM('S','M','L','XL'))");
+        $this->assertFalse($result);
+        $this->assertEquals("Column 'id' redefined", trim($this->fsql->error()));
+    }
+
+    public function testUnsupportedType()
+    {
+        $result = $this->fsql->query("CREATE TABLE students (id SET('a','b','c'), firstName TEXT, lastName TEXT, zip INT, gpa DOUBLE, uniform ENUM('S','M','L','XL'))");
+        $this->assertFalse($result);
+        $this->assertEquals("Column 'id' has unknown type 'SET'", trim($this->fsql->error()));
+    }
+
+    public function testTypesOnly()
     {
         $result = $this->fsql->query("CREATE TABLE students (id INTEGER, firstName TEXT, lastName TEXT, zip INT, gpa DOUBLE, uniform ENUM('S','M','L','XL'))");
         $this->assertTrue($result);
@@ -43,9 +78,8 @@ class CreateTableTest extends BaseTest
         $this->assertFalse($table->temporary());
     }
 
-    public function testCreateTableTemp()
+    public function testTemp()
     {
-
         $result = $this->fsql->query("CREATE TEMPORARY TABLE students (id INTEGER, firstName TEXT, lastName TEXT, zip INT, gpa DOUBLE, uniform ENUM('S','M','L','XL'))");
         $this->assertTrue($result);
 
@@ -65,14 +99,7 @@ class CreateTableTest extends BaseTest
         $this->assertTrue($table->temporary());
     }
 
-    public function testCreateTableColumnNameRepeat()
-    {
-        $result = $this->fsql->query("CREATE TABLE students (id INTEGER, firstName TEXT, lastName TEXT, zip INT, gpa DOUBLE, id VARCHAR, uniform ENUM('S','M','L','XL'))");
-        $this->assertFalse($result);
-        $this->assertEquals("Column 'id' redefined", trim($this->fsql->error()));
-    }
-
-    public function testCreateTableNotNullNoDefaults()
+    public function testNotNullNoDefaults()
     {
         $result = $this->fsql->query("CREATE TABLE students (id INTEGER NOT NULL, firstName TEXT NOT NULL, lastName TEXT NOT NULL, zip INT NOT NULL, gpa DOUBLE NOT NULL, uniform ENUM('S','M','L','XL') NOT NULL)");
         $this->assertTrue($result);
@@ -89,7 +116,7 @@ class CreateTableTest extends BaseTest
         $this->assertEquals($expected, $table->getColumns());
     }
 
-    public function testCreateTableNotNullDefaults()
+    public function testNotNullDefaults()
     {
         $result = $this->fsql->query("CREATE TABLE students (id INTEGER NOT NULL DEFAULT 1, firstName TEXT NOT NULL DEFAULT 'John', lastName TEXT NOT NULL DEFAULT 'Smith', zip INT NOT NULL DEFAULT 90210, gpa DOUBLE NOT NULL DEFAULT 4.0, uniform ENUM('S','M','L','XL') NOT NULL DEFAULT 'M')");
         $this->assertTrue($result);
@@ -106,7 +133,7 @@ class CreateTableTest extends BaseTest
         $this->assertEquals($expected, $table->getColumns());
     }
 
-    public function testCreateTableKeysInColumns()
+    public function testKeysInColumns()
     {
         $result = $this->fsql->query("CREATE TABLE people (id INTEGER NOT NULL PRIMARY KEY, firstName TEXT, lastName TEXT UNIQUE KEY, zip INT, gpa DOUBLE, uniform ENUM('S','M','L','XL'))");
         $this->assertTrue($result);
@@ -123,7 +150,24 @@ class CreateTableTest extends BaseTest
         $this->assertEquals($expected, $table->getColumns());
     }
 
-    public function testCreateTableAutoIncrement()
+    public function testConstraintRows()
+    {
+        $result = $this->fsql->query("CREATE TABLE people (id INTEGER NOT NULL, firstName TEXT, lastName TEXT UNIQUE KEY, zip INT, gpa DOUBLE, uniform ENUM('S','M','L','XL'), PRIMARY KEY(id), UNIQUE(lastName))");
+        $this->assertTrue($result);
+
+        $table = $this->fsql->current_schema()->getTable('people');
+        $expected = array(
+            'id' => array('type' => 'i', 'auto' => 0, 'default' => null, 'key' => 'p', 'null' => 0, 'restraint' => array()),
+            'firstName' => array('type' => 's', 'auto' => 0, 'default' => null, 'key' => 'n', 'null' => 1, 'restraint' => array()),
+            'lastName' => array('type' => 's', 'auto' => 0, 'default' => null, 'key' => 'u', 'null' => 1, 'restraint' => array()),
+            'zip' => array('type' => 'i', 'auto' => 0, 'default' => null, 'key' => 'n', 'null' => 1, 'restraint' => array()),
+            'gpa' => array('type' => 'f', 'auto' => 0, 'default' => null, 'key' => 'n', 'null' => 1, 'restraint' => array()),
+            'uniform' => array('type' => 'e', 'auto' => 0, 'default' => null, 'key' => 'n', 'null' => 1, 'restraint' => array('S','M','L','XL')),
+        );
+        $this->assertEquals($expected, $table->getColumns());
+    }
+
+    public function testAutoIncrement()
     {
         $result = $this->fsql->query('CREATE TABLE people (id INTEGER AUTO_INCREMENT PRIMARY KEY, firstName TEXT NOT NULL, lastName TEXT NOT NULL, zip INT, gpa FLOAT)');
         $this->assertTrue($result);
@@ -140,7 +184,7 @@ class CreateTableTest extends BaseTest
         $this->assertEquals('id', $identity->getColumnName());
     }
 
-    public function testCreateTableIdentityAlwaysNoValues()
+    public function testIdentityAlwaysNoValues()
     {
         $result = $this->fsql->query('CREATE TABLE people (id INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY, firstName TEXT NOT NULL, lastName TEXT NOT NULL, zip INT, gpa FLOAT)');
         $this->assertTrue($result);
@@ -157,7 +201,7 @@ class CreateTableTest extends BaseTest
         $this->assertEquals('id', $identity->getColumnName());
     }
 
-    public function testCreateTableIdentityAlways()
+    public function testIdentityAlways()
     {
         $result = $this->fsql->query('CREATE TABLE people (id INTEGER GENERATED ALWAYS AS IDENTITY(START WITH 7, INCREMENT BY 2, MINVALUE 3, MAXVALUE 10000, CYCLE) PRIMARY KEY, firstName TEXT NOT NULL, lastName TEXT NOT NULL, zip INT, gpa FLOAT)');
         $this->assertTrue($result);
@@ -174,7 +218,7 @@ class CreateTableTest extends BaseTest
         $this->assertEquals('id', $identity->getColumnName());
     }
 
-    public function testCreateTableIdentityByDefaultNoValues()
+    public function testIdentityByDefaultNoValues()
     {
         $result = $this->fsql->query('CREATE TABLE people (id INTEGER GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY, firstName TEXT NOT NULL, lastName TEXT NOT NULL, zip INT, gpa FLOAT)');
         $this->assertTrue($result);
@@ -191,7 +235,7 @@ class CreateTableTest extends BaseTest
         $this->assertEquals('id', $identity->getColumnName());
     }
 
-    public function testCreateTableIdentityByDefault()
+    public function testIdentityByDefault()
     {
         $result = $this->fsql->query('CREATE TABLE people (id INTEGER GENERATED BY DEFAULT AS IDENTITY(START WITH 7, INCREMENT BY 2, MINVALUE 3, MAXVALUE 10000, CYCLE) PRIMARY KEY, firstName TEXT NOT NULL, lastName TEXT NOT NULL, zip INT, gpa FLOAT)');
         $this->assertTrue($result);
