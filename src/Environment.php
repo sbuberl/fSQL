@@ -356,7 +356,6 @@ class Environment
     {
         if (preg_match("/\ABEGIN(?:\s+WORK)?\s*[;]?\Z/is", $query, $matches)) {
             $this->begin();
-
             return true;
         } else {
             return $this->set_error('Invalid BEGIN query');
@@ -367,7 +366,6 @@ class Environment
     {
         if (preg_match("/\ASTART\s+TRANSACTION\s*[;]?\Z/is", $query, $matches)) {
             $this->begin();
-
             return true;
         } else {
             return $this->set_error('Invalid START query');
@@ -376,9 +374,8 @@ class Environment
 
     private function query_commit($query)
     {
-        if (preg_match("/\ACOMMIT\s*[;]?\Z/is", $query, $matches)) {
+        if (preg_match("/\ACOMMIT(?:\s+WORK)?\s*[;]?\Z/is", $query, $matches)) {
             $this->commit();
-
             return true;
         } else {
             return $this->set_error('Invalid COMMIT query');
@@ -387,9 +384,8 @@ class Environment
 
     private function query_rollback($query)
     {
-        if (preg_match("/\AROLLBACK\s*[;]?\Z/is", $query, $matches)) {
+        if (preg_match("/\AROLLBACK(?:\s+WORK)?\s*[;]?\Z/is", $query, $matches)) {
             $this->rollback();
-
             return true;
         } else {
             return $this->set_error('Invalid ROLLBACK query');
