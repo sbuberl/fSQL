@@ -263,7 +263,7 @@ class CachedTable extends Table
                             $entries[$row][$m] = $number;
                         } elseif ($columnDefs[$m]['type'] === Types::ENUM) {
                             $index = (int) $matches[2][$m];
-                            $entries[$row][$m] = $index > 0 ? $columnDefs[$m]['restraint'][$index] : '';
+                            $entries[$row][$m] = $index > 0 ? $columnDefs[$m]['restraint'][$index - 1] : '';
                         } else {
                             $entries[$row][$m] = $matches[3][$m];
                         }
@@ -333,7 +333,8 @@ class CachedTable extends Table
                 if ($value === null) {
                     $value = 'NULL';
                 } elseif ($columnDefs[$key]['type'] === Types::ENUM) {
-                    $value = (int) array_search($value, $columnDefs[$key]['restraint']);
+                    $index = array_search($value, $columnDefs[$key]['restraint']);
+                    $value = $index !== FALSE ? $index + 1 : 0;
                 } elseif (is_string($value)) {
                     $value = "'$value'";
                 }
