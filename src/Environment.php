@@ -28,7 +28,7 @@ class Environment
     private static $WHERE_HAVING = 8;
     private static $WHERE_HAVING_AGG = 9;
 
-    private $updatedTables = array();
+    private $transaction = null;
     private $lockedTables = array();
     private $databases = array();
     private $currentDB = null;
@@ -38,7 +38,7 @@ class Environment
     private $join_lambdas = array();
     private $affected = 0;
     private $insert_id = 0;
-    private $auto = 1;
+    private $auto = true;
     private $functions;
 
     public function __construct()
@@ -295,29 +295,53 @@ class Environment
         $this->lockedTables = array();
     }
 
-    private function begin()
+    public function is_auto_commit()
     {
-        $this->auto = 0;
-        $this->unlock_tables();
-        $this->commit();
+        return $this->auto;
     }
 
-    private function commit()
+    public function auto_commit($auto)
     {
-        $this->auto = 1;
-        foreach (array_keys($this->updatedTables) as $index) {
-            $this->updatedTables[$index]->commit();
-        }
-        $this->updatedTables = array();
+        $this->auto = (bool) $auto;
     }
 
-    private function rollback()
+    public function get_transaction()
     {
-        $this->auto = 1;
-        foreach (array_keys($this->updatedTables) as $index) {
-            $this->updatedTables[$index]->rollback();
+        return $this->transaction;
+    }
+
+    public function begin()
+    {
+        // commit any current transaction
+        if($this->transaction !== null) {
+            $this->transaction->commit();
+            $this->unlock_tables();
         }
-        $this->updatedTables = array();
+
+        $this->transaction = new fSQLTransaction($this);
+        return $this->transaction->begin();
+    }
+
+    public function commit()
+    {
+        if($this->transaction !== null) {
+            $success = $this->transaction->commit();
+            $this->transaction = null;
+            return $success;
+        } else {
+            return $this->_set_error('Can commit because not inside a transaction');
+        }
+    }
+
+    public function rollback()
+    {
+        if($this->transaction !== null) {
+            $success = $this->transaction->rollback();
+            $this->transaction = null;
+            return $success;
+        } else {
+            return $this->_set_error('Can rollback because not inside a transaction');
+        }
     }
 
     public function query($query)
