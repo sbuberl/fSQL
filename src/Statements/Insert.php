@@ -32,6 +32,7 @@ class Insert extends DataModifyStatement
             return false;
 
         $tableColumns = $table->getColumns();
+        $tableCursor = $table->getCursor();
 
         ////Load Columns & Data for the Table
         $colIndex = 0;

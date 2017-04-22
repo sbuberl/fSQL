@@ -809,6 +809,8 @@ class Environment
         }
 
         $table_name_pieces = $this->parse_relation_name($full_table_name);
+        if(!$table_name_pieces)
+            return false;
         $table = $this->find_table($table_name_pieces);
         if ($table === false) {
             return false;
@@ -817,7 +819,6 @@ class Environment
         }
 
         $tableColumns = $table->getColumns();
-        $tableCursor = $table->getCursor();
 
         $check_names = 1;
         $replace = !strcasecmp($command, 'REPLACE');
@@ -851,6 +852,7 @@ class Environment
 
         preg_match_all("/\s*(DEFAULT|AUTO|NULL|'.*?(?<!\\\\)'|(?:[\+\-]\s*)?\d+(?:\.\d+)?|[^$])\s*(?:$|,)/is", $get_data_from, $newData);
         $dataValues = $newData[1];
+        $Data = [];
 
         if ($check_names == 1) {
             $i = 0;

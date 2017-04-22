@@ -9,7 +9,7 @@ abstract class DataModifyStatement extends Statement
 {
 	public $affected = 0;
 
-	function commit(Table $table)
+	protected function commit(Table $table)
 	{
 		// if auto-commit, tell the table to commit and be done with it
 		if($this->environment->is_auto_commit())
