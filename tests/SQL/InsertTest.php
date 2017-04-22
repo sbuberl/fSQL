@@ -46,4 +46,27 @@ class InsertTest extends BaseTest
         $expected = [ [ 1, 'John', 'Smith', 90210, 3.6, 4 ] ];
         $this->assertEquals($expected, $table->getEntries());
     }
+
+    public function testTransactionCommit()
+    {
+        $table = CachedTable::create($this->fsql->current_schema(), 'students', self::$columns1);
+        $this->fsql->begin();
+        $result = $this->fsql->query("INSERT INTO students VALUES (1, 'John', 'Smith', 90210, 3.6, 'XL');");
+        $result = $this->fsql->query("INSERT INTO students VALUES (2, 'Arthur', 'Dent', 12345, 2.5, 'M');");
+        $this->fsql->commit();
+
+        $expected = [ [ 1, 'John', 'Smith', 90210, 3.6, 4 ], [2, 'Arthur', 'Dent', 12345, 2.5, 2] ];
+        $this->assertEquals($expected, $table->getEntries());
+    }
+
+    public function testTransactionRollback()
+    {
+        $table = CachedTable::create($this->fsql->current_schema(), 'students', self::$columns1);
+        $this->fsql->begin();
+        $result = $this->fsql->query("INSERT INTO students VALUES (1, 'John', 'Smith', 90210, 3.6, 'XL');");
+        $result = $this->fsql->query("INSERT INTO students VALUES (2, 'Arthur', 'Dent', 12345, 2.5, 'M');");
+        $this->fsql->rollback();
+
+        $this->assertSame([], $table->getEntries());
+    }
 }
