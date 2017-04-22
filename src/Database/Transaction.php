@@ -12,23 +12,23 @@ class Transaction
 
     private $previousAutoValue;
 
-    function fSQLTransaction(Environment $environment)
+    public function __construct(Environment $environment)
     {
         $this->environment = $environment;
     }
 
-    function begin()
+    public function begin()
     {
         $this->previousAutoValue = $this->environment->is_auto_commit();
         $this->environment->auto_commit(false);
         return true;
     }
 
-    function commit()
+    private function finish(callable $operation)
     {
-        if(!empty($this->updatedTables)) {
-            foreach (array_keys($this->updatedTables) as $index ) {
-                $this->updatedTables[$index]->commit();
+        if(!empty($this->updatedTables)){
+            foreach (array_keys($this->updatedTables) as $index) {
+                $operation($this->updatedTables[$index]);
             }
             $this->updatedTables = [];
         }
@@ -36,23 +36,25 @@ class Transaction
         return true;
     }
 
-    function markTableAsUpdated(&$table)
+    public function commit()
     {
-        $table_fqn = $table->getFullName();
+        return $this->finish(function (Table $table) {
+            return $table->commit();
+        });
+    }
+
+    public function markTableAsUpdated(Table $table)
+    {
+        $table_fqn = $table->fullName();
         if(!isset($this->updatedTables[$table_fqn]))
             $this->updatedTables[$table_fqn] = $table;
         return true;
     }
 
-    function rollback()
+    public function rollback()
     {
-        if(!empty($this->updatedTables)){
-            foreach (array_keys($this->updatedTables) as $index ) {
-                $this->updatedTables[$index]->rollback();
-            }
-            $this->updatedTables = [];
-        }
-        $this->environment->auto_commit($this->previousAutoValue);
-        return true;
+        return $this->finish(function (Table $table) {
+            return $table->rollback();
+        });
     }
 }

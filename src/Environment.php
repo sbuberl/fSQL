@@ -18,6 +18,7 @@ require 'vendor/autoload.php';
 use FSQL\Database\Database;
 use FSQL\Database\Sequence;
 use FSQL\Database\Table;
+use FSQL\Database\Transaction;
 use FSQL\Statements\CreateTableLike;
 
 class Environment
@@ -318,7 +319,7 @@ class Environment
             $this->unlock_tables();
         }
 
-        $this->transaction = new fSQLTransaction($this);
+        $this->transaction = new Transaction($this);
         return $this->transaction->begin();
     }
 
@@ -329,7 +330,7 @@ class Environment
             $this->transaction = null;
             return $success;
         } else {
-            return $this->_set_error('Can commit because not inside a transaction');
+            return $this->set_error('Can commit because not inside a transaction');
         }
     }
 
@@ -340,7 +341,7 @@ class Environment
             $this->transaction = null;
             return $success;
         } else {
-            return $this->_set_error('Can rollback because not inside a transaction');
+            return $this->set_error('Can rollback because not inside a transaction');
         }
     }
 
