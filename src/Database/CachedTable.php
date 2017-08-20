@@ -144,7 +144,7 @@ class CachedTable extends Table
                     $default = $matches[5];
                     $null = (int) $matches[7];
 
-                    if ($type === Types::INTEGER) {
+                    if ($type === Types::INTEGER || $type === Types::ENUM) {
                         $default = (int) $default;
                     } elseif ($type === Types::FLOAT) {
                         $default = (float) $default;
