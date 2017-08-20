@@ -1,5 +1,5 @@
 {
-    "name": "fsql/fsql",
+    "name": "sbuberl/fsql",
     "description": "Library for running SQL queries on flat files",
     "homepage": "http://www.fsql.org",
     "support": {
