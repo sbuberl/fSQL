@@ -2,6 +2,8 @@
 
 namespace FSQL\Database;
 
+use FSQL\Functions;
+
 abstract class Table implements Relation
 {
     protected $name;
@@ -77,18 +79,49 @@ abstract class Table implements Relation
     public function getIdentity()
     {
         if ($this->identity === null) {
+            $colIndex = 0;
             foreach ($this->getColumns() as $columnName => $column) {
                 if ($column['auto']) {
+                    if (empty($column['restraint'])) {  // upgrade old AUTOINCREMENT column to IDENTITY
+                        $this->upgradeAuto($colIndex, $columnName);
+                    }
+
                     $this->identity = new Identity($this, $columnName);
                     $this->identity->load();
                     break;
                 }
+                ++$colIndex;
             }
         }
 
         return $this->identity;
     }
 
+    private function upgradeAuto($colIndex, $columnName)
+    {
+        $always = false;
+        $increment = 1;
+        $min = 1;
+        $max = PHP_INT_MAX;
+        $cycle = false;
+
+        $entries = $this->getEntries();
+
+        $functions = new Functions($this->schema->database()->environment());
+        $maxFunc = [$functions, 'max'];
+
+        $largest = $maxFunc($entries, $colIndex, '');
+        if ($max !== null) {
+            $insert_id = $largest + 1;
+        } else {
+            $insert_id = 1;
+        }
+
+        $tableColumns = $this->getColumns();
+        $tableColumns[$columnName]['restraint'] = array($insert_id, $always, $min, $increment, $min, $max, $cycle);
+        $this->setColumns($tableColumns);
+
+    }
     public function dropIdentity()
     {
         $this->getIdentity();

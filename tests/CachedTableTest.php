@@ -23,6 +23,15 @@ class CachedTablest extends BaseTest
         'gpa' => array('type' => 'f', 'auto' => 0, 'default' => 0.0, 'key' => 'n', 'null' => 0, 'restraint' => array()),
     );
 
+    private static $columns3 = array(
+        'id' => array('type' => 'i', 'auto' => 1, 'default' => 0, 'key' => 'p', 'null' => 0, 'restraint' => array()),
+        'username' => array('type' => 's', 'auto' => 0, 'default' => '', 'key' => 'n', 'null' => 0, 'restraint' => array()),
+        'age' => array('type' => 'i', 'auto' => 0, 'default' => 18, 'key' => 'n', 'null' => 0, 'restraint' => array()),
+        'address' => array('type' => 's', 'auto' => 0, 'default' => '', 'key' => 'n', 'null' => 0, 'restraint' => array()),
+        'salary' => array('type' => 'f', 'auto' => 0, 'default' => 0.0, 'key' => 'n', 'null' => 0, 'restraint' => array()),
+        'size' => array('type' => 'e', 'auto' => 0, 'default' => 0, 'key' => 'n', 'null' => 1, 'restraint' => array('small', 'medium', 'large')),
+    );
+
     private static $entries = array(
         array(1, 'bill', 32, '1234 Someplace Lane', 112334.0, 'medium'),
         array(2, 'smith', 27, '1031 Elm Street', 11.11, 'small'),
@@ -206,6 +215,25 @@ class CachedTablest extends BaseTest
         $table = CachedTable::create($this->schema, 'blah', self::$columns2);
         $identity = $table->getIdentity();
         $this->assertNull($identity);
+    }
+
+    public function testGetIdentityUpgrade()
+    {
+        $table = CachedTable::create($this->schema, 'students', self::$columns3);
+        $table->insertRow(self::$entries[0]);
+        $table->insertRow(self::$entries[1]);
+
+        $identity = $table->getIdentity();
+        $this->assertNotNull($identity);
+
+        $identity = $table->getIdentity();
+        $this->assertEquals($identity->current, 3);
+        $this->assertFalse($identity->getAlways());
+        $this->assertEquals($identity->start, 1);
+        $this->assertEquals($identity->increment, 1);
+        $this->assertEquals($identity->min, 1);
+        $this->assertEquals($identity->max, PHP_INT_MAX);
+        $this->assertFalse($identity->cycle);
     }
 
     public function testGetIdentity()

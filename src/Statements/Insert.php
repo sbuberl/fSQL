@@ -36,7 +36,6 @@ class Insert extends DataModifyStatement
 
         ////Load Columns & Data for the Table
         $colIndex = 0;
-        $maxFunc = $this->environment->lookup_function('max');
         foreach ($tableColumns as $columnName => $columnDef) {
             unset($delete);
 
@@ -46,27 +45,7 @@ class Insert extends DataModifyStatement
             ////Check for Auto_Increment/Identity
             if ($columnDef['auto'] == 1) {
                 $identity = $table->getIdentity();
-                if (empty($columnDef['restraint'])) {  // upgrade old AUTOINCREMENT column to IDENTITY
-                    $always = false;
-                    $increment = 1;
-                    $min = 1;
-                    $max = PHP_INT_MAX;
-                    $cycle = false;
-
-                    $entries = $table->getEntries();
-
-                    $max = $maxFunc($entries, $colIndex, '');
-                    if ($max !== null) {
-                        $insert_id = $max + 1;
-                    } else {
-                        $insert_id = 1;
-                    }
-                    $this->insert_id = $insert_id;
-                    $newEntry[$colIndex] = $this->insert_id;
-
-                    $tableColumns[$columnName]['restraint'] = array($insert_id, $always, $min, $increment, $min, $max, $cycle);
-                    $table->setColumns($tableColumns);
-                } elseif (empty($data) || !strcasecmp($data, 'AUTO') || !strcasecmp($data, 'NULL') || !strcasecmp($data, 'DEFAULT')) {
+                if (empty($data) || !strcasecmp($data, 'AUTO') || !strcasecmp($data, 'NULL') || !strcasecmp($data, 'DEFAULT')) {
                     $insert_id = $identity->nextValueFor();
                     if ($insert_id !== false) {
                         $this->insert_id = $insert_id;
