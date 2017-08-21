@@ -66,7 +66,7 @@ class Insert extends DataModifyStatement
 
                     $tableColumns[$columnName]['restraint'] = array($insert_id, $always, $min, $increment, $min, $max, $cycle);
                     $table->setColumns($tableColumns);
-                } elseif (empty($data) || !strcasecmp($data, 'AUTO') || !strcasecmp($data, 'NULL')) {
+                } elseif (empty($data) || !strcasecmp($data, 'AUTO') || !strcasecmp($data, 'NULL') || !strcasecmp($data, 'DEFAULT')) {
                     $insert_id = $identity->nextValueFor();
                     if ($insert_id !== false) {
                         $this->insert_id = $insert_id;
@@ -87,7 +87,11 @@ class Insert extends DataModifyStatement
             }
             ///Check for NULL Values
             elseif ((!strcasecmp($data, 'NULL') && !$columnDef['null']) || empty($data) || !strcasecmp($data, 'DEFAULT')) {
-                $newEntry[$colIndex] = $columnDef['default'];
+                $data = $this->environment->parse_value($columnDef, $columnDef['default']);
+                if ($data === false) {
+                    return false;
+                }
+                $newEntry[$colIndex] = $data;
             } else {
                 $data = $this->environment->parse_value($columnDef, $data);
                 if ($data === false) {
