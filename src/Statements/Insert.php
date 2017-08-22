@@ -25,7 +25,8 @@ class Insert extends DataModifyStatement
     {
         $this->affected = 0;
 
-        $newEntry = array();
+        $newEntry = [];
+        $keyColumns = [];
 
         $table = $this->environment->find_table($this->tableFullName);
         if(!$table)
@@ -37,8 +38,6 @@ class Insert extends DataModifyStatement
         ////Load Columns & Data for the Table
         $colIndex = 0;
         foreach ($tableColumns as $columnName => $columnDef) {
-            unset($delete);
-
             $data = trim($this->data[$columnName]);
             $data = strtr($data, array('$' => '$', '$' => '\\$'));
 
@@ -81,41 +80,43 @@ class Insert extends DataModifyStatement
 
             ////See if it is a PRIMARY KEY or UNIQUE
             if ($columnDef['key'] == 'p' || $columnDef['key'] == 'u') {
-                if ($this->replace) {
-                    $delete = array();
-                    $tableCursor->rewind();
-                    $n = 0;
-                    while ($tableCursor->valid()) {
-                        $row = $tableCursor->current();
-                        if ($row[$colIndex] == $newEntry[$colIndex]) {
-                            $delete[] = $n;
-                        }
-                        $tableCursor->next();
-                        ++$n;
-                    }
-                    if (!empty($delete)) {
-                        foreach ($delete as $d) {
-                            ++$this->affected;
-                            $table->deleteRow($d);
-                        }
-                    }
-                } else {
-                    $tableCursor->rewind();
-                    while ($tableCursor->valid()) {
-                        $row = $tableCursor->current();
-                        if ($row[$colIndex] == $newEntry[$colIndex]) {
-                            if (!$this->ignore) {
-                                return $this->environment->set_error("Duplicate value for unique column '{$columnName}'");
-                            } else {
-                                return true;
-                            }
-                        }
-                        $tableCursor->next();
-                    }
-                }
+                $keyColumns[$colIndex] = $columnName;
             }
 
             ++$colIndex;
+        }
+
+        foreach ($keyColumns as $colIndex => $columnName) {
+            if ($this->replace) {
+                $delete = array();
+                $tableCursor->rewind();
+                while ($tableCursor->valid()) {
+                    $row = $tableCursor->current();
+                    if ($row[$colIndex] == $newEntry[$colIndex]) {
+                        $delete[] = $tableCursor->key();
+                    }
+                    $tableCursor->next();
+                }
+                if (!empty($delete)) {
+                    foreach ($delete as $d) {
+                        ++$this->affected;
+                        $table->deleteRow($d);
+                    }
+                }
+            } else {
+                $tableCursor->rewind();
+                while ($tableCursor->valid()) {
+                    $row = $tableCursor->current();
+                    if ($row[$colIndex] == $newEntry[$colIndex]) {
+                        if (!$this->ignore) {
+                            return $this->environment->set_error("Duplicate value for unique column '{$columnName}'");
+                        } else {
+                            return true;
+                        }
+                    }
+                    $tableCursor->next();
+                }
+            }
         }
 
         $table->insertRow($newEntry);
