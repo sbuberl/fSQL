@@ -2,6 +2,7 @@
     "name": "sbuberl/fsql",
     "description": "Library for running SQL queries on flat files",
     "homepage": "http://www.fsql.org",
+    "license": "MIT",
     "support": {
         "issues": "https://github.com/sbuberl/fSQL/issues",
         "source": "https://github.com/sbuberl/fSQL"
