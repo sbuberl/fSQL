@@ -314,6 +314,8 @@ class CachedTable extends Table
         ftruncate($columnsHandle, 0);
         fwrite($columnsHandle, $toprint);
 
+        $this->columnsLockFile->write();
+
         $this->columnsFile->releaseWrite();
         $this->columnsLockFile->releaseWrite();
     }
@@ -344,6 +346,8 @@ class CachedTable extends Table
         }
 
         $this->dataFile->acquireWrite();
+
+        $this->dataLockFile->write();
 
         $dataHandle = $this->dataFile->getHandle();
         ftruncate($dataHandle, 0);
