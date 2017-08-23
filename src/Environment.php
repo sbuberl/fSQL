@@ -819,79 +819,133 @@ class Environment
         }
 
         $tableColumns = $table->getColumns();
+        $tableColumnNames = $table->getColumnNames();
 
-        $check_names = 1;
+        $check_names = true;
+        $isSetVersion = false;
         $replace = !strcasecmp($command, 'REPLACE');
 
-        // Column List present and VALUES list
-        if (preg_match("/^\(`?(.+?)`?\)\s+VALUES\s*\((.+)\)/is", $the_rest, $matches)) {
+        // Column List present?
+        if (preg_match("/^\(((`?[^\W\d]\w*`?\s*,\s*)*`?[^\W\d]\w*`?)\s*\)/is", $the_rest, $matches)) {
+            $the_rest = substr($the_rest, strlen($matches[0]));
             $Columns = preg_split("/`?\s*,\s*`?/s", $matches[1]);
-            $get_data_from = $matches[2];
-        }
-        // VALUES list but no column list
-        elseif (preg_match("/^VALUES\s*\((.+)\)/is", $the_rest, $matches)) {
-            $get_data_from = $matches[1];
-            $Columns = $table->getColumnNames();
-            $check_names = 0;
         }
         // SET syntax
         elseif (preg_match("/^SET\s+(.+)/is", $the_rest, $matches)) {
+            $the_rest = substr($the_rest, strlen($matches[0]));
             $SET = $this->parseSetClause($matches[1], $tableColumns);
-            $Columns = array();
-            $data_values = array();
+            $Columns = [];
+            $data_values = [];
 
             foreach ($SET as $set) {
                 $Columns[] = $set[0];
                 $data_values[] = $set[1];
             }
 
-            $get_data_from = implode(',', $data_values);
-        } else {
-            return $this->set_error('Invalid Query');
+            $dataRows = [ $data_values ];
+            $isSetVersion = true;
+        }
+        else {
+            $Columns = $tableColumnNames;
         }
 
-        preg_match_all("/\s*(DEFAULT|AUTO|NULL|'.*?(?<!\\\\)'|(?:[\+\-]\s*)?\d+(?:\.\d+)?|[^$])\s*(?:$|,)/is", $get_data_from, $newData);
-        $dataValues = $newData[1];
+        if (preg_match("/^\s*DEFAULT\s+VALUES\s*/is", $the_rest, $matches)) {
+            if( $isSetVersion )
+                return $this->set_error('Invalid INSERT Query ');
+            $defaults = array_fill(0, count($tableColumns), 'DEFAULT');
+            $check_names = false;
+            $dataRows = [ $defaults ];
+        } elseif (preg_match("/^\s*(VALUES\s*\(.+)/is", $the_rest, $matches)) {
+            if( $isSetVersion )
+                return $this->set_error('Invalid INSERT Query ');
+            $dataRows = $this->parseValues($matches[1]);
+            $check_names = false;
+        } elseif( !$isSetVersion ) {
+            return $this->set_error('Invalid INSERT Query');
+        }
+
         $Data = [];
+        foreach($dataRows as $dataRow) {
+            $NewRow = [];
+            if ($check_names) {
+                $i = 0;
 
-        if ($check_names == 1) {
-            $i = 0;
-            $TableColumns = $table->getColumnNames();
+                if (count($dataRow) != count($Columns)) {
+                    return $this->set_error('Number of inserted values and columns not equal');
+                }
 
-            if (count($dataValues) != count($Columns)) {
-                return $this->set_error('Number of inserted values and columns not equal');
-            }
+                foreach ($Columns as $col_name) {
+                    if (!in_array($col_name, $tableColumnNames)) {
+                        return $this->set_error("Invalid column name '{$col_name}' found");
+                    } else {
+                        $NewRow[$col_name] = $dataRow[$i++];
+                    }
+                }
+            } else {
+                $countData = count($dataRow);
+                $countColumns = count($Columns);
 
-            foreach ($Columns as $col_name) {
-                if (!in_array($col_name, $TableColumns)) {
-                    return $this->set_error("Invalid column name '{$col_name}' found");
+                if ($countData < $countColumns) {
+                    $NewRow = array_combine($Columns, array_pad($dataRow, $countColumns, 'NULL'));
+                } elseif ($countData > $countColumns) {
+                    return $this->set_error('Trying to insert too many values');
                 } else {
-                    $Data[$col_name] = $dataValues[$i++];
+                    $NewRow = array_combine($Columns, $dataRow);
                 }
             }
 
-            if (count($Columns) != count($TableColumns)) {
-                foreach ($TableColumns as $col_name) {
+            if (count($Columns) != count($tableColumnNames)) {
+                foreach ($tableColumnNames as $col_name) {
                     if (!in_array($col_name, $Columns)) {
-                        $Data[$col_name] = 'NULL';
+                        $NewRow[$col_name] = 'NULL';
                     }
                 }
             }
-        } else {
-            $countData = count($dataValues);
-            $countColumns = count($Columns);
-
-            if ($countData < $countColumns) {
-                $Data = array_combine($Columns, array_pad($dataValues, $countColumns, 'NULL'));
-            } elseif ($countData > $countColumns) {
-                return $this->set_error('Trying to insert too many values');
-            } else {
-                $Data = array_combine($Columns, $dataValues);
-            }
+            $Data[] = $NewRow;
         }
 
         $insert = new Statements\Insert($this, $table_name_pieces, $Data, !empty($ignore), $replace);
         return $insert->execute();
+    }
+
+    private function parseValues($query)
+    {
+        if( !preg_match("/\AVALUES\s*\(\s*/is", $query, $matches))
+            return $this->set_error('Invalid VALUES syntax');
+
+        $currentPos = strlen($matches[0]);
+        $the_rest = substr($query, $currentPos);
+        $stop = false;
+        $eos = false;
+        $rows = [];
+
+        do
+        {
+            $row = [];
+            while (!$stop && preg_match("/(?:\A|\s*)(DEFAULT|AUTO|NULL|'.*?(?<!\\\\)'|(?:[\+\-]\s*)?\d+(?:\.\d+)?|`?[^\W\d]\w*`?)\s*($|,|\))/Ais", $the_rest, $colmatches)) {
+                $eos = empty($colmatches[2]);
+                $stop = $eos || $colmatches[2] == ')';
+                $row[] = $colmatches[1];
+                $currentPos += strlen($colmatches[0]);
+                $the_rest = substr($query, $currentPos);
+            }
+
+            if ($eos) {
+                return $this->set_error('Unexpected end of query in VALUES.');
+            }
+
+            $rows[] = $row;
+            if( !preg_match("/\A,\s*\(\s*/is", $the_rest, $colmatches)) {
+                break;
+            }
+
+            $currentPos += strlen($colmatches[0]);
+            $the_rest = substr($query, $currentPos);
+            $stop = false;
+
+        } while(true);
+
+        return $rows;
     }
 
     ////Update data in the DB
