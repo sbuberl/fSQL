@@ -52,6 +52,26 @@ class InsertTest extends BaseTest
         $this->fsql->select_db('db1');
     }
 
+    public function testFullColumnsDefaultValues()
+    {
+        $table = CachedTable::create($this->fsql->current_schema(), 'students', self::$columns2);
+        $result = $this->fsql->query("INSERT INTO students (id, firstName, lastName, zip, gpa, uniform) DEFAULT VALUES");
+        $this->assertTrue($result);
+
+        $expected = [ [ 12, 'Jane', 'Doe', 12345, 4.0, 3] ];
+        $this->assertEquals($expected, $table->getEntries());
+    }
+
+    public function testMissingColumns()
+    {
+        $table = CachedTable::create($this->fsql->current_schema(), 'students', self::$columns1);
+        $result = $this->fsql->query("INSERT INTO students (id, firstName, lastName, gpa) VALUES (1, 'John', 'Smith', 3.6);");
+        $this->assertTrue($result);
+
+        $expected = [ [ 1, 'John', 'Smith', null, 3.6, null ] ];
+        $this->assertEquals($expected, $table->getEntries());
+    }
+
     public function testFullColumnsFullValues()
     {
         $table = CachedTable::create($this->fsql->current_schema(), 'students', self::$columns1);
@@ -66,6 +86,46 @@ class InsertTest extends BaseTest
     {
         $table = CachedTable::create($this->fsql->current_schema(), 'students', self::$columns1);
         $result = $this->fsql->query("INSERT INTO students VALUES (1, 'John', 'Smith', 90210, 3.6, 'XL');");
+        $this->assertTrue($result);
+
+        $expected = [ [ 1, 'John', 'Smith', 90210, 3.6, 4 ] ];
+        $this->assertEquals($expected, $table->getEntries());
+    }
+
+   public function testMultiRow()
+    {
+        $table = CachedTable::create($this->fsql->current_schema(), 'students', self::$columns1);
+        $result = $this->fsql->query("INSERT INTO students (id, firstName, lastName, gpa) VALUES (1, 'John', 'Smith', 3.6), (2, 'Jane', 'Doe', 4.0 );");
+        $this->assertTrue($result);
+
+        $expected = [ [ 1, 'John', 'Smith', null, 3.6, null ], [ 2, 'Jane', 'Doe', null, 4.0, null ] ];
+        $this->assertEquals($expected, $table->getEntries());
+    }
+
+    public function testMultiRowNoColumns()
+    {
+        $table = CachedTable::create($this->fsql->current_schema(), 'students', self::$columns1);
+        $result = $this->fsql->query("INSERT INTO students VALUES (1, 'John', 'Smith', 90210, 3.6, 'XL'), (2, 'Jane', 'Doe', 54321, 4.0, 'S');");
+        $this->assertTrue($result);
+
+        $expected = [ [ 1, 'John', 'Smith', 90210, 3.6, 4 ], [ 2, 'Jane', 'Doe', 54321, 4.0, 1 ] ];
+        $this->assertEquals($expected, $table->getEntries());
+    }
+
+    public function testSetColumns()
+    {
+        $table = CachedTable::create($this->fsql->current_schema(), 'students', self::$columns1);
+        $result = $this->fsql->query("INSERT INTO students SET id=1, firstName='John', lastName='Smith', gpa=3.6");
+        $this->assertTrue($result);
+
+        $expected = [ [ 1, 'John', 'Smith', null, 3.6, null ] ];
+        $this->assertEquals($expected, $table->getEntries());
+    }
+
+    public function testSetColumnsFull()
+    {
+        $table = CachedTable::create($this->fsql->current_schema(), 'students', self::$columns1);
+        $result = $this->fsql->query("INSERT INTO students SET id=1, firstName='John', lastName='Smith', zip=90210, gpa=3.6, uniform='XL'");
         $this->assertTrue($result);
 
         $expected = [ [ 1, 'John', 'Smith', 90210, 3.6, 4 ] ];
