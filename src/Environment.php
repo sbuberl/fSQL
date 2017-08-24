@@ -795,19 +795,6 @@ class Environment
             return $this->set_error('Invalid Query');
         }
 
-        // INSERT...SELECT
-        if (preg_match("/^SELECT\s+.+/is", $the_rest)) {
-            $id = $this->query_select($the_rest);
-            while ($values = fsql_fetch_array($id)) {
-                --$this->query_count;
-                $this->query_insert($beginning." VALUES('".implode("', '", $values)."')");
-            }
-            fsql_free_result($id);
-            unset($id, $values);
-
-            return true;
-        }
-
         $table_name_pieces = $this->parse_relation_name($full_table_name);
         if(!$table_name_pieces)
             return false;
@@ -851,20 +838,30 @@ class Environment
         }
 
         if (preg_match("/^DEFAULT\s+VALUES\s*/is", $the_rest, $matches)) {
-            if( $isSetVersion )
+            if ($isSetVersion )
                 return $this->set_error('Invalid INSERT Query ');
             $defaults = array_fill(0, count($tableColumns), 'DEFAULT');
             $dataRows = [ $defaults ];
         } elseif (preg_match("/^(VALUES\s*\(.+)/is", $the_rest, $matches)) {
-            if( $isSetVersion )
+            if ($isSetVersion)
                 return $this->set_error('Invalid INSERT Query ');
             $dataRows = $this->parseValues($matches[1]);
-        } elseif( !$isSetVersion ) {
+        } elseif (preg_match("/^SELECT\s+.+/is", $the_rest)) {   // INSERT...SELECT
+            if ($isSetVersion)
+                return $this->set_error('Invalid INSERT Query ');
+            $result = $this->query_select($the_rest);
+            while (($values = $result->fetchRow()) !== false) {
+                $dataRows[] = array_map(
+                    function ($value) { if (is_string($value)) $value = "'$value'"; return $value; },
+                    $values);
+            }
+            --$this->query_count;
+        } elseif (!$isSetVersion) {
             return $this->set_error('Invalid INSERT Query');
         }
 
         $Data = [];
-        foreach($dataRows as $dataRow) {
+        foreach ($dataRows as $dataRow) {
             $NewRow = [];
             if ($check_names) {
                 $i = 0;
