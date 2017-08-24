@@ -851,9 +851,14 @@ class Environment
                 return $this->set_error('Invalid INSERT Query ');
             $result = $this->query_select($the_rest);
             while (($values = $result->fetchRow()) !== false) {
-                $dataRows[] = array_map(
-                    function ($value) { if (is_string($value)) $value = "'$value'"; return $value; },
+                $row = array_map(
+                    function ($value) {
+                        if (is_string($value)) $value = "'$value'";
+                        elseif($value === null) $value = "NULL";
+                        return $value;
+                    },
                     $values);
+                $dataRows[] = $row;
             }
             --$this->query_count;
         } elseif (!$isSetVersion) {

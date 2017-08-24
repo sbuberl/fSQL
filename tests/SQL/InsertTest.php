@@ -173,7 +173,7 @@ class InsertTest extends BaseTest
         $this->assertTrue($result);
 
         $expected = [ [ 1, 'John', 'Smith', null, 3.6, null ], [ 2, 'Jane', 'Doe', null, 4.0, null ] ];
-        $this->assertEquals($expected, $table->getEntries());
+        $this->assertEquals($expected, $table2->getEntries());
     }
 
     public function testIdentityAuto()
