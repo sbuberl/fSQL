@@ -826,7 +826,7 @@ class Environment
         $replace = !strcasecmp($command, 'REPLACE');
 
         // Column List present?
-        if (preg_match("/^\(((`?[^\W\d]\w*`?\s*,\s*)*`?[^\W\d]\w*`?)\s*\)/is", $the_rest, $matches)) {
+        if (preg_match("/^\(((`?[^\W\d]\w*`?\s*,\s*)*`?[^\W\d]\w*`?)\s*\)\s*/is", $the_rest, $matches)) {
             $the_rest = substr($the_rest, strlen($matches[0]));
             $Columns = preg_split("/`?\s*,\s*`?/s", $matches[1]);
         }
@@ -847,19 +847,18 @@ class Environment
         }
         else {
             $Columns = $tableColumnNames;
+            $check_names = false;
         }
 
-        if (preg_match("/^\s*DEFAULT\s+VALUES\s*/is", $the_rest, $matches)) {
+        if (preg_match("/^DEFAULT\s+VALUES\s*/is", $the_rest, $matches)) {
             if( $isSetVersion )
                 return $this->set_error('Invalid INSERT Query ');
             $defaults = array_fill(0, count($tableColumns), 'DEFAULT');
-            $check_names = false;
             $dataRows = [ $defaults ];
-        } elseif (preg_match("/^\s*(VALUES\s*\(.+)/is", $the_rest, $matches)) {
+        } elseif (preg_match("/^(VALUES\s*\(.+)/is", $the_rest, $matches)) {
             if( $isSetVersion )
                 return $this->set_error('Invalid INSERT Query ');
             $dataRows = $this->parseValues($matches[1]);
-            $check_names = false;
         } elseif( !$isSetVersion ) {
             return $this->set_error('Invalid INSERT Query');
         }
