@@ -132,6 +132,50 @@ class InsertTest extends BaseTest
         $this->assertEquals($expected, $table->getEntries());
     }
 
+    public function testSelectColumnsNone()
+    {
+        $table = CachedTable::create($this->fsql->current_schema(), 'students', self::$columns1);
+        $result = $this->fsql->query("INSERT INTO students SELECT 1, 'John', 'Smith', 90210, 3.6, 'XL';");
+        $this->assertTrue($result);
+
+        $expected = [ [ 1, 'John', 'Smith', 90210, 3.6, 4 ] ];
+        $this->assertEquals($expected, $table->getEntries());
+    }
+
+    public function testSelectColumnsPartial()
+    {
+        $table = CachedTable::create($this->fsql->current_schema(), 'students', self::$columns1);
+        $result = $this->fsql->query("INSERT INTO students (id, firstName, lastName, gpa) SELECT 1, 'John', 'Smith', 3.6;");
+        $this->assertTrue($result);
+
+        $expected = [ [ 1, 'John', 'Smith', null, 3.6, null ]];
+        $this->assertEquals($expected, $table->getEntries());
+    }
+
+    public function testSelectColumnsFull()
+    {
+        $table = CachedTable::create($this->fsql->current_schema(), 'students', self::$columns1);
+        $result = $this->fsql->query("INSERT INTO students (id, firstName, lastName, zip, gpa, uniform) SELECT 1, 'John', 'Smith', 90210, 3.6, 'XL';");
+        $this->assertTrue($result);
+
+        $expected = [ [ 1, 'John', 'Smith', 90210, 3.6, 4 ] ];
+        $this->assertEquals($expected, $table->getEntries());
+    }
+
+    public function testSelectMultiRow()
+    {
+        $table = CachedTable::create($this->fsql->current_schema(), 'students', self::$columns1);
+        $result = $this->fsql->query("INSERT INTO students (id, firstName, lastName, gpa) VALUES (1, 'John', 'Smith', 3.6), (2, 'Jane', 'Doe', 4.0 );");
+        $this->assertTrue($result);
+
+        $table2 = CachedTable::create($this->fsql->current_schema(), 'students2', self::$columns1);
+        $result = $this->fsql->query("INSERT INTO students2 SELECT * FROM students;");
+        $this->assertTrue($result);
+
+        $expected = [ [ 1, 'John', 'Smith', null, 3.6, null ], [ 2, 'Jane', 'Doe', null, 4.0, null ] ];
+        $this->assertEquals($expected, $table->getEntries());
+    }
+
     public function testIdentityAuto()
     {
         $table = CachedTable::create($this->fsql->current_schema(), 'students', self::$columns3);
