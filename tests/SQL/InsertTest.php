@@ -60,6 +60,8 @@ class InsertTest extends BaseTest
 
         $expected = [ [ 12, 'Jane', 'Doe', 12345, 4.0, 3] ];
         $this->assertEquals($expected, $table->getEntries());
+        $this->assertEquals(1, $this->fsql->affected_rows());
+        $this->assertNull($this->fsql->insert_id());
     }
 
     public function testMissingColumns()
@@ -70,6 +72,8 @@ class InsertTest extends BaseTest
 
         $expected = [ [ 1, 'John', 'Smith', null, 3.6, null ] ];
         $this->assertEquals($expected, $table->getEntries());
+        $this->assertEquals(1, $this->fsql->affected_rows());
+        $this->assertNull($this->fsql->insert_id());
     }
 
     public function testFullColumnsFullValues()
@@ -80,6 +84,8 @@ class InsertTest extends BaseTest
 
         $expected = [ [ 1, 'John', 'Smith', 90210, 3.6, 4 ] ];
         $this->assertEquals($expected, $table->getEntries());
+        $this->assertEquals(1, $this->fsql->affected_rows());
+        $this->assertNull($this->fsql->insert_id());
     }
 
     public function testNoColumnsFull()
@@ -90,6 +96,8 @@ class InsertTest extends BaseTest
 
         $expected = [ [ 1, 'John', 'Smith', 90210, 3.6, 4 ] ];
         $this->assertEquals($expected, $table->getEntries());
+        $this->assertEquals(1, $this->fsql->affected_rows());
+        $this->assertNull($this->fsql->insert_id());
     }
 
    public function testMultiRow()
@@ -100,6 +108,8 @@ class InsertTest extends BaseTest
 
         $expected = [ [ 1, 'John', 'Smith', null, 3.6, null ], [ 2, 'Jane', 'Doe', null, 4.0, null ] ];
         $this->assertEquals($expected, $table->getEntries());
+        $this->assertEquals(2, $this->fsql->affected_rows());
+        $this->assertNull($this->fsql->insert_id());
     }
 
     public function testMultiRowNoColumns()
@@ -110,6 +120,8 @@ class InsertTest extends BaseTest
 
         $expected = [ [ 1, 'John', 'Smith', 90210, 3.6, 4 ], [ 2, 'Jane', 'Doe', 54321, 4.0, 1 ] ];
         $this->assertEquals($expected, $table->getEntries());
+        $this->assertEquals(2, $this->fsql->affected_rows());
+        $this->assertNull($this->fsql->insert_id());
     }
 
     public function testSetColumns()
@@ -120,6 +132,8 @@ class InsertTest extends BaseTest
 
         $expected = [ [ 1, 'John', 'Smith', null, 3.6, null ] ];
         $this->assertEquals($expected, $table->getEntries());
+        $this->assertEquals(1, $this->fsql->affected_rows());
+        $this->assertNull($this->fsql->insert_id());
     }
 
     public function testSetColumnsFull()
@@ -130,6 +144,8 @@ class InsertTest extends BaseTest
 
         $expected = [ [ 1, 'John', 'Smith', 90210, 3.6, 4 ] ];
         $this->assertEquals($expected, $table->getEntries());
+        $this->assertEquals(1, $this->fsql->affected_rows());
+        $this->assertNull($this->fsql->insert_id());
     }
 
     public function testSelectColumnsNone()
@@ -140,6 +156,8 @@ class InsertTest extends BaseTest
 
         $expected = [ [ 1, 'John', 'Smith', 90210, 3.6, 4 ] ];
         $this->assertEquals($expected, $table->getEntries());
+        $this->assertEquals(1, $this->fsql->affected_rows());
+        $this->assertNull($this->fsql->insert_id());
     }
 
     public function testSelectColumnsPartial()
@@ -150,6 +168,8 @@ class InsertTest extends BaseTest
 
         $expected = [ [ 1, 'John', 'Smith', null, 3.6, null ]];
         $this->assertEquals($expected, $table->getEntries());
+        $this->assertEquals(1, $this->fsql->affected_rows());
+        $this->assertNull($this->fsql->insert_id());
     }
 
     public function testSelectColumnsFull()
@@ -160,6 +180,8 @@ class InsertTest extends BaseTest
 
         $expected = [ [ 1, 'John', 'Smith', 90210, 3.6, 4 ] ];
         $this->assertEquals($expected, $table->getEntries());
+        $this->assertEquals(1, $this->fsql->affected_rows());
+        $this->assertNull($this->fsql->insert_id());
     }
 
     public function testSelectMultiRow()
@@ -167,10 +189,14 @@ class InsertTest extends BaseTest
         $table = CachedTable::create($this->fsql->current_schema(), 'students', self::$columns1);
         $result = $this->fsql->query("INSERT INTO students (id, firstName, lastName, gpa) VALUES (1, 'John', 'Smith', 3.6), (2, 'Jane', 'Doe', 4.0 );");
         $this->assertTrue($result);
+        $this->assertEquals(2, $this->fsql->affected_rows());
+        $this->assertNull($this->fsql->insert_id());
 
         $table2 = CachedTable::create($this->fsql->current_schema(), 'students2', self::$columns1);
         $result = $this->fsql->query("INSERT INTO students2 SELECT * FROM students;");
         $this->assertTrue($result);
+        $this->assertEquals(2, $this->fsql->affected_rows());
+        $this->assertNull($this->fsql->insert_id());
 
         $expected = [ [ 1, 'John', 'Smith', null, 3.6, null ], [ 2, 'Jane', 'Doe', null, 4.0, null ] ];
         $this->assertEquals($expected, $table2->getEntries());
@@ -182,9 +208,13 @@ class InsertTest extends BaseTest
 
         $result = $this->fsql->query("INSERT INTO students VALUES (AUTO, 'John', 'Smith', 90210, 3.6);");
         $this->assertTrue($result);
+        $this->assertEquals(1, $this->fsql->affected_rows());
+        $this->assertEquals(3, $this->fsql->insert_id());
 
         $result = $this->fsql->query("INSERT INTO students VALUES (AUTO, 'Arthur', 'Dent', 12345, 2.5);");
         $this->assertTrue($result);
+        $this->assertEquals(1, $this->fsql->affected_rows());
+        $this->assertEquals(4, $this->fsql->insert_id());
 
         $expected = [ [ 3, 'John', 'Smith', 90210, 3.6 ], [ 4, 'Arthur', 'Dent', 12345, 2.5 ] ];
         $this->assertEquals($expected, $table->getEntries());
@@ -196,9 +226,13 @@ class InsertTest extends BaseTest
 
         $result = $this->fsql->query("INSERT INTO students VALUES (DEFAULT, 'John', 'Smith', 90210, 3.6);");
         $this->assertTrue($result);
+        $this->assertEquals(1, $this->fsql->affected_rows());
+        $this->assertEquals(3, $this->fsql->insert_id());
 
         $result = $this->fsql->query("INSERT INTO students VALUES (DEFAULT, 'Arthur', 'Dent', 12345, 2.5);");
         $this->assertTrue($result);
+        $this->assertEquals(1, $this->fsql->affected_rows());
+        $this->assertEquals(4, $this->fsql->insert_id());
 
         $expected = [ [ 3, 'John', 'Smith', 90210, 3.6 ], [ 4, 'Arthur', 'Dent', 12345, 2.5 ] ];
         $this->assertEquals($expected, $table->getEntries());
@@ -210,9 +244,13 @@ class InsertTest extends BaseTest
 
         $result = $this->fsql->query("INSERT INTO students VALUES (NULL, 'John', 'Smith', 90210, 3.6);");
         $this->assertTrue($result);
+        $this->assertEquals(1, $this->fsql->affected_rows());
+        $this->assertEquals(3, $this->fsql->insert_id());
 
         $result = $this->fsql->query("INSERT INTO students VALUES (NULL, 'Arthur', 'Dent', 12345, 2.5);");
         $this->assertTrue($result);
+        $this->assertEquals(1, $this->fsql->affected_rows());
+        $this->assertEquals(4, $this->fsql->insert_id());
 
         $expected = [ [ 3, 'John', 'Smith', 90210, 3.6 ], [ 4, 'Arthur', 'Dent', 12345, 2.5 ] ];
         $this->assertEquals($expected, $table->getEntries());
@@ -224,12 +262,18 @@ class InsertTest extends BaseTest
 
         $result = $this->fsql->query("INSERT INTO students VALUES (AUTO, 'Arthur', 'Dent', 12345, 2.5);");
         $this->assertTrue($result);
+        $this->assertEquals(1, $this->fsql->affected_rows());
+        $this->assertEquals(3, $this->fsql->insert_id());
 
         $result = $this->fsql->query("INSERT INTO students VALUES (12, 'John', 'Smith', 90210, 3.6);");
         $this->assertTrue($result);
+        $this->assertEquals(1, $this->fsql->affected_rows());
+        $this->assertNull($this->fsql->insert_id());
 
         $result = $this->fsql->query("INSERT INTO students VALUES (AUTO, 'Jane', 'Doe', 54321, 4.0);");
         $this->assertTrue($result);
+        $this->assertEquals(1, $this->fsql->affected_rows());
+        $this->assertEquals(4, $this->fsql->insert_id());
 
         $expected = [[ 3, 'Arthur', 'Dent', 12345, 2.5 ], [ 12, 'John', 'Smith', 90210, 3.6 ], [ 4, 'Jane', 'Doe', 54321, 4.0 ] ];
         $this->assertEquals($expected, $table->getEntries());
@@ -242,6 +286,8 @@ class InsertTest extends BaseTest
         $result = $this->fsql->query("INSERT INTO students VALUES (12, 'John', 'Smith', 90210, 3.6);");
         $this->assertFalse($result);
         $this->assertEquals("Manual value inserted into an ALWAYS identity column", trim($this->fsql->error()));
+        $this->assertEquals(0, $this->fsql->affected_rows());
+        $this->assertNull($this->fsql->insert_id());
     }
 
     public function testPrimaryKeyCollision()
@@ -254,6 +300,8 @@ class InsertTest extends BaseTest
         $result = $this->fsql->query("INSERT INTO students VALUES (12, 'Jane', 'Doe', 54321, 4.0);");
         $this->assertFalse($result);
         $this->assertEquals("Duplicate value for unique column 'id'", trim($this->fsql->error()));
+        $this->assertEquals(0, $this->fsql->affected_rows());
+        $this->assertNull($this->fsql->insert_id());
     }
 
     public function testPrimaryKeyReplace()
@@ -270,6 +318,8 @@ class InsertTest extends BaseTest
 
         $expected = [ [ 12, 'Jane', 'Doe', 54321, 4.0 ] ];
         $this->assertEquals($expected, array_values($table->getEntries()));
+        $this->assertEquals(2, $this->fsql->affected_rows());
+        $this->assertNull($this->fsql->insert_id());
     }
 
     public function testPrimaryKeyIgnore()
@@ -285,6 +335,8 @@ class InsertTest extends BaseTest
         $this->assertTrue($result);
 
         $this->assertEquals($expected, $table->getEntries());
+        $this->assertEquals(0, $this->fsql->affected_rows());
+        $this->assertNull($this->fsql->insert_id());
     }
 
     public function testTransactionCommit()
