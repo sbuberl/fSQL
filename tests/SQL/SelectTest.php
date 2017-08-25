@@ -107,6 +107,34 @@ class SelectTest extends BaseTest
         $this->assertEquals(array(null, -3, 3.14, 'my string', 'x y z'), $result);
     }
 
+    public function testSelectCast()
+    {
+        $result = $this->fsql->query("SELECT CAST(NULL as INT), cast(-3 as TEXT), cast(3.14 AS INT), CAST('2.5' AS DOUBLE)");
+        $this->assertTrue($result !== false);
+
+        $result = $this->fsql->fetch_row($result);
+        $this->assertEquals([null, '-3', 3, 2.5], $result);
+    }
+
+    public function testSelectTrim()
+    {
+        $result = $this->fsql->query("SELECT TRIM('x' from 'xxTomxxx'), TRIM(both 'x' FROM 'xxTomxxx'), TRIM(leading 'x' from 'xxTomxxx'), TRIM(trailing 'x' from 'xxTomxxx')");
+        $this->assertTrue($result !== false);
+
+        $result = $this->fsql->fetch_row($result);
+        $this->assertEquals(['Tom', 'Tom', 'Tomxxx', 'xxTom'], $result);
+    }
+
+    public function testSelectPosition()
+    {
+        $result = $this->fsql->query("SELECT POSITION('ug' in 'Douglas'), POSITION('tb' in 'Adams'), POSITION('T' in 'Towel')");
+        $this->assertTrue($result !== false);
+
+        $result = $this->fsql->fetch_row($result);
+        $this->assertEquals([3, 0, 1], $result);
+    }
+
+
     public function testSelectAll()
     {
         $table = CachedTable::create($this->fsql->current_schema(), 'customers', self::$columns1);
