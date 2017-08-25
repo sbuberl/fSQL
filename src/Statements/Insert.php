@@ -6,19 +6,21 @@ use FSQL\Environment;
 
 class Insert extends DataModifyStatement
 {
+    const REPLACE = 2;
+    const IGNORE = 1;
+    const ERROR = 0;
+
     private $insert_id = null;
     private $tableFullName;
     private $data;
-    private $ignore;
-    private $replace;
+    private $mode;
 
-    public function __construct(Environment $environment, array $fullName, array $data, $ignore, $replace)
+    public function __construct(Environment $environment, array $fullName, array $data, $mode)
     {
         parent::__construct($environment);
         $this->tableFullName = $fullName;
         $this->data = $data;
-        $this->ignore = $ignore;
-        $this->replace = $replace;
+        $this->mode = $mode;
     }
 
     public function insertId()
@@ -102,15 +104,12 @@ class Insert extends DataModifyStatement
 
         foreach ($newRows as $newRow) {
             foreach ($keyColumns as $colIndex => $columnName) {
-                if ($this->replace) {
+                if ($this->mode == self::REPLACE) {
                     $delete = [];
-                    $tableCursor->rewind();
-                    while ($tableCursor->valid()) {
-                        $row = $tableCursor->current();
+                    foreach ($tableCursor as $key => $row) {
                         if ($row[$colIndex] == $newRow[$colIndex]) {
-                            $delete[] = $tableCursor->key();
+                            $delete[] = $key;
                         }
-                        $tableCursor->next();
                     }
                     if (!empty($delete)) {
                         foreach ($delete as $d) {
@@ -119,17 +118,14 @@ class Insert extends DataModifyStatement
                         }
                     }
                 } else {
-                    $tableCursor->rewind();
-                    while ($tableCursor->valid()) {
-                        $row = $tableCursor->current();
+                    foreach ($tableCursor as $key => $row) {
                         if ($row[$colIndex] == $newRow[$colIndex]) {
-                            if (!$this->ignore) {
-                                return $this->environment->set_error("Duplicate value for unique column '{$columnName}'");
-                            } else {
+                            if ($this->mode == self::IGNORE) {
                                 return true;
+                            } else {
+                                return $this->environment->set_error("Duplicate value for unique column '{$columnName}'");
                             }
                         }
-                        $tableCursor->next();
                     }
                 }
             }

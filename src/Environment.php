@@ -20,6 +20,7 @@ use FSQL\Database\Sequence;
 use FSQL\Database\Table;
 use FSQL\Database\Transaction;
 use FSQL\Statements\CreateTableLike;
+use FSQL\Statements\Insert;
 
 class Environment
 {
@@ -786,9 +787,11 @@ class Environment
 
     private function query_insert($query)
     {
+        $mode = Insert::ERROR;
+
         // All INSERT/REPLACE queries are the same until after the table name
-        if (preg_match("/\A((INSERT|REPLACE)(?:\s+(IGNORE))?\s+INTO\s+(`?(?:[^\W\d]\w*`?\.`?){0,2}[^\W\d]\w*`?))\s+(.+?)\s*[;]?\Z/is", $query, $matches)) {
-            list(, $beginning, $command, $ignore, $full_table_name, $the_rest) = $matches;
+        if (preg_match("/\A(INSERT(?:\s+(IGNORE))?|REPLACE)\s+INTO\s+(`?(?:[^\W\d]\w*`?\.`?){0,2}[^\W\d]\w*`?)\s+(.+?)\s*[;]?\Z/is", $query, $matches)) {
+            list(, $command, $ignore, $full_table_name, $the_rest) = $matches;
         } else {
             return $this->set_error('Invalid Query');
         }
@@ -808,7 +811,11 @@ class Environment
 
         $check_names = true;
         $isSetVersion = false;
-        $replace = !strcasecmp($command, 'REPLACE');
+
+        if (!strcasecmp($command, 'REPLACE'))
+            $mode = Insert::REPLACE;
+        elseif (!empty($ignore))
+            $mode = Insert::IGNORE;
 
         // Column List present?
         if (preg_match("/^\(((`?[^\W\d]\w*`?\s*,\s*)*`?[^\W\d]\w*`?)\s*\)\s*/is", $the_rest, $matches)) {
@@ -903,7 +910,7 @@ class Environment
             $Data[] = $NewRow;
         }
 
-        $insert = new Statements\Insert($this, $table_name_pieces, $Data, !empty($ignore), $replace);
+        $insert = new Statements\Insert($this, $table_name_pieces, $Data, $mode);
         $result = $insert->execute();
         $this->affected = $insert->affectedRows();
         $this->insert_id = $insert->insertId();
