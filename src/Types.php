@@ -76,4 +76,26 @@ final class Types
             default:                        return false;
         }
     }
+
+    public static function to_float($arg) {
+        if($arg === null)
+            return null;
+        elseif(!is_numeric($arg))
+            return false;
+        return (float) $arg;
+    }
+
+    public static function to_int($arg) {
+        if($arg === null)
+            return null;
+        elseif(!is_numeric($arg))
+            return false;
+        return !is_int($arg) ? (int) $arg : $arg;
+    }
+
+    public static function to_string($arg) {
+        if($arg === null)
+            return null;
+        return !is_string($arg) ? (string) $arg : $arg;
+    }
 }

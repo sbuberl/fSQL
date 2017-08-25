@@ -2852,6 +2852,23 @@ EOC;
         return $params;
     }
 
+    function parse_cast_function($join_info, $where_type, $paramsStr)
+    {
+        if (preg_match("/\A\s*(.*)\s+AS\s+(\w+(?:\s+\w+)*?)\s*(?:\(.*\)\s*)?\Z/is", $paramsStr, $matches)) {
+            $type = Types::getTypeCode($matches[2]);
+            if ($type === false)
+                return $this->set_error("Invalid type in CAST function: {$matches[2]}");
+            $length = isset($matches[3]) ? $matches[3] : null;
+            $type = "'$type'";
+            $expression = $this->build_expression($matches[1], $join_info, $where_type);
+            if ($expression !== false) {
+                return ['cast', [$expression, $type]];
+            }
+        }
+
+        return $this->set_error('Error parsing cast() function parameters');
+    }
+
     private function parse_extract_function($join_info, $where_type, $paramsStr)
     {
         if (preg_match("/\A\s*(\w+)\s+FROM\s+(.+?)\s*\Z/is", $paramsStr, $matches)) {

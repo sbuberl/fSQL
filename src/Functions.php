@@ -16,6 +16,7 @@ class Functions
     private $custom = array(
         'any' => self::AGGREGATE,
         'avg' => self::AGGREGATE,
+        'cast' => self::CUSTOM_PARSE,
         'concat' => self::NORMAL,
         'concat_ws' => self::NORMAL,
         'count' => self::AGGREGATE,
@@ -149,6 +150,20 @@ class Functions
         } else {
             return FSQL_UNKNOWN;
         }
+    }
+
+    public function cast($expression, $type)
+    {
+        switch ($type) {
+            case Types::FLOAT:
+                return Types::to_float($expression);
+            case Types::INTEGER:
+                return Types::to_int($expression);
+            case Types::STRING:
+                return Types::to_string($expression);
+        }
+
+        return false;
     }
 
     //////Misc Functions
