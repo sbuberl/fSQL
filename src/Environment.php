@@ -786,8 +786,6 @@ class Environment
 
     private function query_insert($query)
     {
-        $this->affected = 0;
-
         // All INSERT/REPLACE queries are the same until after the table name
         if (preg_match("/\A((INSERT|REPLACE)(?:\s+(IGNORE))?\s+INTO\s+(`?(?:[^\W\d]\w*`?\.`?){0,2}[^\W\d]\w*`?))\s+(.+?)\s*[;]?\Z/is", $query, $matches)) {
             list(, $beginning, $command, $ignore, $full_table_name, $the_rest) = $matches;
@@ -906,7 +904,10 @@ class Environment
         }
 
         $insert = new Statements\Insert($this, $table_name_pieces, $Data, !empty($ignore), $replace);
-        return $insert->execute();
+        $result = $insert->execute();
+        $this->affected = $insert->affectedRows();
+        $this->insert_id = $insert->insertId();
+        return $result;
     }
 
     private function parseValues($query)

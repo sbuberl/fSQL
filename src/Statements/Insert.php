@@ -21,6 +21,11 @@ class Insert extends DataModifyStatement
         $this->replace = $replace;
     }
 
+    public function insertId()
+    {
+        return $this->insert_id;
+    }
+
     public function execute()
     {
         $this->affected = 0;
