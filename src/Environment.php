@@ -514,38 +514,16 @@ class Environment
                         }
                     } else {
                         $name = $Columns[4][$c];
-                        $type = $Columns[5][$c];
+                        $typeName = $Columns[5][$c];
                         $options = $Columns[10][$c];
 
                         if (isset($new_columns[$name])) {
                             return $this->set_error("Column '{$name}' redefined");
                         }
 
-                        $type = strtoupper($type);
-                        if (in_array($type, array('CHAR', 'VARCHAR', 'BINARY', 'VARBINARY', 'TEXT', 'TINYTEXT', 'MEDIUMTEXT', 'LONGTEXT', 'BLOB', 'TINYBLOB', 'MEDIUMBLOB', 'LONGBLOB'))) {
-                            $type = Types::STRING;
-                        } elseif (in_array($type, array('BIT', 'TINYINT', 'SMALLINT', 'MEDIUMINT', 'INT', 'INTEGER', 'BIGINT'))) {
-                            $type = Types::INTEGER;
-                        } elseif (in_array($type, array('FLOAT', 'REAL', 'DOUBLE', 'DOUBLE PRECISION', 'NUMERIC', 'DEC', 'DECIMAL'))) {
-                            $type = Types::FLOAT;
-                        } else {
-                            switch ($type) {
-                                case 'DATETIME':
-                                    $type = Types::DATETIME;
-                                    break;
-                                case 'DATE':
-                                    $type = Types::DATE;
-                                    break;
-                                case 'ENUM':
-                                    $type = Types::ENUM;
-                                    break;
-                                case 'TIME':
-                                    $type = Types::TIME;
-                                    break;
-                                default:
-                                    return $this->set_error("Column '{$name}' has unknown type '{$type}'");
-                            }
-                        }
+                        $type = Types::getTypeCode($typeName);
+                        if( $type === false)
+                            return $this->set_error("Column '{$name}' has unknown type '{$typeName}'");
 
                         if (preg_match("/\bnot\s+null\b/i", $options)) {
                             $null = 0;
@@ -2697,7 +2675,7 @@ EOC;
         $data = array();
 
         foreach ($tableColumns as $name => $column) {
-            $type = $this->typecode_to_name($column['type']);
+            $type = Types::getTypeName($column['type']);
             $null = ($column['null']) ? 'YES' : '';
             $extra = ($column['auto']) ? 'auto_increment' : '';
             $default = $column['default'];
@@ -3118,19 +3096,5 @@ EOC;
     public function free_result(ResultSet $results)
     {
         // No-op for backwards compat
-    }
-
-    private function typecode_to_name($type)
-    {
-        switch ($type) {
-            case Types::DATE:                return 'DATE';
-            case Types::DATETIME:            return 'DATETIME';
-            case Types::ENUM:                return 'ENUM';
-            case Types::FLOAT:               return 'DOUBLE';
-            case Types::INTEGER:             return 'INTEGER';
-            case Types::STRING:              return 'TEXT';
-            case Types::TIME:                return 'TIME';
-            default:                         return false;
-        }
     }
 }
