@@ -134,6 +134,15 @@ class SelectTest extends BaseTest
         $this->assertEquals([NULL, 'Doug', 'Douglas'], $result);
     }
 
+    public function testSelectPosition()
+    {
+        $result = $this->fsql->query("SELECT POSITION(null in 'blah'), POSITION('q' in 'Donald Duck'), POSITION('Duck' in 'Donald Duck')");
+        $this->assertTrue($result !== false);
+
+        $result = $this->fsql->fetch_row($result);
+        $this->assertEquals([NULL, 0, 8], $result);
+    }
+
     public function testSelectSubstring()
     {
         $result = $this->fsql->query("SELECT SUBSTRING(null from 3 for 4), SUBSTRING('Donald Duck' from 8), SUBSTRING('Donald Duck' from 1 FOR 6)");
