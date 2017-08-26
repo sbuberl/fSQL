@@ -116,24 +116,41 @@ class SelectTest extends BaseTest
         $this->assertEquals([null, '-3', 3, 2.5], $result);
     }
 
+    public function testSelectExtract()
+    {
+        $result = $this->fsql->query("SELECT EXTRACT(YEAR FROM null), EXTRACT(YEAR FROM '2013-07-02'), EXTRACT(SECOND FROM '2013-07-02'), EXTRACT(HOUR FROM '2013-07-02 01:02:03'), EXTRACT(timezone_hour FROM '2013-07-02 01:02:03-05:00')");
+        $this->assertTrue($result !== false);
+
+        $result = $this->fsql->fetch_row($result);
+        $this->assertEquals([null, 2013, 0, 1, -5], $result);
+    }
+
+    public function testSelectOverlay()
+    {
+        $result = $this->fsql->query("SELECT OVERLAY('Dxxxlas' placing NULL from 3 for 4), OVERLAY('Dxxxlas' placing 'oug' from 2), OVERLAY('Dxxxlas' placing 'oug' from 2 for 3)");
+        $this->assertTrue($result !== false);
+
+        $result = $this->fsql->fetch_row($result);
+        $this->assertEquals([NULL, 'Doug', 'Douglas'], $result);
+    }
+
+    public function testSelectSubstring()
+    {
+        $result = $this->fsql->query("SELECT SUBSTRING(null from 3 for 4), SUBSTRING('Donald Duck' from 8), SUBSTRING('Donald Duck' from 1 FOR 6)");
+        $this->assertTrue($result !== false);
+
+        $result = $this->fsql->fetch_row($result);
+        $this->assertEquals([NULL, 'Duck', 'Donald'], $result);
+    }
+
     public function testSelectTrim()
     {
-        $result = $this->fsql->query("SELECT TRIM('x' from 'xxTomxxx'), TRIM(both 'x' FROM 'xxTomxxx'), TRIM(leading 'x' from 'xxTomxxx'), TRIM(trailing 'x' from 'xxTomxxx')");
+        $result = $this->fsql->query("SELECT TRIM('x' from null), TRIM('x' from 'xxTomxxx'), TRIM(both 'x' FROM 'xxTomxxx'), TRIM(leading 'x' from 'xxTomxxx'), TRIM(trailing 'x' from 'xxTomxxx')");
         $this->assertTrue($result !== false);
 
         $result = $this->fsql->fetch_row($result);
-        $this->assertEquals(['Tom', 'Tom', 'Tomxxx', 'xxTom'], $result);
+        $this->assertEquals([null, 'Tom', 'Tom', 'Tomxxx', 'xxTom'], $result);
     }
-
-    public function testSelectPosition()
-    {
-        $result = $this->fsql->query("SELECT POSITION('ug' in 'Douglas'), POSITION('tb' in 'Adams'), POSITION('T' in 'Towel')");
-        $this->assertTrue($result !== false);
-
-        $result = $this->fsql->fetch_row($result);
-        $this->assertEquals([3, 0, 1], $result);
-    }
-
 
     public function testSelectAll()
     {
