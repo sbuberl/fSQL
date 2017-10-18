@@ -1804,25 +1804,24 @@ EOT;
 
     private function parseSetClause($clause, $columns, $tableAlias = null)
     {
-        $result = array();
-        if (preg_match_all("/((?:\S+)\s*=\s*(?:'(?:.*?)'|\S+))`?\s*(?:,|\Z)/is", $clause, $sets)) {
-            foreach ($sets[1] as $set) {
-                $s = preg_split("/`?\s*=\s*`?/", $set);
-                if (preg_match("/\A\s*(?:`?([^\W\d]\w*)`?\.)?`?([^\W\d]\w*)`?/is", $s[0], $namePieces)) {
-                    list(, $prefix, $columnName) = $namePieces;
-                    if ($tableAlias !== null && !empty($prefix) && $tableAlias !== $prefix) {
-                        return $this->set_error('Unknown table alias in SET clause');
-                    }
-                    $s[0] = $columnName;
-                }
+        $result = [];
+        $currentPos = 0;
+        $stop = false;
+        while (!$stop && preg_match("/((?:\A|\s*)(?:`?([^\W\d]\w*)`?\.)?(?:`?([^\W\d]\w*)`?)\s*=\s*('(?:.*?)'|\S+)\s*)(?:(,)|\Z)/is", $clause, $sets, 0, $currentPos)) {
+            $stop = empty($sets[5]);
+            $idx = !$stop ? 0 : 1;
+            $currentPos += strlen($sets[$idx]);
+            list(, , $prefix, $columnName, $value, ) = $sets;
 
-                $result[] = $s;
-                if (!isset($columns[$s[0]])) {
-                    return $this->set_error("Invalid column name '{$s[0]}' found in SET clause");
-                }
+            if ($tableAlias !== null && !empty($prefix) && $tableAlias !== $prefix) {
+                return $this->set_error('Unknown table alias in SET clause');
             }
-        } else {
-            $result[0] = preg_split("/\s*=\s*/", $clause);
+
+            if (!isset($columns[$columnName])) {
+                return $this->set_error("Invalid column name '{$columnName}' found in SET clause");
+            }
+
+            $result[] = [$columnName, $value];
         }
 
         return $result;
