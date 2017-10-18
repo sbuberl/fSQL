@@ -975,6 +975,9 @@ class Environment
                 if ($new_value === false) {
                     return false;
                 }
+                if (is_string($new_value)) {
+                    $new_value = "'".$new_value."'";
+                }
                 $col_index = $col_indicies[$column];
                 $updates[$col_index] = "$col_index => $new_value";
             }
@@ -1030,15 +1033,13 @@ EOV;
             }
 
             $updateCode = <<<EOC
-foreach( \$cursor->rewind(); \$cursor->valid(); \$cursor->next())
+foreach( \$cursor as \$rowId => \$entry)
 {
     \$updates = $updates;
-    \$entry = \$updates + \$cursor->current();
 $code
 }
 return true;
 EOC;
-
             $success = eval($updateCode);
             if (!$success) {
                 return $success;
