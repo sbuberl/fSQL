@@ -1,0 +1,77 @@
+<?php
+
+require_once dirname(__DIR__).'/BaseTest.php';
+
+use FSQL\Database\CachedTable;
+use FSQL\Environment;
+use FSQL\ResultSet;
+
+class UpdateTest extends BaseTest
+{
+    private $fsql;
+
+    private static $options = [
+        'field_name' => ['type' => 's', 'auto' => 0, 'default' => null, 'key' => 'n', 'null' => 1, 'restraint' => []],
+        'field_data' => ['type' => 's', 'auto' => 0, 'default' => null, 'key' => 'n', 'null' => 1, 'restraint' => []],
+    ];
+
+    public function setUp()
+    {
+        parent::setUp();
+        $this->fsql = new Environment();
+        $this->fsql->define_db('db1', parent::$tempDir);
+        $this->fsql->select_db('db1');
+    }
+
+    public function testNoWhere()
+    {
+        $rows = [
+            ['graph_data_amount_total', '---time=1234567890---total=15'],
+            ['graph_data_range_recv', '---time=1234567890---total=5'],
+            ['graph_data_range_sent', '---time=1234567890---total=15'],
+            ['max_active_peers', '5'],
+        ];
+        $table = CachedTable::create($this->fsql->current_schema(), 'options', self::$options);
+        foreach($rows as $row) {
+            $table->insertRow($row);
+        }
+        $table->commit();
+        $result = $this->fsql->query("UPDATE options SET field_data = '99'" );
+        $this->assertTrue($result);
+
+        $expected = [
+            ['graph_data_amount_total', '99'],
+            ['graph_data_range_recv', '99'],
+            ['graph_data_range_sent', '99'],
+            ['max_active_peers', '99'],
+        ];
+        $this->assertEquals($expected, $table->getEntries());
+        $this->assertEquals(4, $this->fsql->affected_rows());
+    }
+
+    public function testSetClauseEmbeddedEqual()
+    {
+        $rows = [
+            ['graph_data_amount_total', '---time=1234567890---total=15'],
+            ['graph_data_range_recv', '---time=1234567890---total=5'],
+            ['graph_data_range_sent', '---time=1234567890---total=15'],
+            ['max_active_peers', '5'],
+        ];
+        $table = CachedTable::create($this->fsql->current_schema(), 'options', self::$options);
+        foreach($rows as $row) {
+            $table->insertRow($row);
+        }
+        $table->commit();
+        $result = $this->fsql->query("UPDATE options SET field_data = '---time=1234567890---total=99' WHERE field_name = 'graph_data_amount_total'" );
+        $this->assertTrue($result);
+
+        $expected = [
+            ['graph_data_amount_total', '---time=1234567890---total=99'],
+            ['graph_data_range_recv', '---time=1234567890---total=5'],
+            ['graph_data_range_sent', '---time=1234567890---total=15'],
+            ['max_active_peers', '5'],
+        ];
+        $this->assertEquals($expected, $table->getEntries());
+        $this->assertEquals(1, $this->fsql->affected_rows());
+    }
+}
