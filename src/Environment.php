@@ -956,7 +956,7 @@ class Environment
             $columns = $table->getColumns();
             $columnNames = array_keys($columns);
             $cursor = $table->getCursor();
-            $col_indicies = array_flip($columnNames);
+            $colIndices = array_flip($columnNames);
 
             $SET = $this->parseSetClause($set_clause, $columns);
 
@@ -971,110 +971,24 @@ class Environment
             $updates = array();
             foreach ($SET as $set) {
                 list($column, $value) = $set;
-                $new_value = $this->parse_value($columns[$column], $value);
-                if ($new_value === false) {
+                $newValue = $this->parse_value($columns[$column], $value);
+                if ($newValue === false) {
                     return false;
                 }
-                if (is_string($new_value)) {
-                    $new_value = "'".$new_value."'";
+                if (is_string($newValue)) {
+                    $newValue = "'".$newValue."'";
                 }
-                $col_index = $col_indicies[$column];
-                $updates[$col_index] = "$col_index => $new_value";
+                $colIndex = $colIndices[$column];
+                $updates[$colIndex] = "$colIndex => $newValue";
             }
 
-            $unique_key_columns = array();
-            foreach ($columns as $column => $columnDef) {
-                if ($columnDef['key'] == 'p' || $columnDef['key'] == 'u') {
-                    $unique_key_columns[] = $col_indicies[$column];
-                }
-            }
-
-            $affected = 0;
-            $updated_key_columns = array_intersect(array_keys($updates), $unique_key_columns);
-            $key_lookup = array();
-            if (!empty($updated_key_columns)) {
-                foreach ($cursor as $rowId => $entry) {
-                    foreach ($updated_key_columns as $unique) {
-                        if (!isset($key_lookup[$unique])) {
-                            $key_lookup[$unique] = array();
-                        }
-
-                        $key_lookup[$unique][$entry[$unique]] = $rowId;
-                    }
-                }
-            }
-
-            $updates = 'array('.implode(',', $updates).')';
-            $line = "\t\t\$table->updateRow(\$rowId, \$updates);\r\n";
-            $line .= "\t\t\$affected++;\r\n";
-
-            // find all updated columns that are part of a unique key
-            // if there are any, call checkUnique to validate still unique.
-            $code = '';
-            if (!empty($updated_key_columns)) {
-                $code = <<<EOV
-    \$violation = \$this->where_key_check(\$rowId, \$entry, \$key_lookup, \$updated_key_columns);
-    if(\$violation) {
-        if(!\$ignore) {
-            return \$this->set_error("Duplicate value for unique column '{\$column}'");
-        } else {
-            continue;
-        }
-    }
-
-    $line
-EOV;
-            } else {
-                $code = $line;
-            }
-
-            if ($where) {
-                $code = "\tif({$where}) {\r\n$code\r\n\t}";
-            }
-
-            $updateCode = <<<EOC
-foreach( \$cursor as \$rowId => \$entry)
-{
-    \$updates = $updates;
-$code
-}
-return true;
-EOC;
-            $success = eval($updateCode);
-            if (!$success) {
-                return $success;
-            }
-
-            $this->affected = $affected;
-            if ($this->affected) {
-                if ($this->auto) {
-                    $table->commit();
-                } elseif (!in_array($table, $this->updatedTables)) {
-                    $this->updatedTables[] = $table;
-                }
-            }
-
-            return true;
+            $update = new Statements\Update($this, $table_name_pieces, $updates, $where, $ignore);
+            $result = $update->execute();
+            $this->affected = $update->affectedRows();
+            return $result;
         } else {
             return $this->set_error('Invalid UPDATE query');
         }
-    }
-
-    private function where_key_check($rowId, $entry, &$key_lookup, $unique_columns)
-    {
-        foreach ($unique_columns as $unique) {
-            $current_lookup = &$key_lookup[$unique];
-            $current_val = $entry[$unique];
-            if (isset($current_lookup[$current_val])) {
-                if ($current_lookup[$current_val] != $rowId) {
-                    return true;
-                }
-            } else {
-                $current_lookup[$current_val] = $rowId;
-            }
-        }
-
-        return false;
     }
 
     /*
