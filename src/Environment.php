@@ -2532,7 +2532,6 @@ EOC;
             $db = $this->databases[$db_name];
             $db->drop();
             unset($this->databases[$db_name]);
-
             return true;
         } else {
             return $this->set_error('Parse error in databse listing');
@@ -2541,20 +2540,17 @@ EOC;
 
     private function query_drop_schema($name, $ifExists)
     {
-        if (preg_match("/\A`?([^\W\d]\w*)`?\Z/is", $name, $matches)) {
-            $db_name = $matches[1];
+        if (preg_match("/\A(?:`?([^\W\d]\w*)`?\.)?`?([^\W\d]\w*)`?\Z/is", $name, $matches)) {
+            list(, $dbName, $schemaName) = $matches;
 
-            if (!isset($this->databases[$db_name])) {
-                if (!$ifExists) {
-                    return $this->set_error("Database '{$db_name}' does not exist");
-                } else {
-                    return true;
-                }
+            $schema = $this->find_schema($dbName, $schemaName);
+            if ($schema == false) {
+                return $ifExists;
             }
 
-            $db = $this->databases[$db_name];
-            $db->drop();
-            unset($this->databases[$db_name]);
+            $database = $schema->database();
+            $database->dropSchema($schemaName);
+            return true;
         } else {
             return $this->set_error('Parse error in schema listing');
         }
