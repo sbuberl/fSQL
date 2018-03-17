@@ -3,6 +3,7 @@
 namespace FSQL\Statements;
 
 use FSQL\Environment;
+use FSQL\Database\Key;
 
 class Insert extends DataModifyStatement
 {
@@ -40,7 +41,8 @@ class Insert extends DataModifyStatement
             return false;
 
         $tableColumns = $table->getColumns();
-        $tableCursor = $table->getCursor();
+        $tableCursor = $table->getWriteCursor();
+        $keys = $table->getKeys();
 
         $colIndex = 0;
         foreach ($tableColumns as $columnName => $columnDef) {
@@ -103,34 +105,30 @@ class Insert extends DataModifyStatement
         }
 
         foreach ($newRows as $newRow) {
-            foreach ($keyColumns as $colIndex => $columnName) {
-                if ($this->mode == self::REPLACE) {
-                    $delete = [];
-                    foreach ($tableCursor as $key => $row) {
-                        if ($row[$colIndex] == $newRow[$colIndex]) {
-                            $delete[] = $key;
-                        }
-                    }
-                    if (!empty($delete)) {
-                        foreach ($delete as $d) {
-                            ++$this->affected;
-                            $table->deleteRow($d);
-                        }
-                    }
-                } else {
-                    foreach ($tableCursor as $key => $row) {
-                        if ($row[$colIndex] == $newRow[$colIndex]) {
-                            if ($this->mode == self::IGNORE) {
-                                return true;
+            foreach($keys as $key) {
+                if($key->type() & Key::UNIQUE) {
+                    $indexValue = $key->extractIndex($newRow);
+                    if($indexValue !== false) {
+                        $rowid = $key->lookup($indexValue);
+                        if($rowid !== false) {
+                            if($this->mode === self::REPLACE) {
+                            // may have already ben deleted so check return
+                                if($tableCursor->seek($rowid) !== false) {
+                                    $tableCursor->deleteRow();
+                                    $this->affected++;
+                                }
+                            }
+                            elseif($this->mode !== self::IGNORE) {
+                                return $this->environment->set_error("Duplicate value found on key");
                             } else {
-                                return $this->environment->set_error("Duplicate value for unique column '{$columnName}'");
+                                return true;
                             }
                         }
                     }
                 }
             }
 
-            $table->insertRow($newRow);
+            $tableCursor->appendRow($newRow);
 
             ++$this->affected;
         }
