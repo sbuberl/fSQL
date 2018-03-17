@@ -12,6 +12,7 @@ abstract class Table implements Relation
     protected $columns = null;
     protected $entries = null;
     protected $identity = null;
+    protected $keys = [];
 
     public function __construct(Schema $schema, $name)
     {
@@ -39,6 +40,8 @@ abstract class Table implements Relation
     abstract public function temporary();
 
     abstract public function truncate();
+
+    abstract public function createKey($name, $type, $columns);
 
     public function getColumnNames()
     {

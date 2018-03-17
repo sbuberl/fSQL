@@ -75,7 +75,13 @@ class CachedTable extends Table
                 $restraint = implode(',', $column['restraint']);
             }
 
-            $toprint .= $name.': '.$type.';'.$restraint.';'.$auto.';'.$default.';'.$column['key'].';'.$column['null'].";\r\n";
+            if(empty($column['key'])) {
+                $key = 'n';
+                $this->columns[$name]['key'] = 'n';
+            } else {
+                $key = $column['key'];
+            }
+            $toprint .= $name.': '.$type.';'.$restraint.';'.$auto.';'.$default.';'.$key.';'.$column['null'].";\r\n";
         }
 
         return $toprint;
@@ -133,15 +139,17 @@ class CachedTable extends Table
             }
 
             $num_columns = $matches[1];
+            $keys = [];
 
             for ($i = 0; $i < $num_columns; ++$i) {
-                $line = fgets($columnsHandle, 4096);
+                $line = fgets($columnsHandle);
                 if (preg_match("/(\S+): (dt|d|i|f|s|t|e);(.*);(0|1);(-?\d+(?:\.\d+)?|'.*'|NULL);(p|u|k|n);(0|1);/", $line, $matches)) {
                     $name = $matches[1];
                     $type = $matches[2];
                     $restraintString = $matches[3];
                     $auto = (int) $matches[4];
                     $default = $matches[5];
+                    $key = $matches[6];
                     $null = (int) $matches[7];
 
                     if ($type === Types::INTEGER || $type === Types::ENUM) {
@@ -156,21 +164,35 @@ class CachedTable extends Table
 
                     if ($auto === 1 && !empty($restraintString)) {
                         list($current, $always, $start, $increment, $min, $max, $cycle) = explode(',', $restraintString);
-                        $restraint = array((int) $current, (int) $always, (int) $start, (int) $increment, (int) $min, (int) $max, (int) $cycle);
+                        $restraint = [(int) $current, (int) $always, (int) $start, (int) $increment, (int) $min, (int) $max, (int) $cycle];
                     } elseif ($type === Types::ENUM && preg_match_all("/'(.*?(?<!\\\\))'/", $restraintString, $enumMatches) !== false) {
                         $restraint = $enumMatches[1];
                     } else {
-                        $restraint = array();
+                        $restraint = [];
                     }
 
-                    $this->columns[$name] = array(
-                        'type' => $type, 'auto' => $auto, 'default' => $default, 'key' => $matches[6], 'null' => $null, 'restraint' => $restraint,
-                    );
+                    if($key === 'p') {
+                        $key_name = $this->name.'_pk';
+                        $key_type = Key::PRIMARY;
+                        if(!isset($this->keys[$key_name]))
+                            $keys[$key_name] = ['type' => $key_type, 'columns' => [$i]];
+                        else   // add a column
+                            $keys[$key_name]['columns'][] = $i;
+                    }
+
+                    $this->columns[$name] = [
+                        'type' => $type, 'auto' => $auto, 'default' => $default, 'key' => $key, 'null' => $null, 'restraint' => $restraint,
+                    ];
                 } else {
                     $this->columnsFile->releaseRead();
                     $this->columnsLockFile->releaseRead();
                     return false;
                 }
+            }
+
+            foreach($keys as $name => $key) {
+                unset($this->keys[$name]);
+                $this->keys[$name] = new MemoryKey($name, $key['type'], $key['columns']);
             }
 
             $this->columnsFile->releaseRead();
@@ -222,30 +244,24 @@ class CachedTable extends Table
             }
 
             $num_entries = rtrim($matches[1]);
+            $keys = $this->getKeys();
+            foreach($keys as $key)
+            {
+                $key->reset();
+            }
 
             if ($num_entries != 0) {
-                $skip = false;
-
                 $columnDefs = array_values($this->getColumns());
                 for ($i = 0; $i < $num_entries; ++$i) {
-                    $line = rtrim(fgets($dataHandle, 4096));
+                    $line = rtrim(fgets($dataHandle));
 
-                    if (!$skip) {
-                        if (preg_match("/^(\d+):(.*)$/", $line, $matches)) {
-                            $row = $matches[1];
-                            $data = trim($matches[2]);
-                        } else {
-                            continue;
-                        }
+                    if (preg_match("/^(\d+):(.*)$/", $line, $matches)) {
+                        $row = $matches[1];
+                        $data = trim($matches[2]);
                     } else {
-                        $data .= $line;
-                    }
-
-                    if (!preg_match("/(-?\d+(?:\.\d+)?|'.*?(?<!\\\\)'|NULL);$/", $line)) {
-                        $skip = true;
-                        continue;
-                    } else {
-                        $skip = false;
+                        $this->dataFile->releaseRead();
+                        $this->dataLockFile->releaseRead();
+                        return false;
                     }
 
                     preg_match_all("#((-?\d+(?:\.\d+)?)|'(.*?(?<!\\\\))'|NULL);#s", $data, $matches);
@@ -267,6 +283,11 @@ class CachedTable extends Table
                         } else {
                             $entries[$row][$m] = $matches[3][$m];
                         }
+                    }
+
+                    foreach($keys as $key) {
+                        $idx = $key->extractIndex($entries[$row]);
+                        $key->addEntry($row, $idx);
                     }
                 }
             }
@@ -318,6 +339,36 @@ class CachedTable extends Table
 
         $this->columnsFile->releaseWrite();
         $this->columnsLockFile->releaseWrite();
+    }
+
+    public function createKey($name, $type, $columns)
+    {
+        $key = false;
+        if($type === FSQL_KEY_PRIMARY)
+        {
+            $key = new fSQLMemoryKey($name, $type, $columns);
+            $this->keys[$name] = $key;
+            addKey($name, $type, $columns);
+        }
+        return $key;
+    }
+
+    private function addKey($name, $type, $columns)
+    {
+        $colLookup = array_keys($columns);
+        foreach($columns as $colIndex)
+        {
+            $colName = $colLookup[$colIndex];
+            $oldKeyValue = $this->columns[$colName]['key'];
+            if($type === FSQL_KEY_PRIMARY)
+                $this->columns[$colName]['key'] = 'p';
+            else if($type & FSQL_KEY_UNIQUE && $oldKeyValue !== 'p')
+                $this->columns[$colName]['key'] = 'u';
+            else if($oldKeyValue !== 'p' && $oldKeyValue !== 'u')
+                $this->columns[$colName]['key'] = 'k';
+        }
+        $this->setColumns($this->columns);
+        return true;
     }
 
     public function commit()
