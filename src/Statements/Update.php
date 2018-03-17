@@ -3,6 +3,7 @@
 namespace FSQL\Statements;
 
 use FSQL\Environment;
+use FSQL\Database\Key;
 
 class Update extends DataModifyStatement
 {
@@ -36,52 +37,34 @@ class Update extends DataModifyStatement
         $columns = $table->getColumns();
         $columnNames = array_keys($columns);
         $colIndices = array_flip($columnNames);
-        $cursor = $table->getCursor();
+        $cursor = $table->getWriteCursor();
 
+        // find all unique keys and columns to watch.
+        $keys = $table->getKeys();
+        $uniqueKeys = [];
         $uniqueKeyColumns = [];
-        foreach ($columns as $column => $columnDef) {
-            if ($columnDef['key'] == 'p' || $columnDef['key'] == 'u') {
-                $uniqueKeyColumns[] = $colIndices[$column];
+        foreach($keys as $key) {
+            if($key->type() & Key::UNIQUE) {
+                $uniqueKeyColumns = array_merge($uniqueKeyColumns, $key->columns());
+                $uniqueKeys[] = $key;
             }
         }
 
         $updatedKeyColumns = array_intersect(array_keys($this->updates), $uniqueKeyColumns);
-        $keyLookup = [];
-        if (!empty($updatedKeyColumns)) {
-            foreach ($cursor as $rowId => $entry) {
-                foreach ($updatedKeyColumns as $unique) {
-                    if (!isset($keyLookup[$unique])) {
-                        $keyLookup[$unique] = array();
-                    }
-
-                    $keyLookup[$unique][$entry[$unique]] = $rowId;
-                }
-            }
-        }
 
         $updates = 'array('.implode(',', $this->updates).')';
-        $line = "\t\t\$table->updateRow(\$rowId, \$updates);\r\n";
-        $line .= "\t\t\$this->affected++;\r\n";
+        $code = '';
 
         // find all updated columns that are part of a unique key
         // if there are any, call checkUnique to validate still unique.
-        $code = '';
         if (!empty($updatedKeyColumns)) {
-            $code = <<<EOV
-\$violation = \$this->whereKeyCheck(\$rowId, \$entry, \$keyLookup, \$updatedKeyColumns);
-if(\$violation) {
-    if(!\$this->ignore) {
-        return \$this->set_error("Duplicate value for unique column '{\$column}'");
-    } else {
-        continue;
-    }
-}
-
-$line
-EOV;
-        } else {
-            $code = $line;
+            $code .= "\t\tif(\$this->checkUnique(\$uniqueKeys, \$rowId, \$entry) === false) {\r\n";
+            $code .= "\t\t\treturn (\$this->ignore) ? true : \$this->environment->set_error('Duplicate values found in unique key during UPDATE');\r\n";
+            $code .= "\t\t}\r\n";
         }
+
+        $code .= "\t\t\$cursor->updateRow(\$updates);\r\n";
+        $code .= "\t\t\$this->affected++;\r\n";
 
         if ($this->where) {
             $code = "\tif({$this->where}) {\r\n$code\r\n\t}";
@@ -105,21 +88,15 @@ EOC;
         return true;
     }
 
-    private function whereKeyCheck($rowId, $entry, &$keyLookup, $uniqueColumns)
+    private function checkUnique($uniqueKeys, $rowId, $updatedRow)
     {
-        foreach ($uniqueColumns as $unique) {
-            $currentLookup = &$keyLookup[$unique];
-            $currentVal = $entry[$unique];
-            if (isset($currentLookup[$currentVal])) {
-                if ($currentLookup[$currentVal] != $rowId) {
-                    return true;
-                }
-            } else {
-                $currentLookup[$currentVal] = $rowId;
+        foreach($uniqueKeys as $key) {
+            $newValue = $key->extractIndex($updatedRow);
+            $foundRowId = $key->lookup($newValue);
+            if($foundRowId !== false && $foundRowId !== $rowId) {
+                return false;
             }
         }
-
-        return false;
+        return true;
     }
-
 }
