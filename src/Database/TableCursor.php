@@ -4,9 +4,9 @@ namespace FSQL\Database;
 
 class TableCursor implements \SeekableIterator, \Countable
 {
-    private $entries;
-    private $numRows;
-    private $currentRowId;
+    protected $entries;
+    protected $numRows;
+    protected $currentRowId;
 
     public function __construct(array &$entries)
     {

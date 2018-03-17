@@ -9,6 +9,7 @@ abstract class Table implements Relation
     protected $name;
     protected $schema;
     protected $cursor = null;
+    protected $writeCursor= null;
     protected $columns = null;
     protected $entries = null;
     protected $identity = null;
@@ -79,6 +80,16 @@ abstract class Table implements Relation
         return new TableCursor($this->entries);
     }
 
+    public function getWriteCursor()
+    {
+        if ($this->writeCursor === null) {
+            $this->writeCursor = new WriteCursor($this->entries, $this);
+        }
+
+        $this->writeCursor->rewind();
+
+        return $this->writeCursor;
+    }
     public function getIdentity()
     {
         if ($this->identity === null) {
@@ -138,21 +149,9 @@ abstract class Table implements Relation
         }
     }
 
-    public function insertRow(array $data)
+    public function getKeys()
     {
-        $this->entries[] = $data;
-    }
-
-    public function updateRow($row, array $data)
-    {
-        foreach ($data as $key => $value) {
-            $this->entries[$row][$key] = $value;
-        }
-    }
-
-    public function deleteRow($row)
-    {
-        unset($this->entries[$row]);
+        return $this->keys;
     }
 
     abstract public function commit();

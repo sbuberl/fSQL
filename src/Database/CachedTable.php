@@ -9,7 +9,6 @@ use FSQL\Types;
 
 class CachedTable extends Table
 {
-    private $uncommited = false;
     public $columnsLockFile;
     public $columnsFile;
     public $dataLockFile;
@@ -224,6 +223,13 @@ class CachedTable extends Table
         return parent::newCursor();
     }
 
+    public function getWriteCursor()
+    {
+        $this->loadEntries();
+
+        return parent::getWriteCursor();
+    }
+
     private function loadEntries()
     {
         $this->dataLockFile->acquireRead();
@@ -302,27 +308,6 @@ class CachedTable extends Table
         return true;
     }
 
-    public function insertRow(array $data)
-    {
-        $this->loadEntries();
-        parent::insertRow($data);
-        $this->uncommited = true;
-    }
-
-    public function updateRow($row, array $data)
-    {
-        $this->loadEntries();
-        parent::updateRow($row, $data);
-        $this->uncommited = true;
-    }
-
-    public function deleteRow($row)
-    {
-        $this->loadEntries();
-        parent::deleteRow($row);
-        $this->uncommited = true;
-    }
-
     public function setColumns(array $columnDefs)
     {
         $this->columnsLockFile->acquireWrite();
@@ -373,7 +358,8 @@ class CachedTable extends Table
 
     public function commit()
     {
-        if ($this->uncommited === false) {
+        $writeCursor = $this->getWriteCursor();
+        if(!$writeCursor->isUncommitted()) {
             return;
         }
 
@@ -407,13 +393,12 @@ class CachedTable extends Table
         $this->dataFile->releaseWrite();
         $this->dataLockFile->releaseWrite();
 
-        $this->uncommited = false;
+        $this->writeCursor = null;
     }
 
     public function rollback()
     {
         $this->dataLockFile->reset();
-        $this->uncommited = false;
     }
 
     public function isReadLocked()

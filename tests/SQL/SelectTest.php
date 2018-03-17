@@ -164,8 +164,9 @@ class SelectTest extends BaseTest
     public function testSelectAll()
     {
         $table = CachedTable::create($this->fsql->current_schema(), 'customers', self::$columns1);
+        $cursor = $table->getWriteCursor();
         foreach (self::$entries1 as $entry) {
-            $table->insertRow($entry);
+            $cursor->appendRow($entry);
         }
         $table->commit();
 
@@ -176,11 +177,12 @@ class SelectTest extends BaseTest
         $this->assertEquals(self::$entries1, $results);
     }
 
-    public function testAgregateNoGroupBy()
+    public function testAggregateNoGroupBy()
     {
         $table = CachedTable::create($this->fsql->current_schema(), 'customers', self::$columns1);
+        $cursor = $table->getWriteCursor();
         foreach (self::$entries1 as $entry) {
-            $table->insertRow($entry);
+            $cursor->appendRow($entry);
         }
         $table->commit();
 
@@ -193,8 +195,9 @@ class SelectTest extends BaseTest
     public function testGroupBy()
     {
         $table = CachedTable::create($this->fsql->current_schema(), 'customers', self::$columns1);
+        $cursor = $table->getWriteCursor();
         foreach (self::$entries1 as $entry) {
-            $table->insertRow($entry);
+            $cursor->appendRow($entry);
         }
         $table->commit();
 
@@ -219,8 +222,9 @@ class SelectTest extends BaseTest
     public function testOrderByColumnIndex()
     {
         $table = CachedTable::create($this->fsql->current_schema(), 'customers', self::$columns1);
+        $cursor = $table->getWriteCursor();
         foreach (self::$entries1 as $entry) {
-            $table->insertRow($entry);
+            $cursor->appendRow($entry);
         }
         $table->commit();
 
@@ -235,8 +239,9 @@ class SelectTest extends BaseTest
     public function testOrderByColumnIndexBad()
     {
         $table = CachedTable::create($this->fsql->current_schema(), 'customers', self::$columns1);
+        $cursor = $table->getWriteCursor();
         foreach (self::$entries1 as $entry) {
-            $table->insertRow($entry);
+            $cursor->appendRow($entry);
         }
         $table->commit();
 
@@ -248,8 +253,9 @@ class SelectTest extends BaseTest
     public function testOrderByColumnName()
     {
         $table = CachedTable::create($this->fsql->current_schema(), 'customers', self::$columns1);
+        $cursor = $table->getWriteCursor();
         foreach (self::$entries1 as $entry) {
-            $table->insertRow($entry);
+            $cursor->appendRow($entry);
         }
         $table->commit();
 
@@ -264,8 +270,9 @@ class SelectTest extends BaseTest
     public function testOrderByColumnNameBad()
     {
         $table = CachedTable::create($this->fsql->current_schema(), 'customers', self::$columns1);
+        $cursor = $table->getWriteCursor();
         foreach (self::$entries1 as $entry) {
-            $table->insertRow($entry);
+            $cursor->appendRow($entry);
         }
         $table->commit();
 
@@ -277,8 +284,9 @@ class SelectTest extends BaseTest
     public function testOrderByDescAsc()
     {
         $table = CachedTable::create($this->fsql->current_schema(), 'customers', self::$columns1);
+        $cursor = $table->getWriteCursor();
         foreach (self::$entries1 as $entry) {
-            $table->insertRow($entry);
+            $cursor->appendRow($entry);
         }
         $table->commit();
 
@@ -293,8 +301,9 @@ class SelectTest extends BaseTest
     public function testOrderByNullsFirstLast()
     {
         $table = CachedTable::create($this->fsql->current_schema(), 'customers', self::$columns1);
+        $cursor = $table->getWriteCursor();
         foreach (self::$entries1 as $entry) {
-            $table->insertRow($entry);
+            $cursor->appendRow($entry);
         }
         $table->commit();
 
@@ -309,8 +318,9 @@ class SelectTest extends BaseTest
     public function testOffsetOnly()
     {
         $table = CachedTable::create($this->fsql->current_schema(), 'customers', self::$columns1);
+        $cursor = $table->getWriteCursor();
         foreach (self::$entries1 as $entry) {
-            $table->insertRow($entry);
+            $cursor->appendRow($entry);
         }
         $table->commit();
 
@@ -325,8 +335,9 @@ class SelectTest extends BaseTest
     public function testOffsetFetchFirstNoLength()
     {
         $table = CachedTable::create($this->fsql->current_schema(), 'customers', self::$columns1);
+        $cursor = $table->getWriteCursor();
         foreach (self::$entries1 as $entry) {
-            $table->insertRow($entry);
+            $cursor->appendRow($entry);
         }
         $table->commit();
 
@@ -340,8 +351,9 @@ class SelectTest extends BaseTest
     public function testOffsetFetchFirstLength()
     {
         $table = CachedTable::create($this->fsql->current_schema(), 'customers', self::$columns1);
+        $cursor = $table->getWriteCursor();
         foreach (self::$entries1 as $entry) {
-            $table->insertRow($entry);
+            $cursor->appendRow($entry);
         }
         $table->commit();
 
@@ -355,8 +367,9 @@ class SelectTest extends BaseTest
     public function testFetchFirstLength()
     {
         $table = CachedTable::create($this->fsql->current_schema(), 'customers', self::$columns1);
+        $cursor = $table->getWriteCursor();
         foreach (self::$entries1 as $entry) {
-            $table->insertRow($entry);
+            $cursor->appendRow($entry);
         }
         $table->commit();
 
@@ -370,8 +383,9 @@ class SelectTest extends BaseTest
     public function testOffsetAndLimit()
     {
         $table = CachedTable::create($this->fsql->current_schema(), 'customers', self::$columns1);
+        $cursor = $table->getWriteCursor();
         foreach (self::$entries1 as $entry) {
-            $table->insertRow($entry);
+            $cursor->appendRow($entry);
         }
         $table->commit();
 
@@ -383,8 +397,9 @@ class SelectTest extends BaseTest
     public function testFetchFirstAndLimit()
     {
         $table = CachedTable::create($this->fsql->current_schema(), 'customers', self::$columns1);
+        $cursor = $table->getWriteCursor();
         foreach (self::$entries1 as $entry) {
-            $table->insertRow($entry);
+            $cursor->appendRow($entry);
         }
         $table->commit();
 
@@ -396,8 +411,9 @@ class SelectTest extends BaseTest
     public function testLimitLengthOnly()
     {
         $table = CachedTable::create($this->fsql->current_schema(), 'customers', self::$columns1);
+        $cursor = $table->getWriteCursor();
         foreach (self::$entries1 as $entry) {
-            $table->insertRow($entry);
+            $cursor->appendRow($entry);
         }
         $table->commit();
 
@@ -411,8 +427,9 @@ class SelectTest extends BaseTest
     public function testLimitThenOffset()
     {
         $table = CachedTable::create($this->fsql->current_schema(), 'customers', self::$columns1);
+        $cursor = $table->getWriteCursor();
         foreach (self::$entries1 as $entry) {
-            $table->insertRow($entry);
+            $cursor->appendRow($entry);
         }
         $table->commit();
 
@@ -426,8 +443,9 @@ class SelectTest extends BaseTest
     public function testLimitCommas()
     {
         $table = CachedTable::create($this->fsql->current_schema(), 'customers', self::$columns1);
+        $cursor = $table->getWriteCursor();
         foreach (self::$entries1 as $entry) {
-            $table->insertRow($entry);
+            $cursor->appendRow($entry);
         }
         $table->commit();
 

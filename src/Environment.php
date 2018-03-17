@@ -1135,14 +1135,14 @@ class Environment
             $join_data = $this->left_join($src_table->getEntries(), $dest_table->getEntries(), $join_function, $src_columns_size, $joinMatches);
 
             $affected = 0;
-            $srcCursor = $src_table->getCursor();
-            $destCursor = $src_table->getCursor();
+            $srcCursor = $src_table->getWriteCursor();
+            $destCursor = $src_table->getWriteCursor();
             foreach ($srcCursor as $srcRowId => $entry) {
                 $destRowId = $joinMatches[$srcRowId];
                 if ($destRowId === false) {
                     $newRow = eval($insertCode);
                     if ($newRow !== false) {
-                        $dest_table->insertRow($newRow);
+                        $destCursor->appendRow($newRow);
                         ++$affected;
                     }
                 } else {
@@ -1151,7 +1151,7 @@ class Environment
                     $entry = array_merge($entry, $destRow);
                     $updates = eval($updateCode);
                     if ($updates !== false) {
-                        $dest_table->updateRow($destRowId, $updates);
+                        $destCursor->updateRow($destRowId, $updates);
                         ++$affected;
                     }
                 }
@@ -2051,7 +2051,7 @@ EOT;
 
             $columns = $table->getColumns();
             $columnNames = array_keys($columns);
-            $cursor = $table->getCursor();
+            $cursor = $table->getWriteCursor();
 
             if ($cursor->isDone()) {
                 return true;
@@ -2064,11 +2064,11 @@ EOT;
                 }
 
                 $code = <<<EOC
-            for(\$cursor->rewind(); \$cursor->valid(); \$cursor->next()) {
+            foreach (\$cursor as \$entry) { {
                 \$entry = \$cursor->current();
                 if({$where})
                 {
-                    \$table->deleteRow(\$cursor->key());
+                    \$cursor->deleteRow();
                     \$this->affected++;
                 }
             }
@@ -2077,8 +2077,8 @@ EOC;
                 eval($code);
             } else {
                 $c = 0;
-                for ($cursor->rewind(); $cursor->valid(); $cursor->next()) {
-                    $table->deleteRow($cursor->key());
+                foreach ($cursor as $entry) {
+                    $cursor->deleteRow();
                     ++$c;
                 }
                 $this->affected = $c;

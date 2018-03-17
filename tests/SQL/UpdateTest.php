@@ -32,8 +32,9 @@ class UpdateTest extends BaseTest
             ['max_active_peers', '5'],
         ];
         $table = CachedTable::create($this->fsql->current_schema(), 'options', self::$options);
+        $cursor = $table->getWriteCursor();
         foreach($rows as $row) {
-            $table->insertRow($row);
+            $cursor->appendRow($row);
         }
         $table->commit();
         $result = $this->fsql->query("UPDATE options SET field_data = '99'" );
@@ -68,8 +69,9 @@ class UpdateTest extends BaseTest
             ['max_active_peers', '5'],
         ];
         $table = CachedTable::create($this->fsql->current_schema(), 'options', self::$options);
+        $cursor = $table->getWriteCursor();
         foreach($rows as $row) {
-            $table->insertRow($row);
+            $cursor->appendRow($row);
         }
         $table->commit();
         $result = $this->fsql->query("UPDATE options SET field_data = '---time=1234567890---total=99' WHERE field_name = 'username'" );
@@ -88,8 +90,9 @@ class UpdateTest extends BaseTest
             ['max_active_peers', '5'],
         ];
         $table = CachedTable::create($this->fsql->current_schema(), 'options', self::$options);
+        $cursor = $table->getWriteCursor();
         foreach($rows as $row) {
-            $table->insertRow($row);
+            $cursor->appendRow($row);
         }
         $table->commit();
         $result = $this->fsql->query("UPDATE options SET field_data = '---time=1234567890---total=99' WHERE field_name = 'graph_data_amount_total'" );

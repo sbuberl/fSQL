@@ -128,43 +128,12 @@ class CachedTablest extends BaseTest
         $this->assertSame(array(), $table->getEntries());
     }
 
-    public function testInsertRow()
-    {
-        $table = CachedTable::create($this->schema, 'blah', self::$columns);
-        $table->insertRow(self::$entries[0]);
-        $table->insertRow(self::$entries[1]);
-
-        $this->assertEquals($table->getEntries(), self::$entries);
-    }
-
-    public function testUpdateRow()
-    {
-        $update = array(1 => 'jsmith', 4 => 10000000.0);
-
-        $table = CachedTable::create($this->schema, 'blah', self::$columns);
-        $table->insertRow(self::$entries[0]);
-        $table->insertRow(self::$entries[1]);
-
-        $table->updateRow(1, $update);
-        $entries = $table->getEntries();
-        $this->assertEquals(array(2, 'jsmith', 27, '1031 Elm Street', 10000000.0, 'small'), $entries[1]);
-    }
-
-    public function testDeleteRow()
-    {
-        $table = CachedTable::create($this->schema, 'blah', self::$columns);
-        $table->insertRow(self::$entries[0]);
-        $table->insertRow(self::$entries[1]);
-
-        $table->deleteRow(0);
-        $this->assertEquals($table->getEntries(), array(1 => self::$entries[1]));
-    }
-
     public function testRollback()
     {
         $table = CachedTable::create($this->schema, 'blah', self::$columns);
-        $table->insertRow(self::$entries[0]);
-        $table->insertRow(self::$entries[1]);
+        $cursor = $table->getWriteCursor();
+        $cursor->appendRow(self::$entries[0]);
+        $cursor->appendRow(self::$entries[1]);
         $this->assertEquals($table->getEntries(), self::$entries);
 
         $table->rollback();
@@ -180,10 +149,11 @@ class CachedTablest extends BaseTest
     public function testCommit()
     {
         $table = CachedTable::create($this->schema, 'blah', self::$columns);
-        $table->insertRow(self::$entries[0]);
+        $cursor = $table->getWriteCursor();
+        $cursor->appendRow(self::$entries[0]);
         $table->commit();
 
-        $table->insertRow(self::$entries[1]);
+        $cursor->appendRow(self::$entries[1]);
         $table->rollback();
         $this->assertEquals(count($table->getEntries()), 1);
     }
@@ -200,8 +170,9 @@ class CachedTablest extends BaseTest
     public function testTruncate()
     {
         $table = CachedTable::create($this->schema, 'blah', self::$columns);
-        $table->insertRow(self::$entries[0]);
-        $table->insertRow(self::$entries[1]);
+        $cursor = $table->getWriteCursor();
+        $cursor->appendRow(self::$entries[0]);
+        $cursor->appendRow(self::$entries[1]);
         $table->commit();
         $this->assertEquals(count($table->getEntries()), 2);
 
@@ -220,8 +191,9 @@ class CachedTablest extends BaseTest
     public function testGetIdentityUpgrade()
     {
         $table = CachedTable::create($this->schema, 'students', self::$columns3);
-        $table->insertRow(self::$entries[0]);
-        $table->insertRow(self::$entries[1]);
+        $cursor = $table->getWriteCursor();
+        $cursor->appendRow(self::$entries[0]);
+        $cursor->appendRow(self::$entries[1]);
 
         $identity = $table->getIdentity();
         $this->assertNotNull($identity);
@@ -264,8 +236,9 @@ class CachedTablest extends BaseTest
     public function testGetCursor()
     {
         $table = CachedTable::create($this->schema, 'blah', self::$columns);
-        $table->insertRow(self::$entries[0]);
-        $table->insertRow(self::$entries[1]);
+        $cursor = $table->getWriteCursor();
+        $cursor->appendRow(self::$entries[0]);
+        $cursor->appendRow(self::$entries[1]);
 
         $cursor = $table->getCursor();
         $this->assertInstanceOf('FSQL\Database\TableCursor', $cursor);
@@ -276,8 +249,9 @@ class CachedTablest extends BaseTest
     public function testNewCursor()
     {
         $table = CachedTable::create($this->schema, 'blah', self::$columns);
-        $table->insertRow(self::$entries[0]);
-        $table->insertRow(self::$entries[1]);
+        $cursor = $table->getWriteCursor();
+        $cursor->appendRow(self::$entries[0]);
+        $cursor->appendRow(self::$entries[1]);
 
         $cursor = $table->newCursor();
         $this->assertInstanceOf('FSQL\Database\TableCursor', $cursor);

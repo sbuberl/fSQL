@@ -299,7 +299,7 @@ class InsertTest extends BaseTest
 
         $result = $this->fsql->query("INSERT INTO students VALUES (12, 'Jane', 'Doe', 54321, 4.0);");
         $this->assertFalse($result);
-        $this->assertEquals("Duplicate value for unique column 'id'", trim($this->fsql->error()));
+        $this->assertEquals("Duplicate value found on key", trim($this->fsql->error()));
         $this->assertEquals(0, $this->fsql->affected_rows());
         $this->assertNull($this->fsql->insert_id());
     }
