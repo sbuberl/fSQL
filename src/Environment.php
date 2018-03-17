@@ -1487,6 +1487,7 @@ class Environment
         $selected_columns = array();
         $final_code = null;
         if ($isGrouping) {
+            $group = [];
             $select_line = '';
             foreach ($selectedInfo as $info) {
                 list($select_type, $select_value, $select_alias) = $info;
