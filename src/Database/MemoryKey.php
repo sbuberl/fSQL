@@ -19,6 +19,7 @@ class MemoryKey extends Key
     public function name() { return $this->name; }
     public function columns() { return $this->columns; }
     public function type() { return $this->type; }
+    public function count() { return count($this->key); }
 
     private function buildKeyIndex($values)
     {
