@@ -42,9 +42,15 @@ class MemoryKeyTest extends BaseTest
         $this->assertEquals(0, $key->count());
     }
 
+    public function testExtractIndexNoKey()
+    {
+        $key = new MemoryKey('my_primary', Key::PRIMARY, []);
+        $index = $key->extractIndex(self::$entries1[1]);
+        $this->assertEquals(false, $index);
+    }
+
     public function testExtractIndexOneKey()
     {
-        $keyColumns = [0];
         $key = new MemoryKey('my_primary', Key::PRIMARY, [0]);
         $index = $key->extractIndex(self::$entries1[1]);
         $this->assertEquals($index, self::$entries1[1][0]);
