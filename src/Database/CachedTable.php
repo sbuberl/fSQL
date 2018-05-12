@@ -173,7 +173,7 @@ class CachedTable extends Table
                     if($key === 'p') {
                         $key_name = $this->name.'_pk';
                         $key_type = Key::PRIMARY;
-                        if(!isset($this->keys[$key_name]))
+                        if(!isset($keys[$key_name]))
                             $keys[$key_name] = ['type' => $key_type, 'columns' => [$i]];
                         else   // add a column
                             $keys[$key_name]['columns'][] = $i;
@@ -331,7 +331,7 @@ class CachedTable extends Table
         $key = false;
         if($type === FSQL_KEY_PRIMARY)
         {
-            $key = new fSQLMemoryKey($name, $type, $columns);
+            $key = new MemoryKey($name, $type, $columns);
             $this->keys[$name] = $key;
             addKey($name, $type, $columns);
         }
