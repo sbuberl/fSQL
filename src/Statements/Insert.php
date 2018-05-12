@@ -44,11 +44,10 @@ class Insert extends DataModifyStatement
         $tableCursor = $table->getWriteCursor();
         $keys = $table->getKeys();
 
-        $colIndex = 0;
-        foreach ($tableColumns as $columnName => $columnDef) {
-            ////See if it is a PRIMARY KEY or UNIQUE
-            if ($columnDef['key'] == 'p' || $columnDef['key'] == 'u') {
-                $keyColumns[$colIndex] = $columnName;
+        $keyColumns = [];
+        foreach($keys as $key) {
+            if($key->type() & Key::UNIQUE) {
+                $keyColumns = array_merge($keyColumns, $key->columns());
             }
         }
 

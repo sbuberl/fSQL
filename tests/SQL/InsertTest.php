@@ -44,6 +44,13 @@ class InsertTest extends BaseTest
         'gpa' => ['type' => 'f', 'auto' => 0, 'default' => 11000000.0, 'key' => 'n', 'null' => 0, 'restraint' => []],
     ];
 
+    private static $columns5 = [
+        'firstName' => ['type' => 's', 'auto' => 0, 'default' => null, 'key' => 'p', 'null' => 0, 'restraint' => []],
+        'lastName' => ['type' => 's', 'auto' => 0, 'default' => 'blah', 'key' => 'p', 'null' => 0, 'restraint' => []],
+        'zip' => ['type' => 'i', 'auto' => 0, 'default' => 12345, 'key' => 'n', 'null' => 0, 'restraint' => []],
+        'gpa' => ['type' => 'f', 'auto' => 0, 'default' => 11000000.0, 'key' => 'n', 'null' => 0, 'restraint' => []],
+    ];
+
     public function setUp()
     {
         parent::setUp();
@@ -298,6 +305,20 @@ class InsertTest extends BaseTest
         $this->assertTrue($result);
 
         $result = $this->fsql->query("INSERT INTO students VALUES (12, 'Jane', 'Doe', 54321, 4.0);");
+        $this->assertFalse($result);
+        $this->assertEquals("Duplicate value found on key", trim($this->fsql->error()));
+        $this->assertEquals(0, $this->fsql->affected_rows());
+        $this->assertNull($this->fsql->insert_id());
+    }
+
+    public function testPrimaryKeyMultipleKeyCollision()
+    {
+        $table = CachedTable::create($this->fsql->current_schema(), 'students', self::$columns5);
+
+        $result = $this->fsql->query("INSERT INTO students VALUES ('John', 'Smith', 90210, 3.6);");
+        $this->assertTrue($result);
+
+        $result = $this->fsql->query("INSERT INTO students VALUES ('John', 'Smith', 54321, 4.0);");
         $this->assertFalse($result);
         $this->assertEquals("Duplicate value found on key", trim($this->fsql->error()));
         $this->assertEquals(0, $this->fsql->affected_rows());
