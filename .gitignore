@@ -1,3 +1,4 @@
 /vendor/
 *.phar
 .tmp
+/nbproject/private/

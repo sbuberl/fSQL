@@ -2529,53 +2529,56 @@ EOC;
 
     private function query_show($query)
     {
-        if (preg_match("/\ASHOW\s+(FULL\s+)?TABLES(?:\s+FROM\s+`?([^\W\d]\w*)`?)?\s*[;]?\Z/is", $query, $matches)) {
+        if (preg_match("/\ASHOW\s+(FULL\s+)?TABLES(?:\s+(?:FROM|IN)\s+(?:(?:`?([^\W\d]\w*)`?\.)?`?([^\W\d]\w*)`?))?\s*[;]?\Z/is", $query, $matches)) {
             $full = !empty($matches[1]);
-            $db_name = !empty($matches[2]) ? $matches[2] : '';
-
-            $db = $this->get_database($db_name);
-            if ($db === false) {
-                return false;
-            }
-
-            $tables = $db->listTables();
-            $data = array();
-
-            foreach ($tables as $table_name) {
-                if ($full) {
-                    $data[] = array($table_name, 'BASE TABLE');
-                } else {
-                    $data[] = array($table_name);
-                }
-            }
-
-            $columns = array('Name');
-            if ($full) {
-                $columns[] = 'Table_type';
-            }
-
-            return new ResultSet($columns, $data);
+            $dbName = isset($matches[2]) ? $matches[2] : false;
+            $schemaName = isset($matches[3]) ? $matches[3] : false;
+            return $this->show_tables($dbName, $schemaName, $full);
         } elseif (preg_match("/\ASHOW\s+DATABASES\s*[;]?\s*\Z/is", $query, $matches)) {
+            $data = [];
             foreach ($this->list_dbs() as $db) {
-                $data[] = array($db);
+                $data[] = [$db];
             }
 
-            $columns = array('Name');
+            $columns = ['Name'];
 
             return new ResultSet($columns, $data);
-        } elseif (preg_match('/\ASHOW\s+(FULL\s+)?COLUMNS\s+(?:FROM|IN)\s+`?([^\W\d]\w*)`?(?:\s+(?:FROM|IN)\s+(?:`?([^\W\d]\w*)`?\.`?)?([^\W\d]\w*)`?)?([^\W\d]\w*)`?)?\s*[;]?\s*\Z/is', $query, $matches)) {
-            $db_name = !empty($matches[3]) ? $matches[3] : null;
-            $schema_name = isset($matches[4]) ? $matches[4] : null;
-            $table_name = $matches[2];
-            $pieces = array($db_name, $schema_name, $table_name);
-
-            return $this->show_columns($pieces, !empty($matches[1]));
+        } elseif (preg_match('/\ASHOW\s+(FULL\s+)?COLUMNS\s+(?:FROM|IN)\s+(`?(?:[^\W\d]\w*`?\.`?){0,2}[^\W\d]\w*`?)?\s*[;]?\s*\Z/is', $query, $matches)) {
+            $full = !empty($matches[1]);
+            $fullTableName = $matches[2];
+            $pieces = $this->parse_relation_name($fullTableName);
+            return $this->show_columns($pieces, $full);
         } else {
             return $this->set_error('Invalid SHOW query');
         }
     }
 
-    private function show_columns($name_pieces, $full)
+    private function show_tables($dbName, $schemaName, $full)
+    {
+        $schema = $this->find_schema($dbName, $schemaName);
+        if ($schema === false) {
+            return false;
+        }
+
+        $tables = $schema->listTables();
+        $data = [];
+
+        foreach ($tables as $tableName) {
+            if ($full) {
+                $data[] = [$tableName, 'BASE TABLE'];
+            } else {
+                $data[] = [$tableName];
+            }
+        }
+
+        $columns = ['Name'];
+        if ($full) {
+            $columns[] = 'Table_type';
+        }
+
+        return new ResultSet($columns, $data);
+    }
+    private function show_columns(array $name_pieces, $full)
     {
         $table = $this->find_table($name_pieces);
         if ($table === false) {
@@ -2583,11 +2586,11 @@ EOC;
         }
         $tableColumns = $table->getColumns();
 
-        $data = array();
+        $data = [];
 
         foreach ($tableColumns as $name => $column) {
             $type = Types::getTypeName($column['type']);
-            $null = ($column['null']) ? 'YES' : '';
+            $null = ($column['null']) ? 'YES' : 'NO';
             $extra = ($column['auto']) ? 'auto_increment' : '';
             $default = $column['default'];
 
@@ -2603,18 +2606,18 @@ EOC;
                 $key = '';
             }
 
-            $row = array($name, $type, $null, $column['default'], $key, $extra);
+            $row = [$name, $type, $null, $default, $key, $extra];
             if ($full) {
-                array_splice($row, 2, 0, array(null));
+                array_splice($row, 2, 0, [null]);
                 array_push($row, 'select,insert,update,references', '');
             }
 
             $data[] = $row;
         }
 
-        $columns = array('Field', 'Type', 'Null', 'Default', 'Key', 'Extra');
+        $columns = ['Field', 'Type', 'Null', 'Default', 'Key', 'Extra'];
         if ($full) {
-            array_splice($columns, 2, 0, 'Correlation');
+            array_splice($columns, 2, 0, 'Collation');
             array_push($columns, 'Privileges', 'Comment');
         }
 
@@ -2625,7 +2628,6 @@ EOC;
     {
         if (preg_match("/\ADESC(?:RIBE)?\s+(`?(?:[^\W\d]\w*`?\.`?){0,2}[^\W\d]\w*`?)\s*[;]?\Z/is", $query, $matches)) {
             $name_pieces = $this->parse_relation_name($matches[1]);
-
             return $this->show_columns($name_pieces, false);
         } else {
             return $this->set_error('Invalid DESCRIBE query');
