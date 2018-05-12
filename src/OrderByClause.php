@@ -8,37 +8,45 @@ class OrderByClause
 
     public function __construct(array $tosortData)
     {
-        $code = '';
+        $sortInfo = [];
         foreach ($tosortData as $tosort) {
             $key = $tosort['key'];
 
             if ($tosort['ascend']) {
                 $ltVal = -1;
-                $gtVal = 1;
             } else {
                 $ltVal = 1;
-                $gtVal = -1;
             }
 
             if ($tosort['nullsFirst']) {
                 $leftNullVal = -1;
-                $rightNullVal = 1;
             } else {
                 $leftNullVal = 1;
-                $rightNullVal = -1;
             }
 
-            $code .= <<<EOC
-\$a_value = \$a[$key];
-\$b_value = \$b[$key];
-if(\$a_value === null)          return $leftNullVal;
-elseif(\$b_value === null)      return $rightNullVal;
-elseif(\$a_value < \$b_value)   return $ltVal;
-elseif(\$a_value > \$b_value)   return $gtVal;
-EOC;
+            $sortInfo[] = [$key, $ltVal, $leftNullVal];
         }
-        $code .= 'return 0;';
-        $this->sortFunction = create_function('$a, $b', $code);
+
+        $this->sortFunction = function($a, $b) use ($sortInfo)
+        {
+            foreach($sortInfo as $info)
+            {
+                list($key, $ltVal, $leftNullVal) = $info;
+                $aValue = $a[$key];
+                $bValue = $b[$key];
+                if($aValue === null)
+                {
+                    if($bValue == null)
+                        continue;
+                    else
+                        return $leftNullVal;
+                }
+                elseif($bValue === null)    return -$leftNullVal;
+                elseif($aValue < $bValue)   return $ltVal;
+                elseif($aValue > $bValue)   return -$ltVal;
+            }
+            return 0;
+        };
     }
 
     public function sort(array &$data)
