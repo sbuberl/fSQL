@@ -4,6 +4,7 @@ namespace FSQL\Statements;
 
 use FSQL\Environment;
 use FSQL\Database\Key;
+use FSQL\Database\TableCursor;
 
 class Update extends DataModifyStatement
 {
@@ -38,6 +39,7 @@ class Update extends DataModifyStatement
         $columnNames = array_keys($columns);
         $colIndices = array_flip($columnNames);
         $cursor = $table->getWriteCursor();
+        $readCursor = $table->getCursor();
 
         // find all unique keys and columns to watch.
         $keys = $table->getKeys();
@@ -58,7 +60,7 @@ class Update extends DataModifyStatement
         // find all updated columns that are part of a unique key
         // if there are any, call checkUnique to validate still unique.
         if (!empty($updatedKeyColumns)) {
-            $code .= "\t\tif(\$this->checkUnique(\$uniqueKeys, \$rowId, \$entry) === false) {\r\n";
+            $code .= "\t\tif(\$this->checkUnique(\$uniqueKeys, \$rowId, \$readCursor, \$this->updates) === false) {\r\n";
             $code .= "\t\t\treturn (\$this->ignore) ? true : \$this->environment->set_error('Duplicate values found in unique key during UPDATE');\r\n";
             $code .= "\t\t}\r\n";
         }
@@ -88,13 +90,18 @@ EOC;
         return true;
     }
 
-    private function checkUnique($uniqueKeys, $rowId, $updatedRow)
+    private function checkUnique(array $uniqueKeys, $rowId, TableCursor $cursor)
     {
-        foreach($uniqueKeys as $key) {
-            $newValue = $key->extractIndex($updatedRow);
-            $foundRowId = $key->lookup($newValue);
-            if($foundRowId !== false && $foundRowId !== $rowId) {
-                return false;
+        foreach($cursor as $rowKey => $row) {
+            if( $rowKey === $rowId ) {
+                $row = array_replace($row, $updates);
+            }
+            foreach($uniqueKeys as $key) {
+                $newValue = $key->extractIndex($row);
+                $foundRowId = $key->lookup($newValue);
+                if($foundRowId !== false && $foundRowId !== $rowId) {
+                    return false;
+                }
             }
         }
         return true;

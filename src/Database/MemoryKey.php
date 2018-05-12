@@ -37,7 +37,7 @@ class MemoryKey extends Key
     public function addEntry($rowId, $values)
     {
         $index = $this->buildKeyIndex($values);
-        $this->key[$index] = $rowId;
+        $this->key[$index] = (int) $rowId;
         return true;
     }
 

@@ -47,18 +47,15 @@ class WriteCursor extends TableCursor
     {
         $rowId = $this->currentRowId;
         if($rowId !== false) {
-            foreach($updates as $column => $value)
-                $this->entries[$rowId][$column] = $value;
+            $this->entries[$rowId] = array_replace($this->entries[$rowId], $updates);
 
             // if row is not new in this transaction,
             // add updates to updatedRows array.
             if(!isset($this->newRows[$rowId]))
             {
                 if(!isset($this->updatedRows[$rowId]))
-                $this->updatedRows[$rowId] = [];
-
-                foreach($updates as $column => $value)
-                $this->updatedRows[$rowId][$column] = $value;
+                    $this->updatedRows[$rowId] = [];
+                $this->updatedRows[$rowId] = array_replace($this->updatedRows[$rowId], $updates);
             }
 
             $keys = $this->table->getKeys();
