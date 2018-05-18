@@ -118,6 +118,33 @@ class UpdateTest extends BaseTest
         $this->assertEquals(1, $this->fsql->affected_rows());
     }
 
+    public function testMultiRowWhere()
+    {
+        $rows = [
+            ['graph_data_amount_total', '---time=1234567890---total=15'],
+            ['graph_data_range_recv', '---time=1234567890---total=5'],
+            ['graph_data_range_sent', '---time=1234567890---total=15'],
+            ['max_active_peers', '5'],
+        ];
+        $table = CachedTable::create($this->fsql->current_schema(), 'options', self::$options);
+        $cursor = $table->getWriteCursor();
+        foreach($rows as $row) {
+            $cursor->appendRow($row);
+        }
+        $table->commit();
+        $result = $this->fsql->query("UPDATE options SET field_data = '10' WHERE field_name != 'graph_data_range_sent'" );
+        $this->assertTrue($result);
+
+        $expected = [
+            ['graph_data_amount_total', '10'],
+            ['graph_data_range_recv', '10'],
+            ['graph_data_range_sent', '---time=1234567890---total=15'],
+            ['max_active_peers', '10'],
+        ];
+        $this->assertEquals($expected, $table->getEntries());
+        $this->assertEquals(3, $this->fsql->affected_rows());
+    }
+
     public function testKeyNoCollision()
     {
         $rows = [
@@ -133,7 +160,6 @@ class UpdateTest extends BaseTest
         }
         $table->commit();
         $result = $this->fsql->query("UPDATE options SET field_name = 'max_total_peers' WHERE field_name = 'graph_data_range_recv'" );
-        var_dump($this->fsql->error());
         $this->assertTrue($result);
 
         $expected = [
@@ -208,5 +234,53 @@ class UpdateTest extends BaseTest
 
         $this->assertEquals($rows, $table->getEntries());
         $this->assertEquals(0, $this->fsql->affected_rows());
+    }
+
+    public function testTransactionCommit()
+    {
+        $rows = [
+            ['graph_data_amount_total', '---time=1234567890---total=15'],
+            ['graph_data_range_recv', '---time=1234567890---total=5'],
+            ['graph_data_range_sent', '---time=1234567890---total=15'],
+            ['max_active_peers', '5'],
+        ];
+        $table = CachedTable::create($this->fsql->current_schema(), 'options', self::$options);
+        $cursor = $table->getWriteCursor();
+        foreach($rows as $row) {
+            $cursor->appendRow($row);
+        }
+        $table->commit();
+        $expected = [
+            ['graph_data_amount_total', '10'],
+            ['graph_data_range_recv', '10'],
+            ['graph_data_range_sent', '---time=1234567890---total=15'],
+            ['max_active_peers', '10'],
+        ];
+        $this->fsql->begin();
+        $result = $this->fsql->query("UPDATE options SET field_data = '10' WHERE field_name != 'graph_data_range_sent'" );
+        $this->fsql->commit();
+        $this->assertEquals($expected, $table->getEntries());
+    }
+
+    public function testTransactionRollback()
+    {
+        $rows = [
+            ['graph_data_amount_total', '---time=1234567890---total=15'],
+            ['graph_data_range_recv', '---time=1234567890---total=5'],
+            ['graph_data_range_sent', '---time=1234567890---total=15'],
+            ['max_active_peers', '5'],
+        ];
+        $table = CachedTable::create($this->fsql->current_schema(), 'options', self::$options);
+        $cursor = $table->getWriteCursor();
+        foreach($rows as $row) {
+            $cursor->appendRow($row);
+        }
+        $table->commit();
+
+        $this->fsql->begin();
+        $result = $this->fsql->query("UPDATE options SET field_data = '10' WHERE field_name != 'graph_data_range_sent'" );
+        $this->fsql->rollback();
+
+        $this->assertSame($rows, $table->getEntries());
     }
 }
