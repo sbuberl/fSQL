@@ -399,6 +399,7 @@ class CachedTable extends Table
     public function rollback()
     {
         $this->dataLockFile->reset();
+        $this->writeCursor = null;
     }
 
     public function isReadLocked()
