@@ -968,18 +968,15 @@ class Environment
                 }
             }
 
-            $updates = array();
+            $updates = [];
             foreach ($SET as $set) {
                 list($column, $value) = $set;
                 $newValue = $this->parse_value($columns[$column], $value);
                 if ($newValue === false) {
                     return false;
                 }
-                if (is_string($newValue)) {
-                    $newValue = "'".$newValue."'";
-                }
                 $colIndex = $colIndices[$column];
-                $updates[$colIndex] = "$colIndex => $newValue";
+                $updates[$colIndex] = $newValue;
             }
 
             $update = new Statements\Update($this, $table_name_pieces, $updates, $where, $ignore);
