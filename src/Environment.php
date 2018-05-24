@@ -24,11 +24,11 @@ use FSQL\Statements\Insert;
 
 class Environment
 {
-    private static $WHERE_NORMAL = 2;
-    private static $WHERE_NORMAL_AGG = 3;
-    private static $WHERE_ON = 4;
-    private static $WHERE_HAVING = 8;
-    private static $WHERE_HAVING_AGG = 9;
+    public static $WHERE_NORMAL = 2;
+    public static $WHERE_NORMAL_AGG = 3;
+    public static $WHERE_ON = 4;
+    public static $WHERE_HAVING = 8;
+    public static $WHERE_HAVING_AGG = 9;
 
     private $transaction = null;
     private $lockedTables = array();
@@ -51,6 +51,11 @@ class Environment
     public function __destruct()
     {
         $this->unlock_tables();
+    }
+
+    public function get_functions()
+    {
+        return $this->functions;
     }
 
     public function define_db($name, $path)
@@ -833,6 +838,7 @@ class Environment
             if ($isSetVersion)
                 return $this->set_error('Invalid INSERT Query ');
             $result = $this->query_select($the_rest);
+            $dataRows = [];
             while (($values = $result->fetchRow()) !== false) {
                 $row = array_map(
                     function ($value) {
@@ -1129,7 +1135,7 @@ class Environment
             }
 
             $joinMatches = array();
-            $join_data = $this->left_join($src_table->getEntries(), $dest_table->getEntries(), $join_function, $src_columns_size, $joinMatches);
+            $join_data = Utilities::leftJoin($src_table->getEntries(), $dest_table->getEntries(), $join_function, $src_columns_size, $joinMatches);
 
             $affected = 0;
             $srcCursor = $src_table->getWriteCursor();
@@ -1180,7 +1186,7 @@ class Environment
         $isTableless = true;
 
         $oneAggregate = false;
-        $selectedInfo = array();
+        $selectedInfo = [];
         $currentPos = $matches[3][1];
         $stop = false;
         while (!$stop && preg_match("/((?:\A|\s*)(?:(-?\d+(?:\.\d+)?)|('.*?(?<!\\\\)')|(?:(`?([^\W\d]\w*)`?\s*\(.*?\)))|(?:(?:(?:`?([^\W\d]\w*)`?\.)?(`?([^\W\d]\w*)`?|\*))))(?:(?:\s+(?:AS\s+)?`?([^\W\d]\w*)`?))?\s*)(?:\Z|(from|where|having|(?:group|order)?\s+by|offset|fetch|limit)|,)/Ais", $query, $colmatches, 0, $currentPos)) {
@@ -1217,15 +1223,14 @@ class Environment
                     return $this->set_error("Can't not specify an alias for *");
                 }
             }
-            $selectedInfo[] = array($type, $value, $alias);
+            $selectedInfo[] = [$type, $value, $alias];
         }
 
-        $data = array();
-        $joins = array();
-        $joined_info = array('tables' => array(), 'offsets' => array(), 'columns' => array());
+        $joins = [];
+        $joined_info = ['tables' => [], 'offsets' => [], 'columns' => [], 'group_columns' => []];
         if (preg_match('/\s*from\s+((?:(?!\b(WHERE|HAVING|(?:GROUP|ORDER)\s+BY|OFFSET|FETCH|LIMIT)\b).)+)/Ais', $query, $from_matches, 0, $currentPos)) {
             $isTableless = false;
-            $tables = array();
+            $tables = [];
 
             $currentPos += strlen($from_matches[0]);
 
@@ -1249,7 +1254,7 @@ class Environment
                         return $this->set_error("Table named '$saveas' already specified");
                     }
 
-                    $joins[$saveas] = array('fullName' => $table_name_pieces, 'joined' => array());
+                    $joins[$saveas] = ['fullName' => $table_name_pieces, 'joined' => []];
                     $table_columns = $table->getColumns();
                     $join_columns_size = count($table_columns);
                     $joined_info['tables'][$saveas] = $table_columns;
@@ -1262,7 +1267,7 @@ class Environment
                         preg_match_all("/\s*(?:((?:LEFT|RIGHT|FULL)(?:\s+OUTER)?|INNER)\s+)?JOIN\s+(`?(?:[^\W\d]\w*`?\.`?){0,2}[^\W\d]\w*`?)(?:\s+(?:AS\s+)?`?([^\W\d]\w*)`?)?\s+(USING|ON)\s*(?:(?:\((.*?)\))|(?:(?:\()?((?:\S+)\s*=\s*(?:\S+)(?:\))?)))/is", $table_unparsed, $join);
                         $numJoins = count($join[0]);
                         for ($i = 0; $i < $numJoins; ++$i) {
-                            $join_name = trim($join[1][$i]);
+                            $join_name = strtolower(trim($join[1][$i]));
                             $join_full_table_name = $join[2][$i];
                             $join_table_saveas = $join[3][$i];
 
@@ -1294,19 +1299,6 @@ class Environment
                                 $conditions = substr($conditional, 5);
                             }
 
-                            $join_table_columns = $join_table->getColumns();
-                            $join_table_column_names = array_keys($join_table_columns);
-                            $joining_columns_size = count($join_table_column_names);
-
-                            $joined_info['tables'][$join_table_saveas] = $join_table_columns;
-                            $new_offset = count($joined_info['columns']);
-                            $joined_info['columns'] = array_merge($joined_info['columns'], $join_table_column_names);
-
-                            $conditional = $this->build_where($conditions, $joined_info, self::$WHERE_ON);
-                            if (!$conditional) {
-                                return $this->set_error('Invalid ON/USING clause: '.$this->error_msg);
-                            }
-
                             if (!isset($this->join_lambdas[$conditional])) {
                                 $join_function = create_function('$left_entry,$right_entry', "return $conditional;");
                                 $this->join_lambdas[$conditional] = $join_function;
@@ -1315,37 +1307,7 @@ class Environment
                             }
 
                             $joined_info['offsets'][$join_table_saveas] = $new_offset;
-                            $joins[$saveas]['joined'][] = array('alias' => $join_table_saveas, 'fullName' => $join_table_name_pieces, 'type' => $join_name, 'clause' => $clause, 'comparator' => $join_function);
-
-                            $joining_entries = $join_table->getEntries();
-                            if (!strncasecmp($join_name, 'LEFT', 4)) {
-                                $joinMatches = array();
-                                $join_data = $this->left_join($join_data, $joining_entries, $join_function, $joining_columns_size, $joinMatches);
-                                unset($joinMatches);
-                            } elseif (!strncasecmp($join_name, 'RIGHT', 5)) {
-                                $join_data = $this->right_join($join_data, $joining_entries, $join_function, $join_columns_size);
-                            } elseif (!strncasecmp($join_name, 'FULL', 4)) {
-                                $join_data = $this->full_join($join_data, $joining_entries, $join_function, $join_columns_size, $joining_columns_size);
-                            } else {
-                                $join_data = $this->inner_join($join_data, $joining_entries, $join_function);
-                            }
-
-                            $join_columns_size += $joining_columns_size;
-                        }
-                    }
-
-                    // implicit CROSS JOINs
-                    if (!empty($join_data)) {
-                        if (!empty($data)) {
-                            $new_data = array();
-                            foreach ($data as $left_entry) {
-                                foreach ($join_data as $right_entry) {
-                                    $new_data[] = array_merge($left_entry, $right_entry);
-                                }
-                            }
-                            $data = $new_data;
-                        } else {
-                            $data = $join_data;
+                            $joins[$saveas]['joined'][] = ['alias' => $join_table_saveas, 'fullName' => $join_table_name_pieces, 'type' => $join_name, 'clause' => $clause, 'comparator' => $join_function];
                         }
                     }
                 } else {
@@ -1354,9 +1316,9 @@ class Environment
             }
         }
 
-        $tosort = array();
+        $orderBy = [];
         $where = null;
-        $group_key = null;
+        $groupList = [];
         $isGrouping = false;
         $having = null;
         $limit = null;
@@ -1373,34 +1335,23 @@ class Environment
         if (preg_match('/\s*GROUP\s+BY\s+((?:(?!\b(HAVING|ORDER\s+BY|OFFSET|FETCH|LIMIT)\b).)+)/Ais', $query, $additional, 0, $currentPos)) {
             $currentPos += strlen($additional[0]);
             $GROUPBY = explode(',', $additional[1]);
-            $joined_info['group_columns'] = array();
             $isGrouping = true;
-            $group_array = array();
-            $group_key_list = '';
             foreach ($GROUPBY as $group_item) {
                 if (preg_match('/(?:`?([^\W\d]\w*)`?\.)?`?([^\W\d]\w*)`?/is', $group_item, $additional)) {
                     list(, $table_alias, $column) = $additional;
-                    $group_col = $this->find_column($column, $table_alias, $joined_info, 'GROUP BY clause');
-                    if ($group_col === false) {
+                    $groupColumn = $this->find_column($column, $table_alias, $joined_info, 'GROUP BY clause');
+                    if ($groupColumn === false) {
                         return false;
                     }
-
-                    $group_array[] = $group_col;
-                    $group_key_list .= '$entry['.$group_col.'], ';
-                    $joined_info['group_columns'][] = $group_col;
+                    $groupList[] = $groupColumn;
+                    $joined_info['group_columns'][] = $groupColumn;
                 }
-            }
-
-            $group_key = substr($group_key_list, 0, -2);
-            if (count($group_array) > 1) {
-                $group_key = 'serialize(array('.$group_key.'))';
             }
         }
 
         if (preg_match('/\s*HAVING\s+((?:(?!\b(ORDER\s+BY|OFFSET|FETCH|LIMIT)\b).)+)/Ais', $query, $additional, 0, $currentPos)) {
             $currentPos += strlen($additional[0]);
-            if (!isset($joined_info['group_columns'])) { // no GROUP BY
-                $joined_info['group_columns'] = array();
+            if (empty($groupList)) { // no GROUP BY
                 $isGrouping = true;
                 $singleRow = true;
             }
@@ -1432,7 +1383,7 @@ class Environment
 
                     $ascend = !empty($additional[4]) ? !strcasecmp('ASC', $additional[4]) : true;
                     $nulls_first = !empty($additional[5]) ? !strcasecmp('FIRST', $additional[5]) : true;
-                    $tosort[] = array('key' => $key, 'ascend' => $ascend, 'nullsFirst' => $nulls_first);
+                    $orderBy[] = ['key' => $key, 'ascend' => $ascend, 'nullsFirst' => $nulls_first];
                 }
             }
         }
@@ -1481,220 +1432,11 @@ class Environment
             $singleRow = true;
         }
 
-        $selected_columns = array();
-        $final_code = null;
-        if ($isGrouping) {
-            $group = [];
-            $select_line = '';
-            foreach ($selectedInfo as $info) {
-                list($select_type, $select_value, $select_alias) = $info;
-                $column_info = null;
-                switch ($select_type) {
-                    case 'column':
-                        if (strpos($select_value, '.') !== false) {
-                            list($table_name, $column) = explode('.', $select_value);
-                        } else {
-                            $table_name = null;
-                            $column = $select_value;
-                        }
-
-                        if (!strcasecmp($select_value, 'NULL')) {
-                            $select_line .= 'NULL, ';
-                            $selected_columns[] = $select_alias;
-                            continue;
-                        } else {
-                            $index = $this->find_column($column, $table_name, $joined_info, 'SELECT clause');
-                            if ($index === false) {
-                                return false;
-                            }
-                        }
-
-                        if (!in_array($index, $group_array)) {
-                            return $this->set_error("Selected column '{$joined_info['columns'][$index]}' is not a grouped column");
-                        }
-                        $select_line .= "\$group[0][$index], ";
-                        $selected_columns[] = $select_alias;
-                        break;
-                    case 'number':
-                    case 'string':
-                        $select_line .= $select_value.', ';
-                        $selected_columns[] = $select_alias;
-                        break;
-                    case 'function':
-                        $expr = $this->build_expression($select_value, $joined_info, self::$WHERE_NORMAL);
-                        if ($expr === false) {
-                            return false;
-                        }
-                        $select_line .= $expr.', ';
-                        $selected_columns[] = $select_alias;
-                        break;
-                }
-                $column_info['name'] = $select_alias;
-                $fullColumnsInfo[] = $column_info;
-            }
-
-            if (!$singleRow) {
-                $line = '$grouped_set['.$group_key.'][] = $entry;';
-            } else {
-                $line = '$group[] = $entry;';
-            }
-
-            $final_line = '$final_set[] = array('.substr($select_line, 0, -2).');';
-            $grouped_set = array();
-
-            if ($having !== null) {
-                $final_line = "if({$having}) {\r\n\t\t\t\t\t\t$final_line\r\n\t\t\t\t\t}";
-            }
-
-            if (!$singleRow) {
-                $final_code = <<<EOT
-                foreach(\$grouped_set as \$group) {
-                    $final_line
-                }
-EOT;
-            } else {
-                $final_code = $final_line;
-            }
-        } else {
-            $select_line = '';
-            foreach ($selectedInfo as $info) {
-                list($select_type, $select_value, $select_alias) = $info;
-                switch ($select_type) {
-                // function call
-                case 'function':
-                    $expr = $this->build_expression($select_value, $joined_info, false);
-                    if ($expr !== false) {
-                        $select_line .= $expr.', ';
-                        $selected_columns[] = $select_alias;
-                    } else {
-                        return false; // error should already be set by parser
-                    }
-                    break;
-
-                case 'column':
-                    if (strpos($select_value, '.') !== false) {
-                        list($table_name, $column) = explode('.', $select_value);
-                    } else {
-                        $table_name = null;
-                        $column = $select_value;
-                    }
-
-                    if ($column === '*') {
-                        $star_tables = !empty($table_name) ? array($table_name) : array_keys($tables);
-                        foreach ($star_tables as $tname) {
-                            $start_index = $joined_info['offsets'][$tname];
-                            $table_columns = $joined_info['tables'][$tname];
-                            $column_names = array_keys($table_columns);
-                            foreach ($column_names as $index => $column_name) {
-                                $select_value = $start_index + $index;
-                                $select_line .= "\$entry[$select_value], ";
-                                $selected_columns[] = $column_name;
-                            }
-                        }
-
-                        continue;
-                    } elseif (!strcasecmp($select_value, 'NULL')) {
-                        $select_line .= 'NULL, ';
-                        $selected_columns[] = $select_alias;
-                        continue;
-                    } else {
-                        $index = $this->find_column($column, $table_name, $joined_info, 'SELECT clause');
-                        if ($index === false) {
-                            return false;
-                        }
-                        $select_line .= "\$entry[$index], ";
-                        $selected_columns[] = $select_alias;
-                    }
-                    break;
-
-                case 'number':
-                case 'string':
-                    $select_line .= "$select_value, ";
-                    $selected_columns[] = $select_alias;
-                    break;
-
-                default:
-                    return $this->set_error("Parse Error: Unknown value in SELECT clause: $column");
-                }
-            }
-
-            $line = '$final_set[] = array('.substr($select_line, 0, -2).');';
-            $group = $data;
-        }
-
-        if (!empty($joins)) {
-            if ($where !== null) {
-                $line = "if({$where}) {\r\n\t\t\t\t\t$line\r\n\t\t\t\t}";
-            }
-
-            $code = <<<EOT
-            foreach(\$data as \$entry) {
-                $line
-            }
-$final_code
-EOT;
-        } else { // Tableless SELECT
-            $entry = array(true);  // hack so it passes count and !empty expressions
-            $code = $line;
-        }
-
-        $final_set = array();
-        eval($code);
-
-        if (!empty($tosort)) {
-            foreach ($tosort as &$sort) {
-                $key = $sort['key'];
-
-                if (is_int($key)) {
-                    if (!isset($selected_columns[$key])) {
-                        return $this->set_error('ORDER BY: Invalid column number: '.($key + 1));
-                    }
-                } else {
-                    list($table_name, $column_name) = $key;
-                    $index = array_search($column_name, $selected_columns);
-                    if ($index === false) {
-                        return $this->set_error('ORDER BY: column/alias not in the SELECT list: '.$column_name);
-                    }
-                    $sort['key'] = $index;
-                }
-            }
-
-            $orderBy = new OrderByClause($tosort);
-            $orderBy->sort($final_set);
-        }
-
-        if ($limit !== null) {
-            $stop = $limit[1];
-            if ($stop !== null) {
-                $final_set = array_slice($final_set, $limit[0], $stop);
-            } else {
-                $final_set = array_slice($final_set, $limit[0]);
-            }
-        }
-
-        if (!empty($final_set) && $has_random && preg_match("/\s+RANDOM(?:\((\d+)\)?)?\s+/is", $select, $additional)) {
-            $results = array();
-            if (!$additional[1]) {
-                $additional[1] = 1;
-            }
-            if ($additional[1] <= count($this_random)) {
-                $random = array_rand($final_set, $additional[1]);
-                if (is_array($random)) {
-                    foreach ($random as $key) {
-                        $results[] = $final_set[$key];
-                    }
-                } else {
-                    $results[] = $final_set[$random];
-                }
-            }
-            unset($final_set);
-            $final_set = $results;
-        }
-
-        return new ResultSet($selected_columns, $final_set);
+        $select = new Statements\Select($this, $selectedInfo, $joins, $joined_info, $where, $groupList, $having, $orderBy, $limit, $distinct, $isGrouping, $singleRow);
+        return $select->execute();
     }
 
-    private function find_column($column, $table_name, $joined_info, $where)
+    public function find_column($column, $table_name, $joined_info, $where)
     {
         if (!empty($table_name)) {
             if (!isset($joined_info['tables'][$table_name])) {
@@ -1740,7 +1482,7 @@ EOT;
         return $result;
     }
 
-    private function build_expression($exprStr, $join_info, $where_type)
+    public function build_expression($exprStr, $join_info, $where_type)
     {
         $expr = false;
 
@@ -1816,7 +1558,7 @@ EOT;
             $final_param_list = implode(',', $paramExprs);
 
             if ($type != Functions::REGISTERED) {
-                $expr = "\$this->functions->$function($final_param_list)";
+                $expr = "\$this->get_functions()->$function($final_param_list)";
             } else {
                 $expr = "$function($final_param_list)";
             }
@@ -2861,103 +2603,6 @@ EOC;
         } else {
             return $this->set_error('Error parsing trim() function parameters');
         }
-    }
-
-    private function inner_join($left_data, $right_data, $join_comparator)
-    {
-        if (empty($left_data) || empty($right_data)) {
-            return array();
-        }
-
-        $new_join_data = array();
-
-        foreach ($left_data as $left_entry) {
-            foreach ($right_data as $right_entry) {
-                if ($join_comparator($left_entry, $right_entry)) {
-                    $new_join_data[] = array_merge($left_entry, $right_entry);
-                }
-            }
-        }
-
-        return $new_join_data;
-    }
-
-    private function left_join($left_data, $right_data, $join_comparator, $pad_length, &$joinMatches)
-    {
-        $new_join_data = array();
-        $right_padding = array_fill(0, $pad_length, null);
-
-        foreach ($left_data as $left_row => $left_entry) {
-            $match_found = false;
-            foreach ($right_data as $right_row => $right_entry) {
-                if ($join_comparator($left_entry, $right_entry)) {
-                    $match_found = true;
-                    $joinMatches[$left_row] = $right_row;
-                    $new_join_data[] = array_merge($left_entry, $right_entry);
-                }
-            }
-
-            if (!$match_found) {
-                $new_join_data[] = array_merge($left_entry, $right_padding);
-                $joinMatches[$left_row] = false;
-            }
-        }
-
-        return $new_join_data;
-    }
-
-    private function right_join($left_data, $right_data, $join_comparator, $pad_length)
-    {
-        $new_join_data = array();
-        $left_padding = array_fill(0, $pad_length, null);
-
-        foreach ($right_data as $right_entry) {
-            $match_found = false;
-            foreach ($left_data as $left_entry) {
-                if ($join_comparator($left_entry, $right_entry)) {
-                    $match_found = true;
-                    $new_join_data[] = array_merge($left_entry, $right_entry);
-                }
-            }
-
-            if (!$match_found) {
-                $new_join_data[] = array_merge($left_padding, $right_entry);
-            }
-        }
-
-        return $new_join_data;
-    }
-
-    private function full_join($left_data, $right_data, $join_comparator, $left_pad_length, $right_pad_length)
-    {
-        $new_join_data = array();
-        $matched_rids = array();
-        $left_padding = array_fill(0, $left_pad_length, null);
-        $right_padding = array_fill(0, $right_pad_length, null);
-
-        foreach ($left_data as $left_entry) {
-            $match_found = false;
-            foreach ($right_data as $rid => $right_entry) {
-                if ($join_comparator($left_entry, $right_entry)) {
-                    $match_found = true;
-                    $new_join_data[] = array_merge($left_entry, $right_entry);
-                    if (!in_array($rid, $matched_rids)) {
-                        $matched_rids[] = $rid;
-                    }
-                }
-            }
-
-            if (!$match_found) {
-                $new_join_data[] = array_merge($left_entry, $right_padding);
-            }
-        }
-
-        $unmatched_rids = array_diff(array_keys($right_data), $matched_rids);
-        foreach ($unmatched_rids as $rid) {
-            $new_join_data[] = array_merge($left_padding, $right_data[$rid]);
-        }
-
-        return $new_join_data;
     }
 
     public function fetch_all(ResultSet $results, $type = ResultSet::FETCH_ASSOC)
