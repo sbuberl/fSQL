@@ -98,4 +98,52 @@ final class Types
             return null;
         return !is_string($arg) ? (string) $arg : $arg;
     }
+
+    // operators
+
+    public static function not($x)
+    {
+        $c = ~$x & 3;
+
+        return (($c << 1) ^ ($c >> 1)) & 3;
+    }
+
+    public static function isTrue($expr)
+    {
+        return !in_array($expr, array(0, 0.0, '', null), true);
+    }
+
+    public static function isFalse($expr)
+    {
+        return in_array($expr, array(0, 0.0, ''), true);
+    }
+
+    public static function like($left, $right)
+    {
+        if ($left !== null && $right !== null) {
+            $right = strtr(preg_quote($right, '/'), array('_' => '.', '%' => '.*', '\_' => '_', '\%' => '%'));
+
+            return (preg_match("/\A{$right}\Z/is", $left)) ? FSQL_TRUE : FSQL_FALSE;
+        } else {
+            return FSQL_UNKNOWN;
+        }
+    }
+
+    public static function in($needle, $haystack)
+    {
+        if ($needle !== null) {
+            return (in_array($needle, $haystack)) ? FSQL_TRUE : FSQL_FALSE;
+        } else {
+            return FSQL_UNKNOWN;
+        }
+    }
+
+    public static function regexp($left, $right)
+    {
+        if ($left !== null && $right !== null) {
+            return (preg_match('/'.$right.'/i', $left)) ? FSQL_TRUE : FSQL_FALSE;
+        } else {
+            return FSQL_UNKNOWN;
+        }
+    }
 }

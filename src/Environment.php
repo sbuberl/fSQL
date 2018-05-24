@@ -1714,9 +1714,9 @@ class Environment
                             if ($rightExpr === 'NULL') {
                                 $local_condition = "($leftExpr === null ? FSQL_TRUE : FSQL_FALSE)";
                             } elseif ($rightExpr === 'TRUE') {
-                                $local_condition = "\$this->functions->isTrue($leftExpr) ? FSQL_TRUE : FSQL_FALSE)";
+                                $local_condition = "FSQL\Types::isTrue($leftExpr) ? FSQL_TRUE : FSQL_FALSE)";
                             } elseif ($rightExpr === 'FALSE') {
-                                $local_condition = "\$this->functions->isFalse($leftExpr) ? FSQL_TRUE : FSQL_FALSE)";
+                                $local_condition = "FSQL\Types::isFalse($leftExpr) ? FSQL_TRUE : FSQL_FALSE)";
                             } else {
                                 return false;
                             }
@@ -1724,14 +1724,14 @@ class Environment
                         case 'NOT LIKE':
                             $not = !$not;
                         case 'LIKE':
-                            $local_condition = "\$this->functions->like($leftExpr, $rightExpr)";
+                            $local_condition = "FSQL\Types::like($leftExpr, $rightExpr)";
                             break;
                         case 'NOT RLIKE':
                         case 'NOT REGEXP':
                             $not = !$not;
                         case 'RLIKE':
                         case 'REGEXP':
-                            $local_condition = "\$this->functions->regexp($leftExpr, $rightExpr)";
+                            $local_condition = "\FSQL\Types::regexp($leftExpr, $rightExpr)";
                             break;
                         default:
                             $local_condition = "$leftExpr $operator $rightExpr";
@@ -1746,7 +1746,7 @@ class Environment
                             $valuesExpressions[] = $valueExpr['expression'];
                         }
                         $valuesString = implode(',', $valuesExpressions);
-                        $local_condition = "\$this->functions->in($leftExpr, array($valuesString))";
+                        $local_condition = "FSQL\Types::in($leftExpr, array($valuesString))";
 
                         if ($operator === 'NOT IN') {
                             $not = !$not;
@@ -1763,7 +1763,7 @@ class Environment
                 }
 
                 if ($not) {
-                    $condition .= '\$this->functions->not('.$local_condition.')';
+                    $condition .= 'FSQL\Types::not('.$local_condition.')';
                 } else {
                     $condition .= $local_condition;
                 }
