@@ -88,10 +88,7 @@ EOT;
 
         if (!empty($this->orderBy)) {
             if (!$this->orderBy($final_set, $selected_columns))
-            {
-                var_dump("fuck");
                 return false;
-            }
         }
 
         if ($this->limit !== null) {
