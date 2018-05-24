@@ -177,6 +177,90 @@ class SelectTest extends BaseTest
         $this->assertEquals(self::$entries1, $results);
     }
 
+    public function testSelectColumn()
+    {
+        $table = CachedTable::create($this->fsql->current_schema(), 'customers', self::$columns1);
+        $cursor = $table->getWriteCursor();
+        foreach (self::$entries1 as $entry) {
+            $cursor->appendRow($entry);
+        }
+        $table->commit();
+
+        $result = $this->fsql->query("SELECT firstName FROM customers");
+        $this->assertTrue($result !== false);
+
+        $expected = [
+            ['bill'],
+            ['jon'],
+            ['mary'],
+            ['stephen'],
+            ['bart'],
+            ['jane'],
+            ['bram'],
+            ['douglas'],
+            ['bill'],
+            ['jon'],
+            ['homer'],
+            [null],
+        ];
+
+        $results = $this->fsql->fetch_all($result, ResultSet::FETCH_NUM);
+        $this->assertEquals($expected, $results);
+    }
+    public function testSelectSomeColumns()
+    {
+        $table = CachedTable::create($this->fsql->current_schema(), 'customers', self::$columns1);
+        $cursor = $table->getWriteCursor();
+        foreach (self::$entries1 as $entry) {
+            $cursor->appendRow($entry);
+        }
+        $table->commit();
+
+        $result = $this->fsql->query("SELECT firstName, lastName FROM customers");
+        $this->assertTrue($result !== false);
+
+        $expected = [
+            ['bill', 'smith'],
+            ['jon', 'doe'],
+            ['mary', 'shelley'],
+            ['stephen', 'king'],
+            ['bart', 'simpson'],
+            ['jane', 'doe'],
+            ['bram', 'stoker'],
+            ['douglas', 'adams'],
+            ['bill', 'johnson'],
+            ['jon', 'doe'],
+            ['homer', null],
+            [null, 'king'],
+        ];
+
+        $results = $this->fsql->fetch_all($result, ResultSet::FETCH_NUM);
+        $this->assertEquals($expected, $results);
+    }
+
+    public function testSelectLike()
+    {
+        $table = CachedTable::create($this->fsql->current_schema(), 'customers', self::$columns1);
+        $cursor = $table->getWriteCursor();
+        foreach (self::$entries1 as $entry) {
+            $cursor->appendRow($entry);
+        }
+        $table->commit();
+
+        $result = $this->fsql->query("SELECT firstName, lastName, city FROM customers WHERE lastName LIKE '_o%'");
+        $this->assertTrue($result !== false);
+
+        $expected = [
+            ['jon', 'doe', 'baltimore'],
+            ['jane', 'doe', 'seattle'],
+            ['bill', 'johnson', 'derry'],
+            ['jon', 'doe', 'new york'],
+        ];
+
+        $results = $this->fsql->fetch_all($result, ResultSet::FETCH_NUM);
+        $this->assertEquals($expected, $results);
+    }
+
     public function testAggregateNoGroupBy()
     {
         $table = CachedTable::create($this->fsql->current_schema(), 'customers', self::$columns1);
