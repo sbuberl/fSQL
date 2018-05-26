@@ -1135,11 +1135,11 @@ class Environment
             }
 
             $joinMatches = array();
-            $join_data = Utilities::leftJoin($src_table->getEntries(), $dest_table->getEntries(), $join_function, $src_columns_size, $joinMatches);
+            Utilities::leftJoin($src_table->getEntries(), $dest_table->getEntries(), $join_function, $src_columns_size, $joinMatches);
 
             $affected = 0;
             $srcCursor = $src_table->getWriteCursor();
-            $destCursor = $src_table->getWriteCursor();
+            $destCursor = $dest->getWriteCursor();
             foreach ($srcCursor as $srcRowId => $entry) {
                 $destRowId = $joinMatches[$srcRowId];
                 if ($destRowId === false) {
@@ -1177,17 +1177,14 @@ class Environment
     ////Select data from the DB
     private function query_select($query)
     {
-        if (!preg_match('/SELECT(?:\s+(ALL|DISTINCT(?:ROW)?))?(\s+RANDOM(?:\((?:\d+)\)?)?\s+|\s+)(.*)\s*[;]?\s*\Z/is', $query, $matches, PREG_OFFSET_CAPTURE)) {
+        if (!preg_match('/SELECT(?:\s+(ALL|DISTINCT(?:ROW))?\s+)?(.*)\s*[;]?\s*\Z/is', $query, $matches, PREG_OFFSET_CAPTURE)) {
             return $this->set_error('Invalid SELECT query');
         }
 
         $distinct = !strncasecmp($matches[1][0], 'DISTINCT', 8);
-        $has_random = strlen(trim($matches[2][0])) > 0;
-        $isTableless = true;
-
         $oneAggregate = false;
         $selectedInfo = [];
-        $currentPos = $matches[3][1];
+        $currentPos = $matches[2][1];
         $stop = false;
         while (!$stop && preg_match("/((?:\A|\s*)(?:(-?\d+(?:\.\d+)?)|('.*?(?<!\\\\)')|(?:(`?([^\W\d]\w*)`?\s*\(.*?\)))|(?:(?:(?:`?([^\W\d]\w*)`?\.)?(`?([^\W\d]\w*)`?|\*))))(?:(?:\s+(?:AS\s+)?`?([^\W\d]\w*)`?))?\s*)(?:\Z|(from|where|having|(?:group|order)?\s+by|offset|fetch|limit)|,)/Ais", $query, $colmatches, 0, $currentPos)) {
             $stop = !empty($colmatches[10]);
@@ -1217,6 +1214,10 @@ class Environment
                 $alias = $column;
                 $type = 'column';
             }
+            else {
+                return $this->set_error('Unknown value in the SELECT clause');
+            }
+
             if (!empty($colmatches[9])) {
                 $alias = $colmatches[9];
                 if (substr($value, -1) == '*') {
