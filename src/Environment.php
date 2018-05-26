@@ -300,6 +300,7 @@ class Environment
             $this->lockedTables[$index]->unlock();
         }
         $this->lockedTables = array();
+        return true;
     }
 
     public function is_auto_commit()
@@ -383,44 +384,34 @@ class Environment
         }
     }
 
+
+    private function query_basic($name, $query, $action)
+    {
+        if (preg_match("/\ABEGIN(?:\s+WORK)?\s*[;]?\Z/is", $query)) {
+            return action();
+        } else {
+            return $this->set_error('Invalid '. $name . ' query');
+        }
+    }
+
     private function query_begin($query)
     {
-        if (preg_match("/\ABEGIN(?:\s+WORK)?\s*[;]?\Z/is", $query, $matches)) {
-            $this->begin();
-            return true;
-        } else {
-            return $this->set_error('Invalid BEGIN query');
-        }
+        return $this->query_basic('BEGIN', '/\ABEGIN(?:\s+WORK)?\s*[;]?\Z/is', function () { return $this->begin(); });
     }
 
     private function query_start($query)
     {
-        if (preg_match("/\ASTART\s+TRANSACTION\s*[;]?\Z/is", $query, $matches)) {
-            $this->begin();
-            return true;
-        } else {
-            return $this->set_error('Invalid START query');
-        }
+        return $this->query_basic('START', '/\ASTART\s+TRANSACTION\s*[;]?\Z/is', function () { return $this->begin(); });
     }
 
     private function query_commit($query)
     {
-        if (preg_match("/\ACOMMIT(?:\s+WORK)?\s*[;]?\Z/is", $query, $matches)) {
-            $this->commit();
-            return true;
-        } else {
-            return $this->set_error('Invalid COMMIT query');
-        }
+        return $this->query_basic('COMMIT', '/\ACOMMIT(?:\s+WORK)?\s*[;]?\Z/is', function () { return $this->commit(); });
     }
 
     private function query_rollback($query)
     {
-        if (preg_match("/\AROLLBACK(?:\s+WORK)?\s*[;]?\Z/is", $query, $matches)) {
-            $this->rollback();
-            return true;
-        } else {
-            return $this->set_error('Invalid ROLLBACK query');
-        }
+        return $this->query_basic('ROLLBACK', '/\AROLLBACK(?:\s+WORK)?\s*[;]?\Z/is', function () { return $this->rollback(); });
     }
 
     private function query_create($query)
@@ -2425,13 +2416,7 @@ EOC;
 
     private function query_unlock($query)
     {
-        if (preg_match("/\AUNLOCK\s+TABLES\s*[;]?\Z/is", $query)) {
-            $this->unlock_tables();
-
-            return true;
-        } else {
-            return $this->set_error('Invalid UNLOCK query');
-        }
+        return $this->query_basic('UNLOCK', '/\AUNLOCK\s+TABLES\s*[;]?\Z/is', function () { return $this->unlock_tables(); });
     }
 
     public function parse_value($columnDef, $value)
