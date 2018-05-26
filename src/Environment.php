@@ -1229,7 +1229,6 @@ class Environment
         $joins = [];
         $joined_info = ['tables' => [], 'offsets' => [], 'columns' => [], 'group_columns' => []];
         if (preg_match('/\s*from\s+((?:(?!\b(WHERE|HAVING|(?:GROUP|ORDER)\s+BY|OFFSET|FETCH|LIMIT)\b).)+)/Ais', $query, $from_matches, 0, $currentPos)) {
-            $isTableless = false;
             $tables = [];
 
             $currentPos += strlen($from_matches[0]);
@@ -1256,12 +1255,9 @@ class Environment
 
                     $joins[$saveas] = ['fullName' => $table_name_pieces, 'joined' => []];
                     $table_columns = $table->getColumns();
-                    $join_columns_size = count($table_columns);
                     $joined_info['tables'][$saveas] = $table_columns;
                     $joined_info['offsets'][$saveas] = count($joined_info['columns']);
                     $joined_info['columns'] = array_merge($joined_info['columns'], array_keys($table_columns));
-
-                    $join_data = $table->getEntries();
 
                     if (!empty($table_unparsed)) {
                         preg_match_all("/\s*(?:((?:LEFT|RIGHT|FULL)(?:\s+OUTER)?|INNER)\s+)?JOIN\s+(`?(?:[^\W\d]\w*`?\.`?){0,2}[^\W\d]\w*`?)(?:\s+(?:AS\s+)?`?([^\W\d]\w*)`?)?\s+(USING|ON)\s*(?:(?:\((.*?)\))|(?:(?:\()?((?:\S+)\s*=\s*(?:\S+)(?:\))?)))/is", $table_unparsed, $join);
@@ -1276,6 +1272,8 @@ class Environment
                                 return false;
                             }
 
+                            $join_table_columns = $join_table->getColumns();
+
                             if (empty($join_table_saveas)) {
                                 $join_table_saveas = $join_table_name_pieces[2];
                             }
@@ -1288,15 +1286,15 @@ class Environment
 
                             $clause = $join[4][$i];
                             if (!strcasecmp($clause, 'ON')) {
-                                $conditions = isset($join[5][$i]) ? $join[5][$i] : $join[6][$i];
+                                $conditional = isset($join[5][$i]) ? $join[5][$i] : $join[6][$i];
                             } elseif (!strcasecmp($clause, 'USING')) {
                                 $shared_columns = preg_split('/\s*,\s*/', trim($join[6][$i]));
 
                                 $conditional = '';
                                 foreach ($shared_columns as $shared_column) {
-                                    $conditional .= " AND {{left}}.$shared_column=$join_table_alias.$shared_column";
+                                    $conditional .= " AND {{left}}.$shared_column=$join_table_saveas.$shared_column";
                                 }
-                                $conditions = substr($conditional, 5);
+                                $conditional = substr($conditional, 5);
                             }
 
                             if (!isset($this->join_lambdas[$conditional])) {
@@ -1305,6 +1303,9 @@ class Environment
                             } else {
                                 $join_function = $this->join_lambdas[$conditional];
                             }
+                            $joined_info['tables'][$join_table_alias] = $join_table_columns;
+                            $new_offset = count($joined_info['columns']);
+                            $joined_info['columns'] = array_merge($joined_info['columns'], array_keys($join_table_column_names));
 
                             $joined_info['offsets'][$join_table_saveas] = $new_offset;
                             $joins[$saveas]['joined'][] = ['alias' => $join_table_saveas, 'fullName' => $join_table_name_pieces, 'type' => $join_name, 'clause' => $clause, 'comparator' => $join_function];
@@ -1708,8 +1709,6 @@ class Environment
                         case '<=>':
                             $local_condition = "(($leftExpr == $rightExpr) ? FSQL_TRUE : FSQL_FALSE)";
                             break;
-                        case 'IS NOT':
-                            $not = !$not;
                         case 'IS':
                             if ($rightExpr === 'NULL') {
                                 $local_condition = "($leftExpr === null ? FSQL_TRUE : FSQL_FALSE)";
@@ -1721,17 +1720,30 @@ class Environment
                                 return false;
                             }
                             break;
-                        case 'NOT LIKE':
-                            $not = !$not;
+                        case 'IS NOT':
+                            if ($rightExpr === 'NULL') {
+                                $local_condition = "($leftExpr === null ? FSQL_FALSE : FSQL_TRUE)";
+                            } elseif ($rightExpr === 'TRUE') {
+                                $local_condition = "FSQL\Types::isTrue($leftExpr) ? FSQL_FALSE : FSQL_TRUE)";
+                            } elseif ($rightExpr === 'FALSE') {
+                                $local_condition = "FSQL\Types::isFalse($leftExpr) ? FSQL_FALSE : FSQL_TRUE)";
+                            } else {
+                                return false;
+                            }
+                            break;
                         case 'LIKE':
                             $local_condition = "FSQL\Types::like($leftExpr, $rightExpr)";
                             break;
-                        case 'NOT RLIKE':
-                        case 'NOT REGEXP':
-                            $not = !$not;
+                        case 'NOT LIKE':
+                            $local_condition = "FSQL\Types::not(FSQL\Types::like($leftExpr, $rightExpr))";
+                            break;
                         case 'RLIKE':
                         case 'REGEXP':
-                            $local_condition = "\FSQL\Types::regexp($leftExpr, $rightExpr)";
+                            $local_condition = "FSQL\Types::regexp($leftExpr, $rightExpr)";
+                            break;
+                        case 'NOT RLIKE':
+                        case 'NOT REGEXP':
+                            $local_condition = "FSQL\Types::not(\FSQL\Types::regexp($leftExpr, $rightExpr))";
                             break;
                         default:
                             $local_condition = "$leftExpr $operator $rightExpr";
@@ -1740,16 +1752,15 @@ class Environment
                 } else {
                     if (!empty($where[6])) {
                         $array_values = explode(',', $where[6]);
-                        $valuesExpressions = array();
+                        $valuesExpressions = [];
                         foreach ($array_values as $value) {
-                            $valueExpr = $this->build_expression(trim($value), $join_info, $where_type);
-                            $valuesExpressions[] = $valueExpr['expression'];
+                            $valuesExpressions[]  = $this->build_expression(trim($value), $join_info, $where_type);
                         }
                         $valuesString = implode(',', $valuesExpressions);
-                        $local_condition = "FSQL\Types::in($leftExpr, array($valuesString))";
+                        $local_condition = "FSQL\Types::in($leftExpr, [$valuesString])";
 
                         if ($operator === 'NOT IN') {
-                            $not = !$not;
+                            $local_condition = "FSQL\Types::not($local_condition)";
                         }
                     } else {
                         return false;
