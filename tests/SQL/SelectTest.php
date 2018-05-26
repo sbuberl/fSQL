@@ -10,36 +10,36 @@ class SelectTest extends BaseTest
 {
     private $fsql;
 
-    private static $columns1 = array(
-        'personId' => array('type' => 'i', 'auto' => 0, 'default' => 0, 'key' => 'n', 'null' => 1, 'restraint' => array()),
-        'firstName' => array('type' => 's', 'auto' => 0, 'default' => '', 'key' => 'n', 'null' => 1, 'restraint' => array()),
-        'lastName' => array('type' => 's', 'auto' => 0, 'default' => '', 'key' => 'n', 'null' => 1, 'restraint' => array()),
-        'city' => array('type' => 's', 'auto' => 0, 'default' => '', 'key' => 'n', 'null' => 1, 'restraint' => array()),
-    );
+    private static $columns1 = [
+        'personId' => ['type' => 'i', 'auto' => 0, 'default' => 0, 'key' => 'n', 'null' => 1, 'restraint' => []],
+        'firstName' => ['type' => 's', 'auto' => 0, 'default' => '', 'key' => 'n', 'null' => 1, 'restraint' => []],
+        'lastName' => ['type' => 's', 'auto' => 0, 'default' => '', 'key' => 'n', 'null' => 1, 'restraint' => []],
+        'city' => ['type' => 's', 'auto' => 0, 'default' => '', 'key' => 'n', 'null' => 1, 'restraint' => []],
+    ];
 
-    private static $entries1 = array(
-        array(1, 'bill', 'smith', 'chicago'),
-        array(2, 'jon', 'doe', 'baltimore'),
-        array(3, 'mary', 'shelley', 'seattle'),
-        array(4, 'stephen', 'king', 'derry'),
-        array(5, 'bart', 'simpson', 'springfield'),
-        array(6, 'jane', 'doe', 'seattle'),
-        array(7, 'bram', 'stoker', 'new york'),
-        array(8, 'douglas', 'adams', 'london'),
-        array(9, 'bill', 'johnson', 'derry'),
-        array(10, 'jon', 'doe', 'new york'),
-        array(11, 'homer', null, 'boston'),
-        array(12, null, 'king', 'tokyo'),
-    );
+    private static $entries1 = [
+        [1, 'bill', 'smith', 'chicago'],
+        [2, 'jon', 'doe', 'baltimore'],
+        [3, 'mary', 'shelley', 'seattle'],
+        [4, 'stephen', 'king', 'derry'],
+        [5, 'bart', 'simpson', 'springfield'],
+        [6, 'jane', 'doe', 'seattle'],
+        [7, 'bram', 'stoker', 'new york'],
+        [8, 'douglas', 'adams', 'london'],
+        [9, 'bill', 'johnson', 'derry'],
+        [10, 'jon', 'doe', 'new york'],
+        [11, 'homer', null, 'boston'],
+        [12, null, 'king', 'tokyo'],
+    ];
 
-    private static $columns2 = array(
-        'id' => array('type' => 'i', 'auto' => 0, 'default' => 0, 'key' => 'n', 'null' => 0, 'restraint' => array()),
-        'person' => array('type' => 'i', 'auto' => 0, 'default' => 0, 'key' => 'n', 'null' => 0, 'restraint' => array()),
-        'item' => array('type' => 'i', 'auto' => 0, 'default' => 0, 'key' => 'n', 'null' => 0, 'restraint' => array()),
-        'quantity' => array('type' => 'i', 'auto' => 0, 'default' => 0, 'key' => 'n', 'null' => 0, 'restraint' => array()),
-        'orderDate' => array('type' => 'd', 'auto' => 0, 'default' => 0, 'key' => 'n', 'null' => 0, 'restraint' => array()),
-        'total' => array('type' => 'f', 'auto' => 0, 'default' => 0.0, 'key' => 'n', 'null' => 0, 'restraint' => array()),
-    );
+    private static $columns2 = [
+        'id' => ['type' => 'i', 'auto' => 0, 'default' => 0, 'key' => 'n', 'null' => 0, 'restraint' => []],
+        'person' => ['type' => 'i', 'auto' => 0, 'default' => 0, 'key' => 'n', 'null' => 0, 'restraint' => []],
+        'item' => ['type' => 'i', 'auto' => 0, 'default' => 0, 'key' => 'n', 'null' => 0, 'restraint' => []],
+        'quantity' => ['type' => 'i', 'auto' => 0, 'default' => 0, 'key' => 'n', 'null' => 0, 'restraint' => []],
+        'orderDate' => ['type' => 'd', 'auto' => 0, 'default' => 0, 'key' => 'n', 'null' => 0, 'restraint' => []],
+        'total' => ['type' => 'f', 'auto' => 0, 'default' => 0.0, 'key' => 'n', 'null' => 0, 'restraint' => []],
+    ];
 
     public function setUp()
     {
@@ -177,6 +177,22 @@ class SelectTest extends BaseTest
         $this->assertEquals(self::$entries1, $results);
     }
 
+    public function testSelectAllPrefix()
+    {
+        $table = CachedTable::create($this->fsql->current_schema(), 'customers', self::$columns1);
+        $cursor = $table->getWriteCursor();
+        foreach (self::$entries1 as $entry) {
+            $cursor->appendRow($entry);
+        }
+        $table->commit();
+
+        $result = $this->fsql->query('SELECT c.* FROM customers as c');
+        $this->assertTrue($result !== false);
+
+        $results = $this->fsql->fetch_all($result, ResultSet::FETCH_NUM);
+        $this->assertEquals(self::$entries1, $results);
+    }
+
     public function testSelectColumn()
     {
         $table = CachedTable::create($this->fsql->current_schema(), 'customers', self::$columns1);
@@ -207,6 +223,7 @@ class SelectTest extends BaseTest
         $results = $this->fsql->fetch_all($result, ResultSet::FETCH_NUM);
         $this->assertEquals($expected, $results);
     }
+
     public function testSelectSomeColumns()
     {
         $table = CachedTable::create($this->fsql->current_schema(), 'customers', self::$columns1);
@@ -255,6 +272,79 @@ class SelectTest extends BaseTest
             ['jane', 'doe', 'seattle'],
             ['bill', 'johnson', 'derry'],
             ['jon', 'doe', 'new york'],
+        ];
+
+        $results = $this->fsql->fetch_all($result, ResultSet::FETCH_NUM);
+        $this->assertEquals($expected, $results);
+    }
+
+    public function testSelectNotLike()
+    {
+        $table = CachedTable::create($this->fsql->current_schema(), 'customers', self::$columns1);
+        $cursor = $table->getWriteCursor();
+        foreach (self::$entries1 as $entry) {
+            $cursor->appendRow($entry);
+        }
+        $table->commit();
+
+        $result = $this->fsql->query("SELECT firstName, lastName, city FROM customers WHERE lastName NOT LIKE '_o%'");
+        $this->assertTrue($result !== false);
+
+        $expected = [
+            ['bill', 'smith', 'chicago'],
+            ['mary', 'shelley', 'seattle'],
+            ['stephen', 'king', 'derry'],
+            ['bart', 'simpson', 'springfield'],
+            ['bram', 'stoker', 'new york'],
+            ['douglas', 'adams', 'london'],
+            [null, 'king', 'tokyo'],
+        ];
+
+        $results = $this->fsql->fetch_all($result, ResultSet::FETCH_NUM);
+        $this->assertEquals($expected, $results);
+    }
+
+    public function testSelectRegexp()
+    {
+        $table = CachedTable::create($this->fsql->current_schema(), 'customers', self::$columns1);
+        $cursor = $table->getWriteCursor();
+        foreach (self::$entries1 as $entry) {
+            $cursor->appendRow($entry);
+        }
+        $table->commit();
+
+        $result = $this->fsql->query("SELECT firstName, lastName, city FROM customers WHERE lastName REGEXP '.o.+'");
+        $this->assertTrue($result !== false);
+
+        $expected = [
+            ['jon', 'doe', 'baltimore'],
+            ['jane', 'doe', 'seattle'],
+            ['bill', 'johnson', 'derry'],
+            ['jon', 'doe', 'new york'],
+        ];
+
+        $results = $this->fsql->fetch_all($result, ResultSet::FETCH_NUM);
+        $this->assertEquals($expected, $results);
+    }
+
+    public function testSelectIn()
+    {
+        $table = CachedTable::create($this->fsql->current_schema(), 'customers', self::$columns1);
+        $cursor = $table->getWriteCursor();
+        foreach (self::$entries1 as $entry) {
+            $cursor->appendRow($entry);
+        }
+        $table->commit();
+
+        $result = $this->fsql->query("SELECT firstName, lastName, city FROM customers WHERE city IN ('baltimore', 'derry', 'tampa', 'seattle')");
+        $this->assertTrue($result !== false);
+
+        $expected = [
+            ['jon', 'doe', 'baltimore'],
+            ['mary', 'shelley', 'seattle'],
+            ['stephen', 'king', 'derry'],
+            ['jane', 'doe', 'seattle'],
+            ['bill', 'johnson', 'derry'],
         ];
 
         $results = $this->fsql->fetch_all($result, ResultSet::FETCH_NUM);
