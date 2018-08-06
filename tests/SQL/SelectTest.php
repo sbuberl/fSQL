@@ -318,7 +318,9 @@ class SelectTest extends BaseTest
 
         $expected = [
             ['jon', 'doe', 'baltimore'],
+            ['bart', 'simpson', 'springfield'],
             ['jane', 'doe', 'seattle'],
+            ['bram', 'stoker', 'new york'],
             ['bill', 'johnson', 'derry'],
             ['jon', 'doe', 'new york'],
         ];
