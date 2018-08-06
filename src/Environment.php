@@ -385,10 +385,10 @@ class Environment
     }
 
 
-    private function query_basic($name, $query, $action)
+    private function query_basic($query, $name, $pattern, $action)
     {
-        if (preg_match("/\ABEGIN(?:\s+WORK)?\s*[;]?\Z/is", $query)) {
-            return action();
+        if (preg_match($pattern, $query)) {
+            return $action();
         } else {
             return $this->set_error('Invalid '. $name . ' query');
         }
@@ -396,7 +396,7 @@ class Environment
 
     private function query_begin($query)
     {
-        return $this->query_basic('BEGIN', '/\ABEGIN(?:\s+WORK)?\s*[;]?\Z/is', function () { return $this->begin(); });
+        return $this->query_basic($query, 'BEGIN', '/\ABEGIN(?:\s+WORK)?\s*[;]?\Z/is', function () { return $this->begin(); });
     }
 
     private function query_start($query)
@@ -406,12 +406,12 @@ class Environment
 
     private function query_commit($query)
     {
-        return $this->query_basic('COMMIT', '/\ACOMMIT(?:\s+WORK)?\s*[;]?\Z/is', function () { return $this->commit(); });
+        return $this->query_basic($query, 'COMMIT', '/\ACOMMIT(?:\s+WORK)?\s*[;]?\Z/is', function () { return $this->commit(); });
     }
 
     private function query_rollback($query)
     {
-        return $this->query_basic('ROLLBACK', '/\AROLLBACK(?:\s+WORK)?\s*[;]?\Z/is', function () { return $this->rollback(); });
+        return $this->query_basic($query, 'ROLLBACK', '/\AROLLBACK(?:\s+WORK)?\s*[;]?\Z/is', function () { return $this->rollback(); });
     }
 
     private function query_create($query)
@@ -2416,7 +2416,7 @@ EOC;
 
     private function query_unlock($query)
     {
-        return $this->query_basic('UNLOCK', '/\AUNLOCK\s+TABLES\s*[;]?\Z/is', function () { return $this->unlock_tables(); });
+        return $this->query_basic($query, 'UNLOCK', '/\AUNLOCK\s+TABLES\s*[;]?\Z/is', function () { return $this->unlock_tables(); });
     }
 
     public function parse_value($columnDef, $value)
