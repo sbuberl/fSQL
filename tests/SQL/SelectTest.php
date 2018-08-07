@@ -255,6 +255,99 @@ class SelectTest extends BaseTest
         $this->assertEquals($expected, $results);
     }
 
+    public function testSelectSomeColumnsOneAlias()
+    {
+        $table = CachedTable::create($this->fsql->current_schema(), 'customers', self::$columns1);
+        $cursor = $table->getWriteCursor();
+        foreach (self::$entries1 as $entry) {
+            $cursor->appendRow($entry);
+        }
+        $table->commit();
+
+        $result = $this->fsql->query("SELECT firstName AS first, lastName FROM customers");
+        $this->assertTrue($result !== false);
+
+        $expected = [
+            ['first' => 'bill', 'lastName' => 'smith'],
+            ['first' => 'jon', 'lastName' => 'doe'],
+            ['first' => 'mary', 'lastName' => 'shelley'],
+            ['first' => 'stephen', 'lastName' => 'king'],
+            ['first' => 'bart', 'lastName' => 'simpson'],
+            ['first' => 'jane', 'lastName' => 'doe'],
+            ['first' => 'bram', 'lastName' => 'stoker'],
+            ['first' => 'douglas', 'lastName' => 'adams'],
+            ['first' => 'bill', 'lastName' => 'johnson'],
+            ['first' => 'jon', 'lastName' => 'doe'],
+            ['first' => 'homer', 'lastName' => null],
+            ['first' => null, 'lastName' => 'king'],
+        ];
+
+        $results = $this->fsql->fetch_all($result, ResultSet::FETCH_ASSOC);
+        $this->assertEquals($expected, $results);
+    }
+
+    public function testSelectSomeColumnsAliases()
+    {
+        $table = CachedTable::create($this->fsql->current_schema(), 'customers', self::$columns1);
+        $cursor = $table->getWriteCursor();
+        foreach (self::$entries1 as $entry) {
+            $cursor->appendRow($entry);
+        }
+        $table->commit();
+
+        $result = $this->fsql->query("SELECT firstName AS first, lastName last FROM customers");
+        $this->assertTrue($result !== false);
+
+        $expected = [
+            ['first' => 'bill', 'last' => 'smith'],
+            ['first' => 'jon', 'last' => 'doe'],
+            ['first' => 'mary', 'last' => 'shelley'],
+            ['first' => 'stephen', 'last' => 'king'],
+            ['first' => 'bart', 'last' => 'simpson'],
+            ['first' => 'jane', 'last' => 'doe'],
+            ['first' => 'bram', 'last' => 'stoker'],
+            ['first' => 'douglas', 'last' => 'adams'],
+            ['first' => 'bill', 'last' => 'johnson'],
+            ['first' => 'jon', 'last' => 'doe'],
+            ['first' => 'homer', 'last' => null],
+            ['first' => null, 'last' => 'king'],
+        ];
+
+        $results = $this->fsql->fetch_all($result, ResultSet::FETCH_ASSOC);
+        $this->assertEquals($expected, $results);
+    }
+
+    public function testSelectSomeColumnsTableAlias()
+    {
+        $table = CachedTable::create($this->fsql->current_schema(), 'customers', self::$columns1);
+        $cursor = $table->getWriteCursor();
+        foreach (self::$entries1 as $entry) {
+            $cursor->appendRow($entry);
+        }
+        $table->commit();
+
+        $result = $this->fsql->query("SELECT c.firstName, c.lastName FROM customers c");
+        $this->assertTrue($result !== false);
+
+        $expected = [
+            ['firstName' => 'bill', 'lastName' => 'smith'],
+            ['firstName' => 'jon', 'lastName' => 'doe'],
+            ['firstName' => 'mary', 'lastName' => 'shelley'],
+            ['firstName' => 'stephen', 'lastName' => 'king'],
+            ['firstName' => 'bart', 'lastName' => 'simpson'],
+            ['firstName' => 'jane', 'lastName' => 'doe'],
+            ['firstName' => 'bram', 'lastName' => 'stoker'],
+            ['firstName' => 'douglas', 'lastName' => 'adams'],
+            ['firstName' => 'bill', 'lastName' => 'johnson'],
+            ['firstName' => 'jon', 'lastName' => 'doe'],
+            ['firstName' => 'homer', 'lastName' => null],
+            ['firstName' => null, 'lastName' => 'king'],
+        ];
+
+        $results = $this->fsql->fetch_all($result, ResultSet::FETCH_ASSOC);
+        $this->assertEquals($expected, $results);
+    }
+
     public function testSelectLike()
     {
         $table = CachedTable::create($this->fsql->current_schema(), 'customers', self::$columns1);
