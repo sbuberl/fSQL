@@ -1486,7 +1486,7 @@ class Environment
             $params = $matches[2];
             $final_param_list = '';
             $paramExprs = array();
-            $expr_type = '"non-constant"';
+            $isConstant = 'false';
 
             $functionInfo = $this->lookup_function($function);
             if ($functionInfo === false) {
@@ -1534,9 +1534,8 @@ class Environment
                                 $paramExprs[] = $paramExpr_matches[1];
                             } else {
                                 //assume everything else is some form of constant
-
-                                $expr_type = '"constant"';
-                                $paramExprs[] = $pexp;
+                                $isConstant = 'true';
+                                $paramExprs[] = $paramExpr;
                             }
                         } else {
                             $paramExprs[] = $paramExpr;
@@ -1546,7 +1545,7 @@ class Environment
             }
 
             if ($isAggregate) {
-                $paramExprs[] = $expr_type;
+                $paramExprs[] = $isConstant;
             }
 
             $final_param_list = implode(',', $paramExprs);

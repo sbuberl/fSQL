@@ -227,10 +227,11 @@ class Functions
         }
     }
 
-     ///// Aggregate Functions
-    public function any($data, $column, $flag)
+    ///// Aggregate Functions
+
+    public function any($data, $column, $isConstant)
     {
-        if ($flag === 'constant') {
+        if ($isConstant) {
             return $this->isTrue($data);
         }
         foreach ($data as $entry) {
@@ -242,18 +243,18 @@ class Functions
         return false;
     }
 
-    public function avg($data, $column, $flag)
+    public function avg($data, $column, $isConstant)
     {
-        $sum = $this->sum($data, $column, $flag);
+        $sum = $this->sum($data, $column, $isConstant);
 
         return $sum !== null ? $sum / count($data) : null;
     }
 
-    public function count($data, $column, $flag)
+    public function count($data, $column, $isConstant)
     {
         if ($column == '*') {
             return count($data);
-        } elseif ($flag === 'constant') {
+        } elseif ($isConstant) {
             return (int) ($column !== null);
         } else {
             $i = 0;
@@ -267,9 +268,9 @@ class Functions
         }
     }
 
-    public function every($data, $column, $flag)
+    public function every($data, $column, $isConstant)
     {
-        if ($flag === 'constant') {
+        if ($isConstant) {
             return $this->isTrue($data);
         }
         foreach ($data as $entry) {
@@ -281,10 +282,10 @@ class Functions
         return true;
     }
 
-    public function max($data, $column, $flag)
+    public function max($data, $column, $isConstant)
     {
         $max = null;
-        if ($flag === 'constant') {
+        if ($isConstant) {
             $max = $column;
         } else {
             foreach ($data as $entry) {
@@ -297,10 +298,10 @@ class Functions
         return $max;
     }
 
-    public function min($data, $column, $flag)
+    public function min($data, $column, $isConstant)
     {
         $min = null;
-        if ($flag === 'constant') {
+        if ($isConstant) {
             $min = $column;
         } else {
             foreach ($data as $entry) {
@@ -313,11 +314,11 @@ class Functions
         return $min;
     }
 
-    public function sum($data, $column, $flag)
+    public function sum($data, $column, $isConstant)
     {
         $i = null;
 
-        if ($flag === 'constant' && $column !== null) {
+        if ($isConstant && $column !== null) {
             $i = $column * count($data);
         } else {
             foreach ($data as $entry) {
