@@ -37,7 +37,6 @@ class Environment
     private $currentSchema = null;
     private $error_msg = null;
     private $query_count = 0;
-    private $join_lambdas = array();
     private $affected = 0;
     private $insert_id = 0;
     private $auto = true;
@@ -1038,12 +1037,11 @@ class Environment
                 return $this->set_error('Invalid ON clause: '.$this->error_msg);
             }
 
-            if (!isset($this->join_lambdas[$conditional])) {
-                $join_function = create_function('$left_entry,$right_entry', "return $conditional;");
-                $this->join_lambdas[$conditional] = $join_function;
-            } else {
-                $join_function = $this->join_lambdas[$conditional];
-            }
+            $conditional = 'return '.  $conditional . ';';
+            $join_function = function($left_entry, $right_entry) use ($conditional)
+            {
+                return eval($conditional);
+            };
 
             $joined_info['offsets'][$dest_alias] = $new_offset;
 
@@ -1276,30 +1274,32 @@ class Environment
                                 return $this->set_error("Table named '$join_table_saveas' already specified");
                             }
 
+                            $joined_info['tables'][$join_table_saveas] = $join_table_columns;
                             $clause = $join[4][$i];
                             if (!strcasecmp($clause, 'ON')) {
-                                $conditional = isset($join[5][$i]) ? $join[5][$i] : $join[6][$i];
+                                $on = !empty($join[5][$i]) ? $join[5][$i] : $join[6][$i];
+                                $conditional = $this->build_where($on, $joined_info, self::$WHERE_ON);
                             } elseif (!strcasecmp($clause, 'USING')) {
                                 $shared_columns = preg_split('/\s*,\s*/', trim($join[6][$i]));
 
-                                $conditional = '';
+                                $using = '';
                                 foreach ($shared_columns as $shared_column) {
-                                    $conditional .= " AND {{left}}.$shared_column=$join_table_saveas.$shared_column";
+                                    $using .= " AND {{left}}.$shared_column=$join_table_saveas.$shared_column";
                                 }
-                                $conditional = substr($conditional, 5);
+                                $using = substr($using, 5);
+                                $conditional = $this->build_where($using, $joined_info, self::$WHERE_ON);
                             }
 
-                            if (!isset($this->join_lambdas[$conditional])) {
-                                $join_function = create_function('$left_entry,$right_entry', "return $conditional;");
-                                $this->join_lambdas[$conditional] = $join_function;
-                            } else {
-                                $join_function = $this->join_lambdas[$conditional];
-                            }
-                            $joined_info['tables'][$join_table_alias] = $join_table_columns;
+                            $conditional = 'return '.  $conditional . ';';
+                            $join_function = function($left_entry, $right_entry) use ($conditional)
+                            {
+                                return eval($conditional);
+                            };
+
                             $new_offset = count($joined_info['columns']);
-                            $joined_info['columns'] = array_merge($joined_info['columns'], array_keys($join_table_column_names));
-
+                            $joined_info['columns'] = array_merge($joined_info['columns'], array_keys($join_table_columns));
                             $joined_info['offsets'][$join_table_saveas] = $new_offset;
+
                             $joins[$saveas]['joined'][] = ['alias' => $join_table_saveas, 'fullName' => $join_table_name_pieces, 'type' => $join_name, 'clause' => $clause, 'comparator' => $join_function];
                         }
                     }
