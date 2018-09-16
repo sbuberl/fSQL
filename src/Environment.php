@@ -1280,7 +1280,8 @@ class Environment
                                 $on = !empty($join[5][$i]) ? $join[5][$i] : $join[6][$i];
                                 $conditional = $this->build_where($on, $joined_info, self::$WHERE_ON);
                             } elseif (!strcasecmp($clause, 'USING')) {
-                                $shared_columns = preg_split('/\s*,\s*/', trim($join[6][$i]));
+                                $shared = !empty($join[5][$i]) ? $join[5][$i] : $join[6][$i];
+                                $shared_columns = preg_split('/\s*,\s*/', trim($shared));
 
                                 $using = '';
                                 foreach ($shared_columns as $shared_column) {
@@ -1583,7 +1584,7 @@ class Environment
                         return $this->set_error("Unknown column $column for table $table_name");
                     }
                 } elseif ($where_type & self::$WHERE_ON && $table_name === '{{left}}') {
-                    $colIndex = $this->find_exactly_one($joined_info, $column, 'expression');
+                    $colIndex = $this->find_exactly_one($join_info, $column, 'expression');
                     if ($colIndex === false) {
                         return false;
                     }
