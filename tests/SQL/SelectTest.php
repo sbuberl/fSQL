@@ -32,13 +32,39 @@ class SelectTest extends BaseTest
         [12, null, 'king', 'tokyo'],
     ];
 
-    private static $columns2 = [
-        'id' => ['type' => 'i', 'auto' => 0, 'default' => 0, 'key' => 'n', 'null' => 0, 'restraint' => []],
-        'person' => ['type' => 'i', 'auto' => 0, 'default' => 0, 'key' => 'n', 'null' => 0, 'restraint' => []],
-        'item' => ['type' => 'i', 'auto' => 0, 'default' => 0, 'key' => 'n', 'null' => 0, 'restraint' => []],
-        'quantity' => ['type' => 'i', 'auto' => 0, 'default' => 0, 'key' => 'n', 'null' => 0, 'restraint' => []],
-        'orderDate' => ['type' => 'd', 'auto' => 0, 'default' => 0, 'key' => 'n', 'null' => 0, 'restraint' => []],
-        'total' => ['type' => 'f', 'auto' => 0, 'default' => 0.0, 'key' => 'n', 'null' => 0, 'restraint' => []],
+    private static $customersColumns = [
+        'customer_id' => ['type' => 'i', 'auto' => 0, 'default' => 0, 'key' => 'p', 'null' => 0, 'restraint' => []],
+        'first_name' => ['type' => 's', 'auto' => 0, 'default' => '', 'key' => 'n', 'null' => 0, 'restraint' => []],
+        'last_name' => ['type' => 's', 'auto' => 0, 'default' => '', 'key' => 'n', 'null' => 0, 'restraint' => []],
+        'email' => ['type' => 's', 'auto' => 0, 'default' => '', 'key' => 'n', 'null' => 0, 'restraint' => []],
+        'address' => ['type' => 's', 'auto' => 0, 'default' => '', 'key' => 'n', 'null' => 0, 'restraint' => []],
+        'city' => ['type' => 's', 'auto' => 0, 'default' => '', 'key' => 'n', 'null' => 0, 'restraint' => []],
+        'state' => ['type' => 's', 'auto' => 0, 'default' => '', 'key' => 'n', 'null' => 0, 'restraint' => []],
+        'zip' => ['type' => 'i', 'auto' => 0, 'default' => 0, 'key' => 'n', 'null' => 0, 'restraint' => []],
+    ];
+
+    private static $customersEntries = [
+        [1, 'George', 'Washington', 'gwashington@usa.gov', '3200 Mt Vernon Hwy', 'Mount Vernon', 'VA', 22121],
+        [2, 'John', 'Adams', 'jadams@usa.gov', '1250 Hancock St', 'Quincy', 'MA', '02169'],
+        [3, 'Thomas', 'Jefferson', 'tjefferson@usa.gov', '931 Thomas Jefferson Pkwy',  'Charlottesville', 'VA', '22902'],
+        [4, 'James', 'Madison', 'jmadison@usa.gov', '11350 Constitution Hwy',  'Orange', 'VA', 22960],
+        [5, 'James', 'Monroe', 'jmonroe@usa.gov', '2050 James Monroe Parkway', 'Charlottesville', 'VA', 22902],
+    ];
+
+    private static $ordersColumns = [
+        'order_id' => ['type' => 'i', 'auto' => 0, 'default' => 0, 'key' => 'p', 'null' => 0, 'restraint' => []],
+        'order_date' => ['type' => 'd', 'auto' => 0, 'default' => '', 'key' => 'n', 'null' => 0, 'restraint' => []],
+        'order_amount' => ['type' => 'f', 'auto' => 0, 'default' => 0.0, 'key' => 'n', 'null' => 0, 'restraint' => []],
+        'customer_id' => ['type' => 'i', 'auto' => 0, 'default' => 0, 'key' => 'n', 'null' => 0, 'restraint' => []],
+    ];
+
+    private static $ordersEntries = [
+        [1, '07/04/1776', '234.56', 1],
+        [2, '03/14/1760', '78.50', 3],
+        [3, '05/23/1784', '124.00', 2],
+        [4, '09/03/1790', '65.50', 3],
+        [5, '07/21/1795', '25.50', 10],
+        [6, '11/27/1787', '14.40', 9],
     ];
 
     public function setUp()
@@ -348,6 +374,37 @@ class SelectTest extends BaseTest
         $this->assertEquals($expected, $results);
     }
 
+    public function testInnerJoin()
+    {
+        $customers = CachedTable::create($this->fsql->current_schema(), 'customers', self::$customersColumns);
+        $customersCursor = $customers->getWriteCursor();
+        foreach (self::$customersEntries as $entry) {
+            $customersCursor->appendRow($entry);
+        }
+        $customers->commit();
+
+        $orders = CachedTable::create($this->fsql->current_schema(), 'orders', self::$ordersColumns);
+        $ordersCursor = $orders->getWriteCursor();
+        foreach (self::$ordersEntries as $entry) {
+            $ordersCursor->appendRow($entry);
+        }
+        $orders->commit();
+
+        $result = $this->fsql->query("SELECT first_name, last_name, order_date, order_amount
+            FROM customers c
+            INNER JOIN orders o
+            ON c.customer_id = o.customer_id");
+        $this->assertTrue($result !== false);
+        $expected = [
+            ['George', 'Washington', '07/04/1776', 234.56],
+            ['John', 'Adams', '05/23/1784', 124.00],
+            ['Thomas', 'Jefferson', '03/14/1760', 78.50],
+            ['Thomas', 'Jefferson', '09/03/1790', 65.50],
+        ];
+
+        $results = $this->fsql->fetch_all($result, ResultSet::FETCH_NUM);
+        $this->assertEquals($expected, $results);
+    }
     public function testSelectLike()
     {
         $table = CachedTable::create($this->fsql->current_schema(), 'customers', self::$columns1);
