@@ -232,10 +232,11 @@ class Functions
     public function any($data, $column, $isConstant)
     {
         if ($isConstant) {
-            return $this->isTrue($data);
+            return Types::isTrue($column);
         }
+
         foreach ($data as $entry) {
-            if ($this->isTrue($entry[$column])) {
+            if (Types::isTrue($entry[$column])) {
                 return true;
             }
         }
@@ -246,8 +247,15 @@ class Functions
     public function avg($data, $column, $isConstant)
     {
         $sum = $this->sum($data, $column, $isConstant);
+        if($sum !== null) {
+            if($isConstant) {
+                return $sum;
+            } else {
+                return $sum / count($data);
+            }
+        }
 
-        return $sum !== null ? $sum / count($data) : null;
+        return null;
     }
 
     public function count($data, $column, $isConstant)
@@ -271,10 +279,10 @@ class Functions
     public function every($data, $column, $isConstant)
     {
         if ($isConstant) {
-            return $this->isTrue($data);
+            return Types::isTrue($column);
         }
         foreach ($data as $entry) {
-            if (!$this->isTrue($entry[$column])) {
+            if (!Types::isTrue($entry[$column])) {
                 return false;
             }
         }
@@ -318,8 +326,8 @@ class Functions
     {
         $i = null;
 
-        if ($isConstant && $column !== null) {
-            $i = $column * count($data);
+        if ($isConstant) {
+            $i = $column;
         } else {
             foreach ($data as $entry) {
                 $i += $entry[$column];
