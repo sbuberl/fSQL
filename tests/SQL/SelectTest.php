@@ -640,7 +640,7 @@ class SelectTest extends BaseTest
         $this->assertEquals($expected, $results);
     }
 
-    public function testAggregateNoGroupBy()
+    public function testCountNoGroupBy()
     {
         $table = CachedTable::create($this->fsql->current_schema(), 'customers', self::$columns1);
         $cursor = $table->getWriteCursor();
@@ -649,10 +649,115 @@ class SelectTest extends BaseTest
         }
         $table->commit();
 
-        $result = $this->fsql->query('SELECT COUNT(lastName) FROM customers');
+        $result = $this->fsql->query('SELECT COUNT(12.34), COUNT(NULL), COUNT(firstName), COUNT(lastName), COUNT(city) FROM customers');
         $this->assertTrue($result !== false);
 
-        $this->assertEquals(array(11), $this->fsql->fetch_row($result));
+        $this->assertEquals([1, 0, 11, 11, 12], $this->fsql->fetch_row($result));
+    }
+
+    public function testAny()
+    {
+        $table = CachedTable::create($this->fsql->current_schema(), 'customers', self::$columns1);
+        $cursor = $table->getWriteCursor();
+        foreach (self::$entries1 as $entry) {
+            $cursor->appendRow($entry);
+        }
+        $table->commit();
+
+        $result = $this->fsql->query("SELECT ANY('blah'), ANY(NULL), ANY(lastName) FROM customers");
+        $this->assertTrue($result !== false);
+
+        $this->assertEquals([true, false, true], $this->fsql->fetch_row($result));
+    }
+
+    public function testAvg()
+    {
+        $orders = CachedTable::create($this->fsql->current_schema(), 'orders', self::$ordersColumns);
+        $ordersCursor = $orders->getWriteCursor();
+        foreach (self::$ordersEntries as $entry) {
+            $ordersCursor->appendRow($entry);
+        }
+        $orders->commit();
+
+        $result = $this->fsql->query("SELECT AVG(12.5), AVG(NULL), AVG(order_amount) FROM orders");
+        $this->assertTrue($result !== false);
+
+        $this->assertEquals([12.5, null, 90.41], $this->fsql->fetch_row($result));
+    }
+
+    public function testEvery()
+    {
+        $table = CachedTable::create($this->fsql->current_schema(), 'customers', self::$columns1);
+        $cursor = $table->getWriteCursor();
+        foreach (self::$entries1 as $entry) {
+            $cursor->appendRow($entry);
+        }
+        $table->commit();
+
+        $result = $this->fsql->query("SELECT EVERY('blah'), EVERY(NULL), EVERY(lastName), EVERY(city) FROM customers");
+        $this->assertTrue($result !== false);
+
+        $this->assertEquals([true, false, false, true], $this->fsql->fetch_row($result));
+    }
+
+    public function testMax()
+    {
+        $orders = CachedTable::create($this->fsql->current_schema(), 'orders', self::$ordersColumns);
+        $ordersCursor = $orders->getWriteCursor();
+        foreach (self::$ordersEntries as $entry) {
+            $ordersCursor->appendRow($entry);
+        }
+        $orders->commit();
+
+        $result = $this->fsql->query("SELECT MAX(12.5), MAX(NULL), MAX(order_amount) FROM orders");
+        $this->assertTrue($result !== false);
+
+        $this->assertEquals([12.5, null, 234.56], $this->fsql->fetch_row($result));
+    }
+
+    public function testMin()
+    {
+        $orders = CachedTable::create($this->fsql->current_schema(), 'orders', self::$ordersColumns);
+        $ordersCursor = $orders->getWriteCursor();
+        foreach (self::$ordersEntries as $entry) {
+            $ordersCursor->appendRow($entry);
+        }
+        $orders->commit();
+
+        $result = $this->fsql->query("SELECT MIN(11), MIN(NULL), MIN(order_amount) FROM orders");
+        $this->assertTrue($result !== false);
+
+        $this->assertEquals([11, null, 14.40], $this->fsql->fetch_row($result));
+    }
+
+    public function testSum()
+    {
+        $orders = CachedTable::create($this->fsql->current_schema(), 'orders', self::$ordersColumns);
+        $ordersCursor = $orders->getWriteCursor();
+        foreach (self::$ordersEntries as $entry) {
+            $ordersCursor->appendRow($entry);
+        }
+        $orders->commit();
+
+        $result = $this->fsql->query("SELECT SUM(11), SUM(NULL), SUM(order_amount) FROM orders");
+        $this->assertTrue($result !== false);
+
+        $this->assertEquals([11, null, 542.46], $this->fsql->fetch_row($result));
+    }
+
+    public function testSome()
+    {
+        $table = CachedTable::create($this->fsql->current_schema(), 'customers', self::$columns1);
+        $cursor = $table->getWriteCursor();
+        foreach (self::$entries1 as $entry) {
+            $cursor->appendRow($entry);
+        }
+        $table->commit();
+
+        $result = $this->fsql->query("SELECT SOME('blah'), SOME(NULL), SOME(lastName) FROM customers");
+        $this->assertTrue($result !== false);
+
+        $this->assertEquals([true, false, true], $this->fsql->fetch_row($result));
     }
 
     public function testGroupBy()
