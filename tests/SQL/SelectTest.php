@@ -374,6 +374,94 @@ class SelectTest extends BaseTest
         $this->assertEquals($expected, $results);
     }
 
+    public function testCrossJoin()
+    {
+        $customers = CachedTable::create($this->fsql->current_schema(), 'customers', self::$customersColumns);
+        $customersCursor = $customers->getWriteCursor();
+        foreach (self::$customersEntries as $entry) {
+            $customersCursor->appendRow($entry);
+        }
+        $customers->commit();
+
+        $orders = CachedTable::create($this->fsql->current_schema(), 'orders', self::$ordersColumns);
+        $ordersCursor = $orders->getWriteCursor();
+        foreach (self::$ordersEntries as $entry) {
+            $ordersCursor->appendRow($entry);
+        }
+        $orders->commit();
+
+        $result = $this->fsql->query("SELECT first_name, last_name, order_date, order_amount
+            FROM customers c, orders o");
+        $this->assertTrue($result !== false);
+
+        $expected = [
+            ["George", "Washington", "07/04/1776", 234.56],
+            ["George", "Washington", "03/14/1760", 78.50],
+            ["George", "Washington", "05/23/1784", 124.00],
+            ["George", "Washington", "09/03/1790", 65.50],
+            ["George", "Washington", "07/21/1795", 25.50],
+            ["George", "Washington", "11/27/1787", 14.40],
+            ["John", "Adams", "07/04/1776", 234.56],
+            ["John", "Adams", "03/14/1760", 78.50],
+            ["John", "Adams", "05/23/1784", 124.00],
+            ["John", "Adams", "09/03/1790", 65.50],
+            ["John", "Adams", "07/21/1795", 25.50],
+            ["John", "Adams", "11/27/1787", 14.40],
+            ["Thomas", "Jefferson", "07/04/1776", 234.56],
+            ["Thomas", "Jefferson", "03/14/1760", 78.50],
+            ["Thomas", "Jefferson", "05/23/1784", 124.00],
+            ["Thomas", "Jefferson", "09/03/1790", 65.50],
+            ["Thomas", "Jefferson", "07/21/1795", 25.50],
+            ["Thomas", "Jefferson", "11/27/1787", 14.40],
+            ["James", "Madison", "07/04/1776", 234.56],
+            ["James", "Madison", "03/14/1760", 78.50],
+            ["James", "Madison", "05/23/1784", 124.00],
+            ["James", "Madison", "09/03/1790", 65.50],
+            ["James", "Madison", "07/21/1795", 25.50],
+            ["James", "Madison", "11/27/1787", 14.40],
+            ["James", "Monroe", "07/04/1776", 234.56],
+            ["James", "Monroe", "03/14/1760", 78.50],
+            ["James", "Monroe", "05/23/1784", 124.00],
+            ["James", "Monroe", "09/03/1790", 65.50],
+            ["James", "Monroe", "07/21/1795", 25.50],
+            ["James", "Monroe", "11/27/1787", 14.40],
+        ];
+
+        $results = $this->fsql->fetch_all($result, ResultSet::FETCH_NUM);
+        $this->assertEquals($expected, $results);
+    }
+
+    public function testCrossJoinWhere()
+    {
+        $customers = CachedTable::create($this->fsql->current_schema(), 'customers', self::$customersColumns);
+        $customersCursor = $customers->getWriteCursor();
+        foreach (self::$customersEntries as $entry) {
+            $customersCursor->appendRow($entry);
+        }
+        $customers->commit();
+
+        $orders = CachedTable::create($this->fsql->current_schema(), 'orders', self::$ordersColumns);
+        $ordersCursor = $orders->getWriteCursor();
+        foreach (self::$ordersEntries as $entry) {
+            $ordersCursor->appendRow($entry);
+        }
+        $orders->commit();
+
+        $result = $this->fsql->query("SELECT first_name, last_name, order_date, order_amount
+            FROM customers c, orders o
+            WHERE c.customer_id = o.customer_id");
+        $this->assertTrue($result !== false);
+        $expected = [
+            ['George', 'Washington', '07/04/1776', 234.56],
+            ['John', 'Adams', '05/23/1784', 124.00],
+            ['Thomas', 'Jefferson', '03/14/1760', 78.50],
+            ['Thomas', 'Jefferson', '09/03/1790', 65.50],
+        ];
+
+        $results = $this->fsql->fetch_all($result, ResultSet::FETCH_NUM);
+        $this->assertEquals($expected, $results);
+    }
+
     public function testInnerJoinOn()
     {
         $customers = CachedTable::create($this->fsql->current_schema(), 'customers', self::$customersColumns);
