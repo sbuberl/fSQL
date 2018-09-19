@@ -34,8 +34,8 @@ class SelectTest extends BaseTest
 
     private static $customersColumns = [
         'customer_id' => ['type' => 'i', 'auto' => 0, 'default' => 0, 'key' => 'p', 'null' => 0, 'restraint' => []],
-        'first_name' => ['type' => 's', 'auto' => 0, 'default' => '', 'key' => 'n', 'null' => 0, 'restraint' => []],
-        'last_name' => ['type' => 's', 'auto' => 0, 'default' => '', 'key' => 'n', 'null' => 0, 'restraint' => []],
+        'firstName' => ['type' => 's', 'auto' => 0, 'default' => '', 'key' => 'n', 'null' => 0, 'restraint' => []],
+        'lastName' => ['type' => 's', 'auto' => 0, 'default' => '', 'key' => 'n', 'null' => 0, 'restraint' => []],
         'email' => ['type' => 's', 'auto' => 0, 'default' => '', 'key' => 'n', 'null' => 0, 'restraint' => []],
         'address' => ['type' => 's', 'auto' => 0, 'default' => '', 'key' => 'n', 'null' => 0, 'restraint' => []],
         'city' => ['type' => 's', 'auto' => 0, 'default' => '', 'key' => 'n', 'null' => 0, 'restraint' => []],
@@ -390,7 +390,7 @@ class SelectTest extends BaseTest
         }
         $orders->commit();
 
-        $result = $this->fsql->query("SELECT first_name, last_name, order_date, order_amount
+        $result = $this->fsql->query("SELECT firstName, lastName, order_date, order_amount
             FROM customers c, orders o");
         $this->assertTrue($result !== false);
 
@@ -447,7 +447,7 @@ class SelectTest extends BaseTest
         }
         $orders->commit();
 
-        $result = $this->fsql->query("SELECT first_name, last_name, order_date, order_amount
+        $result = $this->fsql->query("SELECT firstName, lastName, order_date, order_amount
             FROM customers c, orders o
             WHERE c.customer_id = o.customer_id");
         $this->assertTrue($result !== false);
@@ -478,7 +478,7 @@ class SelectTest extends BaseTest
         }
         $orders->commit();
 
-        $result = $this->fsql->query("SELECT first_name, last_name, order_date, order_amount
+        $result = $this->fsql->query("SELECT firstName, lastName, order_date, order_amount
             FROM customers c
             INNER JOIN orders o
             ON c.customer_id = o.customer_id");
@@ -510,7 +510,7 @@ class SelectTest extends BaseTest
         }
         $orders->commit();
 
-        $result = $this->fsql->query("SELECT first_name, last_name, order_date, order_amount
+        $result = $this->fsql->query("SELECT firstName, lastName, order_date, order_amount
             FROM customers c
             INNER JOIN orders o
             USING (customer_id)");
@@ -522,6 +522,31 @@ class SelectTest extends BaseTest
             ['Thomas', 'Jefferson', '09/03/1790', 65.50],
         ];
 
+        $results = $this->fsql->fetch_all($result, ResultSet::FETCH_NUM);
+        $this->assertEquals($expected, $results);
+    }
+
+    public function testInnerJoinUsingMultiple()
+    {
+        $customers = CachedTable::create($this->fsql->current_schema(), 'customers', self::$customersColumns);
+        $customersCursor = $customers->getWriteCursor();
+        foreach (self::$customersEntries as $entry) {
+            $customersCursor->appendRow($entry);
+        }
+        $customers->commit();
+
+        $result = $this->fsql->query("SELECT c.id, c.firstName, c.lastName
+            FROM customers c
+            INNER JOIN customers c2
+            USING (firstName, lastName)");
+        $this->assertTrue($result !== false);
+        $expected = [
+            [1, 'George', 'Washington'],
+            [2, 'John', 'Adams'],
+            [3, 'Thomas', 'Jefferson'],
+            [4, 'James', 'Madison'],
+            [5, 'James', 'Monroe'],
+        ];
         $results = $this->fsql->fetch_all($result, ResultSet::FETCH_NUM);
         $this->assertEquals($expected, $results);
     }
@@ -542,7 +567,7 @@ class SelectTest extends BaseTest
         }
         $orders->commit();
 
-        $result = $this->fsql->query("SELECT first_name, last_name, order_date, order_amount
+        $result = $this->fsql->query("SELECT firstName, lastName, order_date, order_amount
             FROM customers c
             LEFT JOIN orders o
             ON c.customer_id = o.customer_id");
@@ -576,7 +601,7 @@ class SelectTest extends BaseTest
         }
         $orders->commit();
 
-        $result = $this->fsql->query("SELECT first_name, last_name, order_date, order_amount
+        $result = $this->fsql->query("SELECT firstName, lastName, order_date, order_amount
             FROM customers c
             RIGHT JOIN orders o
             ON c.customer_id = o.customer_id");
@@ -610,7 +635,7 @@ class SelectTest extends BaseTest
         }
         $orders->commit();
 
-        $result = $this->fsql->query("SELECT first_name, last_name, order_date, order_amount
+        $result = $this->fsql->query("SELECT firstName, lastName, order_date, order_amount
             FROM customers c
             FULL JOIN orders o
             ON c.customer_id = o.customer_id");
