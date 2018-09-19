@@ -1218,94 +1218,93 @@ class Environment
 
         $joins = [];
         $joined_info = ['tables' => [], 'offsets' => [], 'columns' => [], 'group_columns' => []];
-        if (preg_match('/\s*from\s+((?:(?!\b(WHERE|HAVING|(?:GROUP|ORDER)\s+BY|OFFSET|FETCH|LIMIT)\b).)+)/Ais', $query, $from_matches, 0, $currentPos)) {
+        if (preg_match('/(\s*from\s+)((?:(?!\b(WHERE|HAVING|(?:GROUP|ORDER)\s+BY|OFFSET|FETCH|LIMIT)\b).)+)/Ais', $query, $from_matches, 0, $currentPos)) {
             $tables = [];
-
             $currentPos += strlen($from_matches[0]);
 
-            $tbls = explode(',', $from_matches[1]);
-            foreach ($tbls as $tbl) {
-                if (preg_match('/\A\s*(`?(?:[^\W\d]\w*`?\.`?){0,2}[^\W\d]\w*`?)(?:\s+(?:AS\s+)?`?([^\W\d]\w*)`?)?\s*(.*)/is', $tbl, $table_matches)) {
-                    list(, $full_table_name, $saveas, $table_unparsed) = $table_matches;
+            $table_list = $from_matches[2];
+            $tablePos = 0;
+            while (preg_match('/\s*(`?(?:[^\W\d]\w*`?\.`?){0,2}[^\W\d]\w*`?)(?:\s+(?:AS\s+)?`?([^\W\d]\w*)`?)?(\s*,\s*)?/Ais', $table_list, $table_matches, 0, $tablePos)) {
+                list(, $full_table_name, ) = $table_matches;
 
-                    $table_name_pieces = $this->parse_relation_name($full_table_name);
-                    if (!($table = $this->find_table($table_name_pieces))) {
+                $tablePos += strlen($table_matches[0]);
+
+                $table_name_pieces = $this->parse_relation_name($full_table_name);
+                if (!($table = $this->find_table($table_name_pieces))) {
+                    return false;
+                }
+
+                if (!empty($table_matches[2])) {
+                    $saveas = $table_matches[2];
+                }
+                else {
+                    $saveas = $table_name_pieces[2];
+                }
+
+                if (!isset($tables[$saveas])) {
+                    $tables[$saveas] = $table;
+                } else {
+                    return $this->set_error("Table named '$saveas' already specified");
+                }
+
+                $joins[$saveas] = ['fullName' => $table_name_pieces, 'joined' => []];
+                $table_columns = $table->getColumns();
+                $joined_info['tables'][$saveas] = $table_columns;
+                $joined_info['offsets'][$saveas] = count($joined_info['columns']);
+                $joined_info['columns'] = array_merge($joined_info['columns'], array_keys($table_columns));
+
+                while (preg_match("/\s*(?:((?:LEFT|RIGHT|FULL)(?:\s+OUTER)?|INNER)\s+)?JOIN\s+(`?(?:[^\W\d]\w*`?\.`?){0,2}[^\W\d]\w*`?)(?:\s+(?:AS\s+)?`?([^\W\d]\w*)`?)?\s+(USING|ON)\s*(?:(?:\((.*?)\))|(?:(?:\()?((?:\S+)\s*=\s*(?:\S+)(?:\))?)))/Ais", $table_list, $join, 0, $tablePos)) {
+                    $join_name = strtolower(trim($join[1]));
+                    $join_full_table_name = $join[2];
+                    $join_table_saveas = $join[3];
+
+                    $tablePos += strlen($join[0]);
+
+                    $join_table_name_pieces = $this->parse_relation_name($join_full_table_name);
+                    if (!($join_table = $this->find_table($join_table_name_pieces))) {
                         return false;
                     }
 
-                    if (empty($saveas)) {
-                        $saveas = $table_name_pieces[2];
+                    $join_table_columns = $join_table->getColumns();
+
+                    if (empty($join_table_saveas)) {
+                        $join_table_saveas = $join_table_name_pieces[2];
                     }
 
-                    if (!isset($tables[$saveas])) {
-                        $tables[$saveas] = $table;
+                    if (!isset($tables[$join_table_saveas])) {
+                        $tables[$join_table_saveas] = $join_table;
                     } else {
-                        return $this->set_error("Table named '$saveas' already specified");
+                        return $this->set_error("Table named '$join_table_saveas' already specified");
                     }
 
-                    $joins[$saveas] = ['fullName' => $table_name_pieces, 'joined' => []];
-                    $table_columns = $table->getColumns();
-                    $joined_info['tables'][$saveas] = $table_columns;
-                    $joined_info['offsets'][$saveas] = count($joined_info['columns']);
-                    $joined_info['columns'] = array_merge($joined_info['columns'], array_keys($table_columns));
+                    $joined_info['tables'][$join_table_saveas] = $join_table_columns;
+                    $clause = $join[4];
+                    if (!strcasecmp($clause, 'ON')) {
+                        $on = !empty($join[5]) ? $join[5] : $join[6];
+                        $conditional = $this->build_where($on, $joined_info, self::$WHERE_ON);
+                    } elseif (!strcasecmp($clause, 'USING')) {
+                        $shared = !empty($join[5]) ? $join[5] : $join[6];
+                        $shared_columns = preg_split('/\s*,\s*/', trim($shared));
 
-                    if (!empty($table_unparsed)) {
-                        preg_match_all("/\s*(?:((?:LEFT|RIGHT|FULL)(?:\s+OUTER)?|INNER)\s+)?JOIN\s+(`?(?:[^\W\d]\w*`?\.`?){0,2}[^\W\d]\w*`?)(?:\s+(?:AS\s+)?`?([^\W\d]\w*)`?)?\s+(USING|ON)\s*(?:(?:\((.*?)\))|(?:(?:\()?((?:\S+)\s*=\s*(?:\S+)(?:\))?)))/is", $table_unparsed, $join);
-                        $numJoins = count($join[0]);
-                        for ($i = 0; $i < $numJoins; ++$i) {
-                            $join_name = strtolower(trim($join[1][$i]));
-                            $join_full_table_name = $join[2][$i];
-                            $join_table_saveas = $join[3][$i];
-
-                            $join_table_name_pieces = $this->parse_relation_name($join_full_table_name);
-                            if (!($join_table = $this->find_table($join_table_name_pieces))) {
-                                return false;
-                            }
-
-                            $join_table_columns = $join_table->getColumns();
-
-                            if (empty($join_table_saveas)) {
-                                $join_table_saveas = $join_table_name_pieces[2];
-                            }
-
-                            if (!isset($tables[$join_table_saveas])) {
-                                $tables[$join_table_saveas] = $join_table;
-                            } else {
-                                return $this->set_error("Table named '$join_table_saveas' already specified");
-                            }
-
-                            $joined_info['tables'][$join_table_saveas] = $join_table_columns;
-                            $clause = $join[4][$i];
-                            if (!strcasecmp($clause, 'ON')) {
-                                $on = !empty($join[5][$i]) ? $join[5][$i] : $join[6][$i];
-                                $conditional = $this->build_where($on, $joined_info, self::$WHERE_ON);
-                            } elseif (!strcasecmp($clause, 'USING')) {
-                                $shared = !empty($join[5][$i]) ? $join[5][$i] : $join[6][$i];
-                                $shared_columns = preg_split('/\s*,\s*/', trim($shared));
-
-                                $using = '';
-                                foreach ($shared_columns as $shared_column) {
-                                    $using .= " AND {{left}}.$shared_column=$join_table_saveas.$shared_column";
-                                }
-                                $using = substr($using, 5);
-                                $conditional = $this->build_where($using, $joined_info, self::$WHERE_ON);
-                            }
-
-                            $conditional = 'return '.  $conditional . ';';
-                            $join_function = function($left_entry, $right_entry) use ($conditional)
-                            {
-                                return eval($conditional);
-                            };
-
-                            $new_offset = count($joined_info['columns']);
-                            $joined_info['columns'] = array_merge($joined_info['columns'], array_keys($join_table_columns));
-                            $joined_info['offsets'][$join_table_saveas] = $new_offset;
-
-                            $joins[$saveas]['joined'][] = ['alias' => $join_table_saveas, 'fullName' => $join_table_name_pieces, 'type' => $join_name, 'clause' => $clause, 'comparator' => $join_function];
+                        $using = '';
+                        foreach ($shared_columns as $shared_column) {
+                            $using .= " AND {{left}}.$shared_column=$join_table_saveas.$shared_column";
                         }
+                        $using = substr($using, 5);
+                        $conditional = $this->build_where($using, $joined_info, self::$WHERE_ON);
                     }
-                } else {
-                    return $this->set_error('Invalid table list');
+
+                    $conditional = 'return '.  $conditional . ';';
+                    $join_function = function($left_entry, $right_entry) use ($conditional)
+                    {
+                        return eval($conditional);
+                    };
+
+                    $new_offset = count($joined_info['columns']);
+                    $joined_info['columns'] = array_merge($joined_info['columns'], array_keys($join_table_columns));
+                    $joined_info['offsets'][$join_table_saveas] = $new_offset;
+
+                    $joins[$saveas]['joined'][] = ['alias' => $join_table_saveas, 'fullName' => $join_table_name_pieces, 'type' => $join_name, 'clause' => $clause, 'comparator' => $join_function];
                 }
             }
         }
