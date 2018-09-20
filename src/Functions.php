@@ -338,33 +338,22 @@ class Functions
     }
 
      /////String Functions
-    public function concat_ws($separator)
+    public function concat_ws($separator, ...$args)
     {
-        $numargs = func_num_args();
-        if ($numargs >= 2) {
-            $return = array();
-            for ($i = 1; $i < $numargs; ++$i) {
-                $return[] = func_get_arg($i);
-            }
-
-            return implode($separator, $return);
-        } else {
-            return;
-        }
+        return implode($separator, $args);
     }
 
-    public function concat()
+    public function concat(...$args)
     {
-        $args = func_get_args();
         array_unshift($args, '');
-
         return call_user_func_array(array($this, 'concat_ws'), $args);
     }
 
-    public function elt($return)
+    public function elt($index, ...$elements)
     {
-        if (func_num_args() > 1 && $return >= 1 && $return <= func_num_args()) {
-            return func_get_arg($return);
+        $count = count($elements);
+        if ($count > 1 && $index >= 1 && $index <= $count) {
+            return $elements[$index];
         } else {
             return;
         }
