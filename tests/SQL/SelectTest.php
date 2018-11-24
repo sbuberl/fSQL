@@ -130,7 +130,7 @@ class SelectTest extends BaseTest
         $this->assertTrue($result !== false);
 
         $result = $this->fsql->fetch_row($result);
-        $this->assertEquals(array(null, -3, 3.14, 'my string', 'x y z'), $result);
+        $this->assertEquals([null, -3, 3.14, 'my string', 'x y z'], $result);
     }
 
     public function testSelectCast()
@@ -885,17 +885,38 @@ class SelectTest extends BaseTest
         $result = $this->fsql->query('SELECT city, COUNT(lastName) FROM customers GROUP BY city ORDER BY city');
         $this->assertTrue($result !== false);
 
-        $expected = array(
-            array('city' => 'baltimore', 'count' => 1),
-            array('city' => 'boston', 'count' => 0),
-            array('city' => 'chicago', 'count' => 1),
-            array('city' => 'derry', 'count' => 2),
-            array('city' => 'london', 'count' => 1),
-            array('city' => 'new york', 'count' => 2),
-            array('city' => 'seattle', 'count' => 2),
-            array('city' => 'springfield', 'count' => 1),
-            array('city' => 'tokyo', 'count' => 1),
-        );
+        $expected = [
+            ['city' => 'baltimore', 'count' => 1],
+            ['city' => 'boston', 'count' => 0],
+            ['city' => 'chicago', 'count' => 1],
+            ['city' => 'derry', 'count' => 2],
+            ['city' => 'london', 'count' => 1],
+            ['city' => 'new york', 'count' => 2],
+            ['city' => 'seattle', 'count' => 2],
+            ['city' => 'springfield', 'count' => 1],
+            ['city' => 'tokyo', 'count' => 1],
+        ];
+
+        $this->assertEquals($expected, $this->fsql->fetch_all($result));
+    }
+
+    public function testGroupByHaving()
+    {
+        $table = CachedTable::create($this->fsql->current_schema(), 'customers', self::$columns1);
+        $cursor = $table->getWriteCursor();
+        foreach (self::$entries1 as $entry) {
+            $cursor->appendRow($entry);
+        }
+        $table->commit();
+
+        $result = $this->fsql->query('SELECT city, COUNT(lastName) FROM customers GROUP BY city HAVING COUNT(lastName) > 1 ORDER BY city');
+        $this->assertTrue($result !== false);
+
+        $expected = [
+            ['city' => 'derry', 'count' => 2],
+            ['city' => 'new york', 'count' => 2],
+            ['city' => 'seattle', 'count' => 2],
+        ];
 
         $this->assertEquals($expected, $this->fsql->fetch_all($result));
     }
@@ -913,7 +934,7 @@ class SelectTest extends BaseTest
         $this->assertTrue($result !== false);
 
         $results = $this->fsql->fetch_all($result, ResultSet::FETCH_NUM);
-        $tosort = array(array(2, true, true), array(1, true, true));
+        $tosort = [ [2, true, true], [1, true, true] ];
         $this->assertTrue($this->isArrayKeySorted($results, $tosort));
     }
 
@@ -944,7 +965,7 @@ class SelectTest extends BaseTest
         $this->assertTrue($result !== false);
 
         $results = $this->fsql->fetch_all($result, ResultSet::FETCH_NUM);
-        $tosort = array(array(1, true, true), array(0, true, true));
+        $tosort = [ [1, true, true], [0, true, true]];
         $this->assertTrue($this->isArrayKeySorted($results, $tosort));
     }
 
@@ -975,7 +996,7 @@ class SelectTest extends BaseTest
         $this->assertTrue($result !== false);
 
         $results = $this->fsql->fetch_all($result, ResultSet::FETCH_NUM);
-        $tosort = array(array(2, true, true), array(1, false, true));
+        $tosort = [ [2, true, true], [1, false, true] ];
         $this->assertTrue($this->isArrayKeySorted($results, $tosort));
     }
 
@@ -992,7 +1013,7 @@ class SelectTest extends BaseTest
         $this->assertTrue($result !== false);
 
         $results = $this->fsql->fetch_all($result, ResultSet::FETCH_NUM);
-        $tosort = array(array(2, true, true), array(1, true, false));
+        $tosort = [[2, true, true], [1, true, false ]];
         $this->assertTrue($this->isArrayKeySorted($results, $tosort));
     }
 
