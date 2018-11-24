@@ -137,6 +137,7 @@ class Schema
             }
         }
 
+        asort($tables);
         return $tables;
     }
 
