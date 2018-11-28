@@ -77,20 +77,23 @@ class WriteCursor extends TableCursor
             else if(!in_array($rowId, $this->deletedRows)) // double check not already in there
                 $this->deletedRows[] = $rowId;
 
+            $keys = $this->table->getKeys();
+            foreach($keys as $key)
+            {
+                $key->deleteEntry($rowId);
+            }
+
             --$this->numRows;
             unset($this->entries[$rowId]);
             $this->currentRowId = key($this->entries);
             if($this->currentRowId === null) { // key on an empty array is null?
                 $this->currentRowId = false;
                 $this->entries = [];
+                return false;
             }
-
-            $keys = $this->table->getKeys();
-            foreach($keys as $key)
-            {
-                $key->deleteEntry($rowId);
-            }
+            return true;
         }
+        return false;
     }
 
     function isUncommitted()
