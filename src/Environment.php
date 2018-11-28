@@ -1790,50 +1790,19 @@ class Environment
                 return $this->error_table_read_lock($table_name_pieces);
             }
 
+            $tableName = $table->name();
             $columns = $table->getColumns();
             $columnNames = array_keys($columns);
-            $cursor = $table->getWriteCursor();
-
-            if ($cursor->isDone()) {
-                return true;
-            }
-
+            $where = null;
             if (isset($matches[2])) {
-                $where = $this->build_where($matches[2], array('tables' => array($table_name => $columns), 'offsets' => array($table_name => 0), 'columns' => $columnNames), self::$WHERE_NORMAL);
+                $where = $this->build_where($matches[2], array('tables' => array($tableName => $columns), 'offsets' => array($tableName => 0), 'columns' => $columnNames), self::$WHERE_NORMAL);
                 if (!$where) {
                     return $this->set_error('Invalid WHERE clause: '.$this->error_msg);
                 }
-
-                $code = <<<EOC
-            foreach (\$cursor as \$entry) { {
-                \$entry = \$cursor->current();
-                if({$where})
-                {
-                    \$cursor->deleteRow();
-                    \$this->affected++;
-                }
             }
-EOC;
-
-                eval($code);
-            } else {
-                $c = 0;
-                foreach ($cursor as $entry) {
-                    $cursor->deleteRow();
-                    ++$c;
-                }
-                $this->affected = $c;
-            }
-
-            if ($this->affected) {
-                if ($this->auto) {
-                    $table->commit();
-                } elseif (!in_array($table, $this->updatedTables)) {
-                    $this->updatedTables[] = $table;
-                }
-            }
-
-            return true;
+            $delete = new Statements\Delete($this, $table_name_pieces, $where);
+            $result = $delete->execute();
+            $this->affected = $delete->affectedRows();
         } else {
             return $this->set_error('Invalid DELETE query');
         }
