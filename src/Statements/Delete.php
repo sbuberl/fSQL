@@ -27,7 +27,6 @@ class Delete extends DataModifyStatement
         $cursor = $table->getWriteCursor();
         if($this->where) {
             $where = "return " . $this->where .";";
-            var_dump($where);
             for($cursor->rewind(); $cursor->valid(); ) {
                 $entry = $cursor->current();
                 if(eval($where)) {
