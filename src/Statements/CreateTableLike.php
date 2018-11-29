@@ -20,16 +20,6 @@ class CreateTableLike extends CreateTableBase
         $this->options = $options;
     }
 
-    public function likeFullName()
-    {
-        return $this->likeFullName;
-    }
-
-    public function options()
-    {
-        return $this->options;
-    }
-
     public function execute()
     {
         $tableName = $this->fullName[2];

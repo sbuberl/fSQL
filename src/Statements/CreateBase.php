@@ -16,14 +16,4 @@ abstract class CreateBase extends Statement
         $this->fullName = $fullName;
         $this->ifNotExists = $ifNotExists;
     }
-
-    public function fullName()
-    {
-        return $this->fullName;
-    }
-
-    public function ifNotExists()
-    {
-        return $this->ifNotExists;
-    }
 }

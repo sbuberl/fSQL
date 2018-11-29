@@ -14,11 +14,6 @@ class CreateSequence extends CreateRelationBase
         $this->initialValues = $initialValues;
     }
 
-    public function initialValues()
-    {
-        return $this->initialValues;
-    }
-
     public function execute()
     {
         $sequenceName = $this->fullName[2];

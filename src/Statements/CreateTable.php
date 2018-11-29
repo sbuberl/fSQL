@@ -14,11 +14,6 @@ class CreateTable extends CreateTableBase
         $this->columns = $columns;
     }
 
-    public function columns()
-    {
-        return $this->columns;
-    }
-
     public function execute()
     {
         $tableName = $this->fullName[2];

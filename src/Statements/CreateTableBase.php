@@ -13,9 +13,4 @@ abstract class CreateTableBase extends CreateRelationBase
         parent::__construct($environment, $fullName, $ifNotExists);
         $this->temporary = $temporary;
     }
-
-    public function temporary()
-    {
-        return $this->temporary;
-    }
 }
