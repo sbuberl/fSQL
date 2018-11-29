@@ -51,7 +51,7 @@ class WriteCursor extends TableCursor
 
             // if row is not new in this transaction,
             // add updates to updatedRows array.
-            if(!isset($this->newRows[$rowId]))
+            if($key = array_search($rowId, $this->newRows) === FALSE)
             {
                 if(!isset($this->updatedRows[$rowId]))
                     $this->updatedRows[$rowId] = [];
@@ -70,11 +70,12 @@ class WriteCursor extends TableCursor
     {
         $rowId = $this->currentRowId;
         if($rowId !== false) {
-            if(isset($this->newRows[$rowId])) // row added in same transaction
-                unset($this->newRows[$rowId]);
+            if($key = array_search($rowId, $this->newRows) === FALSE)  // row added in same transaction
+                unset($this->newRows[$key]);
             else if(isset($this->updatedRows[$rowId]))
                 unset($this->updatedRows[$rowId]);
-            else if(!in_array($rowId, $this->deletedRows)) // double check not already in there
+
+            if($key = array_search($rowId, $this->deletedRows) === FALSE) // double check not already in there
                 $this->deletedRows[] = $rowId;
 
             $keys = $this->table->getKeys();
