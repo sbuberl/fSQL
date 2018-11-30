@@ -222,17 +222,21 @@ class WriteCursorTest extends BaseTest
         }
         $table->commit();
 
-        $writeCursor->deleteRow();
-        $writeCursor->seek(5);
-        $writeCursor->deleteRow();
-        $writeCursor->deleteRow();
+        $writeCursor->rewind();
+        $result = $writeCursor->deleteRow();
+        $this->assertTrue($result);
+
+        $writeCursor->next();
+        $result2 = $writeCursor->deleteRow();
+        $this->assertTrue($result2);
 
         $expected = [
             [2, 'jon', 'doe', 'baltimore'],
-            [3, 'mary', 'shelley', 'seattle'],
             [4, 'stephen', 'king', 'derry'],
             [5, 'bart', 'simpson', 'springfield'],
             [6, 'jane', 'doe', 'seattle'],
+            [7, 'bram', 'stoker', 'new york'],
+            [8, 'douglas', 'adams', 'london'],
             [9, 'bill', 'johnson', 'derry'],
             [10, 'jon', 'doe', 'new york'],
             [11, 'homer', null, 'boston'],
