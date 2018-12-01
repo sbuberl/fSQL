@@ -140,14 +140,14 @@ class Environment
         return $this->set_error("Schema {$db_name}.{$schema_name} does not exist");
     }
 
-    private function error_relation_not_exists($relation_name_pieces, $relation_type)
+    public function error_relation_not_exists($relation_name_pieces, $relation_type)
     {
         $relation_name = $this->build_relation_name($relation_name_pieces);
 
         return $this->set_error("${relation_type} {$relation_name} does not exist");
     }
 
-    private function error_table_not_exists($table_name_pieces)
+    public function error_table_not_exists($table_name_pieces)
     {
         return $this->error_relation_not_exists($table_name_pieces, 'Table');
     }
@@ -186,6 +186,17 @@ class Environment
         return $db;
     }
 
+    public function drop_database($dbName)
+    {
+        if (isset($this->databases[$dbName])) {
+            $db = $this->databases[$dbName];
+            $db->drop();
+            unset($this->databases[$dbName]);
+        } else {
+            $this->set_error("Database $dbName not found");
+        }
+    }
+
     public function find_schema($db_name, $schema_name)
     {
         $schema = false;
@@ -211,7 +222,7 @@ class Environment
         return $schema;
     }
 
-    public function find_relation($name_pieces)
+    public function find_relation(array $name_pieces)
     {
         $relation = false;
 
@@ -229,7 +240,7 @@ class Environment
         return $relation;
     }
 
-    public function find_table($name_pieces)
+    public function find_table(array $name_pieces)
     {
         $table = $this->find_relation($name_pieces);
         if ($table !== false) {
@@ -237,6 +248,19 @@ class Environment
                 $name = $this->build_relation_name($name_pieces);
 
                 return $this->set_error("Relation {$name} is not a table");
+            }
+        }
+
+        return $table;
+    }
+
+    public function find_sequence(array $name_pieces)
+    {
+        $sequence = $this->find_relation($name_pieces);
+        if ($sequence !== false) {
+            if (!($sequence instanceof Sequence)) {
+                $name = $this->build_relation_name($name_pieces);
+                return $this->set_error("Relation {$name} is not a sequence");
             }
         }
 
@@ -2099,7 +2123,7 @@ class Environment
             if (substr($type, -5) === 'TABLE') {
                 $type = 'table';
             }
-            $dropFunction = array($this, 'query_drop_'.$type);
+            $dropFunction = 'query_drop_'.$type;
             $names = preg_split('/\s*,\s*/', $namesList);
 
             foreach ($names as $name) {
@@ -2118,24 +2142,9 @@ class Environment
     private function query_drop_table($name, $ifExists)
     {
         if (preg_match("/\A(`?(?:[^\W\d]\w*`?\.`?){0,2}[^\W\d]\w*`?)\Z/is", $name, $matches)) {
-            $table_name_pieces = $this->parse_relation_name($matches[1]);
-            $schema = $this->find_schema($table_name_pieces[0], $table_name_pieces[1]);
-            if ($schema == false) {
-                return false;
-            }
-
-            $table_name = $table_name_pieces[2];
-            $table = $schema->getTable($table_name);
-            if ($table->isReadLocked()) {
-                return $this->error_table_read_lock($table_name_pieces);
-            }
-
-            $existed = $schema->dropTable($table_name);
-            if (!$ifExists && !$existed) {
-                return $this->error_table_not_exists($table_name_pieces);
-            }
-
-            return true;
+            $tableNamePieces = $this->parse_relation_name($matches[1]);
+            $drop = new Statements\DropTable($this, $tableNamePieces, $ifExists);
+            return $drop->execute();
         } else {
             return $this->set_error('Parse error in table listing');
         }
@@ -2144,20 +2153,9 @@ class Environment
     private function query_drop_database($name, $ifExists)
     {
         if (preg_match("/\A`?([^\W\d]\w*)`?\Z/is", $name, $matches)) {
-            $db_name = $matches[1];
-
-            if (!isset($this->databases[$db_name])) {
-                if (!$ifExists) {
-                    return $this->set_error("Database '{$db_name}' does not exist");
-                } else {
-                    return true;
-                }
-            }
-
-            $db = $this->databases[$db_name];
-            $db->drop();
-            unset($this->databases[$db_name]);
-            return true;
+            $dbName = $matches[1];
+            $drop = new Statements\DropDatabase($this, [$dbName], $ifExists);
+            return $drop->execute();
         } else {
             return $this->set_error('Parse error in databse listing');
         }
@@ -2167,15 +2165,8 @@ class Environment
     {
         if (preg_match("/\A(?:`?([^\W\d]\w*)`?\.)?`?([^\W\d]\w*)`?\Z/is", $name, $matches)) {
             list(, $dbName, $schemaName) = $matches;
-
-            $schema = $this->find_schema($dbName, $schemaName);
-            if ($schema == false) {
-                return $ifExists;
-            }
-
-            $database = $schema->database();
-            $database->dropSchema($schemaName);
-            return true;
+            $drop = new Statements\DropSchema($this, [$dbName, $schemaName], $ifExists);
+            return $drop->execute();
         } else {
             return $this->set_error('Parse error in schema listing');
         }
@@ -2183,30 +2174,10 @@ class Environment
 
     private function query_drop_sequence($name, $ifExists)
     {
-        if (preg_match("/\A(`?(?:[^\W\d]\w*`?\.`?){0,2}[^\W\d]\w*`?)\Z/is", $query, $matches)) {
-            list(, $ifExists, $fullSequenceName) = $matches;
-
-            $seqNamePieces = $this->parse_relation_name($fullSequenceName);
-            $schema = $this->find_schema($seqNamePieces[0], $seqNamePieces[1]);
-            if ($schema == false) {
-                return false;
-            }
-
-            $sequenceName = $seqNamePieces[2];
-            $sequence = $schema->getSequence($sequenceName);
-
-            if ($sequence === false) {
-                if (!$ifExists) {
-                    return $this->set_error("Sequence {$fullSequenceName} does not exist");
-                } else {
-                    return true;
-                }
-            }
-
-            $sequences = $schema->getSequences();
-            $sequences->dropSequence($sequenceName);
-
-            return true;
+        if (preg_match("/\A(`?(?:[^\W\d]\w*`?\.`?){0,2}[^\W\d]\w*`?)\Z/is", $name, $matches)) {
+            $seqNamePieces = $this->parse_relation_name($matches[1]);
+            $drop = new Statements\DropSequence($this, $seqNamePieces, $ifExists);
+            return $drop->execute();
         } else {
             return $this->set_error('Parse error in sequence listing');
         }
