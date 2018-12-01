@@ -476,7 +476,7 @@ class Environment
 
     private function query_create_sequence($definition, $ifNotExists)
     {
-        if (preg_match("/\A(`?(?:[^\W\d]\w*`?\.`?){0,2}[^\W\d]\w*`?)\s+(.+)\Z/is", $definition, $matches)) {
+        if (preg_match("/\A(`?(?:[^\W\d]\w*`?\.`?){0,2}[^\W\d]\w*`?)\s+(?:AS\s+[^\W\d]\w*\s*)?(.+)\Z/is", $definition, $matches)) {
             list(, $fullSequenceName, $valuesList) = $matches;
             $seqNamePieces = $this->parse_relation_name($fullSequenceName);
             if ($seqNamePieces === false) {

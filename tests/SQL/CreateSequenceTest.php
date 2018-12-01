@@ -55,7 +55,7 @@ class CreateSequenceTest extends BaseTest
 
     public function testSuccess()
     {
-        $result = $this->fsql->query('CREATE SEQUENCE userids INCREMENT BY 2 START WITH 22 MAXVALUE 66 NO CYCLE');
+        $result = $this->fsql->query('CREATE SEQUENCE userids AS INT, INCREMENT BY 2 START WITH 22 MAXVALUE 66 NO CYCLE');
         $this->assertTrue($result);
 
         $sequence = $this->sequences->getSequence('userids');
