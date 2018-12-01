@@ -8,7 +8,7 @@ abstract class Statement
 {
     protected $environment;
 
-    protected function __construct(Environment $environment)
+    public function __construct(Environment $environment)
     {
         $this->environment = $environment;
     }
