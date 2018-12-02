@@ -264,7 +264,7 @@ class Environment
             }
         }
 
-        return $table;
+        return $sequence;
     }
 
     public function parse_relation_name($name)
@@ -694,7 +694,7 @@ class Environment
         return array($start, $increment, $min, $max, $cycle);
     }
 
-    private function parse_sequence_options($options, $isAlter = false)
+    public function parse_sequence_options($options, $isAlter = false)
     {
         $parsed = array();
         if (!empty($options)) {
@@ -1851,47 +1851,9 @@ class Environment
     {
         if (preg_match("/\A(`?(?:[^\W\d]\w*`?\.`?){0,2}[^\W\d]\w*`?)\s+(.+?)\s*[;]?\Z/is", $definition, $matches)) {
             list(, $fullSequenceName, $valuesList) = $matches;
-
             $seqNamePieces = $this->parse_relation_name($fullSequenceName);
-
-            $schema = $this->find_schema($seqNamePieces[0], $seqNamePieces[1]);
-            if ($schema === false) {
-                return false;
-            }
-
-            $sequenceName = $seqNamePieces[2];
-            $sequence = $schema->getRelation($sequenceName);
-            if ($sequence === false) {
-                if (!$ifExists) {
-                    return $this->error_relation_not_exists($seqNamePieces, 'Sequence');
-                } else {
-                    return true;
-                }
-            }
-
-            if (!($sequence instanceof Sequence)) {
-                $fullName = $this->build_relation_name($seqNamePieces);
-
-                return $this->set_error("Relation {$fullName} is not a sequence");
-            }
-
-            $parsed = $this->parse_sequence_options($valuesList, true);
-            if ($parsed === false) {
-                return false;
-            }
-
-            $sequences = $schema->getSequences();
-            if (!$sequences->exists()) {
-                $sequences->create();
-            }
-
-            $result = $sequence->alter($parsed);
-            if ($result !== true) {
-                $sequence->load();  // refresh temp changes made
-                return $this->set_error($result);
-            }
-
-            return true;
+            $alter = new Statements\AlterSequence($this, $seqNamePieces, $ifExists, $valuesList);
+            return $alter->execute();
         } else {
             return $this->set_error('Invalid ALTER SEQUENCE query');
         }
