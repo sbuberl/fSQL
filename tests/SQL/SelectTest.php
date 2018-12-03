@@ -250,6 +250,66 @@ class SelectTest extends BaseTest
         $this->assertEquals($expected, $results);
     }
 
+    public function testAllSelectColumn()
+    {
+        $table = CachedTable::create($this->fsql->current_schema(), 'customers', self::$columns1);
+        $cursor = $table->getWriteCursor();
+        foreach (self::$entries1 as $entry) {
+            $cursor->appendRow($entry);
+        }
+        $table->commit();
+
+        $result = $this->fsql->query("SELECT ALL firstName FROM customers");
+        $this->assertTrue($result !== false);
+
+        $expected = [
+            ['bill'],
+            ['jon'],
+            ['mary'],
+            ['stephen'],
+            ['bart'],
+            ['jane'],
+            ['bram'],
+            ['douglas'],
+            ['bill'],
+            ['jon'],
+            ['homer'],
+            [null],
+        ];
+
+        $results = $this->fsql->fetch_all($result, ResultSet::FETCH_NUM);
+        $this->assertEquals($expected, $results);
+    }
+
+    public function testDistinctSelectColumn()
+    {
+        $table = CachedTable::create($this->fsql->current_schema(), 'customers', self::$columns1);
+        $cursor = $table->getWriteCursor();
+        foreach (self::$entries1 as $entry) {
+            $cursor->appendRow($entry);
+        }
+        $table->commit();
+
+        $result = $this->fsql->query("SELECT DISTINCT firstName FROM customers");
+        $this->assertTrue($result !== false);
+
+        $expected = [
+            ['bill'],
+            ['jon'],
+            ['mary'],
+            ['stephen'],
+            ['bart'],
+            ['jane'],
+            ['bram'],
+            ['douglas'],
+            ['homer'],
+            [null],
+        ];
+
+        $results = $this->fsql->fetch_all($result, ResultSet::FETCH_NUM);
+        $this->assertEquals($expected, array_values($results));
+    }
+
     public function testSelectSomeColumns()
     {
         $table = CachedTable::create($this->fsql->current_schema(), 'customers', self::$columns1);
@@ -871,6 +931,29 @@ class SelectTest extends BaseTest
         $this->assertTrue($result !== false);
 
         $this->assertEquals([true, false, true], $this->fsql->fetch_row($result));
+    }
+
+    public function testWhereConditions()
+    {
+        $table = CachedTable::create($this->fsql->current_schema(), 'customers', self::$columns1);
+        $cursor = $table->getWriteCursor();
+        foreach (self::$entries1 as $entry) {
+            $cursor->appendRow($entry);
+        }
+        $table->commit();
+
+        $result = $this->fsql->query("SELECT firstName, lastName, city FROM customers WHERE city = 'seattle' OR firstName = 'jon'");
+        $this->assertTrue($result !== false);
+
+        $expected =[
+                ['jon', 'doe', 'baltimore'],
+                ['mary', 'shelley', 'seattle'],
+                ['jane', 'doe', 'seattle'],
+                ['jon', 'doe', 'new york'],
+        ];
+
+        $results = $this->fsql->fetch_all($result, ResultSet::FETCH_NUM);
+        $this->assertEquals($expected, $results);
     }
 
     public function testGroupBy()
