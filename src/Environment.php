@@ -1190,7 +1190,7 @@ class Environment
     ////Select data from the DB
     private function query_select($query)
     {
-        if (!preg_match('/SELECT(?:\s+(ALL|DISTINCT(?:ROW))?\s+)?(.*)\s*[;]?\s*\Z/is', $query, $matches, PREG_OFFSET_CAPTURE)) {
+        if (!preg_match('/SELECT(?:\s+(ALL|DISTINCT(?:ROW)?)?\s+)?(.*)\s*[;]?\s*\Z/is', $query, $matches, PREG_OFFSET_CAPTURE)) {
             return $this->set_error('Invalid SELECT query');
         }
 

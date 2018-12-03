@@ -100,6 +100,10 @@ EOT;
             }
         }
 
+        if ($this->distinct) {
+            $final_set = array_unique($final_set, SORT_REGULAR);
+        }
+
         return new ResultSet($selected_columns, $final_set);
     }
 
