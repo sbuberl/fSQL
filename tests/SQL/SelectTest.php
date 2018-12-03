@@ -434,6 +434,37 @@ class SelectTest extends BaseTest
         $this->assertEquals($expected, $results);
     }
 
+    public function testSelectFullColumnNames()
+    {
+        $table = CachedTable::create($this->fsql->current_schema(), 'customers', self::$columns1);
+        $cursor = $table->getWriteCursor();
+        foreach (self::$entries1 as $entry) {
+            $cursor->appendRow($entry);
+        }
+        $table->commit();
+
+        $result = $this->fsql->query("SELECT customers.firstName, customers.lastName FROM customers");
+        $this->assertTrue($result !== false);
+
+        $expected = [
+            ['firstName' => 'bill', 'lastName' => 'smith'],
+            ['firstName' => 'jon', 'lastName' => 'doe'],
+            ['firstName' => 'mary', 'lastName' => 'shelley'],
+            ['firstName' => 'stephen', 'lastName' => 'king'],
+            ['firstName' => 'bart', 'lastName' => 'simpson'],
+            ['firstName' => 'jane', 'lastName' => 'doe'],
+            ['firstName' => 'bram', 'lastName' => 'stoker'],
+            ['firstName' => 'douglas', 'lastName' => 'adams'],
+            ['firstName' => 'bill', 'lastName' => 'johnson'],
+            ['firstName' => 'jon', 'lastName' => 'doe'],
+            ['firstName' => 'homer', 'lastName' => null],
+            ['firstName' => null, 'lastName' => 'king'],
+        ];
+
+        $results = $this->fsql->fetch_all($result, ResultSet::FETCH_ASSOC);
+        $this->assertEquals($expected, $results);
+    }
+
     public function testCrossJoin()
     {
         $customers = CachedTable::create($this->fsql->current_schema(), 'customers', self::$customersColumns);
