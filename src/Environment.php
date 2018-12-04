@@ -1879,7 +1879,10 @@ class Environment
             $specCount = count($specs[0]);
             for ($i = 0; $i < $specCount; ++$i) {
                 if (preg_match("/\AADD\s+(?:CONSTRAINT\s+`?[^\W\d]\w*`?\s+)?PRIMARY\s+KEY\s*\((.+?)\)/is", $specs[0][$i], $matches)) {
-                    $columnDef = &$columns[$matches[1]];
+                    $columnName = $matches[1];
+                    if (!isset($columns[$columnName])) {
+                        return $this->set_error("Column named '$columnName' does not exist in table '$tableName'");
+                    }
 
                     foreach ($columns as $name => $column) {
                         if ($column['key'] == 'p') {
@@ -1887,7 +1890,7 @@ class Environment
                         }
                     }
 
-                    $columnDef['key'] = 'p';
+                    $columns[$columnName]['key'] = 'p';
                     $tableObj->setColumns($columns);
 
                     return true;
