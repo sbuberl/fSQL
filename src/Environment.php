@@ -222,7 +222,7 @@ class Environment
         return $schema;
     }
 
-    public function find_relation(array $name_pieces)
+    public function find_relation(array $name_pieces, $type = 'Relation')
     {
         $relation = false;
 
@@ -232,7 +232,7 @@ class Environment
             if ($schema) {
                 $relation = $schema->getRelation($relation_name);
                 if (!$relation) {
-                    $this->error_relation_not_exists($name_pieces, 'Relation');
+                    $this->error_relation_not_exists($name_pieces, $type);
                 }
             }
         }
@@ -242,7 +242,7 @@ class Environment
 
     public function find_table(array $name_pieces)
     {
-        $table = $this->find_relation($name_pieces);
+        $table = $this->find_relation($name_pieces, 'Table');
         if ($table !== false) {
             if (!($table instanceof Table)) {
                 $name = $this->build_relation_name($name_pieces);
@@ -256,7 +256,7 @@ class Environment
 
     public function find_sequence(array $name_pieces)
     {
-        $sequence = $this->find_relation($name_pieces);
+        $sequence = $this->find_relation($name_pieces, 'Sequence');
         if ($sequence !== false) {
             if (!($sequence instanceof Sequence)) {
                 $name = $this->build_relation_name($name_pieces);
@@ -1867,11 +1867,7 @@ class Environment
             $tableNamePieces = $this->parse_relation_name($fullTableName);
             $tableObj = $this->find_table($tableNamePieces);
             if ($tableObj === false) {
-                if (!$ifExists) {
-                    return $this->error_table_not_exists($tableNamePieces);
-                } else {
-                    return true;
-                }
+                return $ifExists;
             } elseif ($tableObj->isReadLocked()) {
                 return $this->error_table_read_lock($tableNamePieces);
             }

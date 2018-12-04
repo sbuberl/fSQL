@@ -256,7 +256,7 @@ class CreateTableTest extends BaseTest
     {
         $result = $this->fsql->query('CREATE TABLE people LIKE students;');
         $this->assertFalse($result);
-        $this->assertEquals('Relation db1.public.students does not exist', trim($this->fsql->error()));
+        $this->assertEquals('Table db1.public.students does not exist', trim($this->fsql->error()));
     }
 
     public function testLike()
