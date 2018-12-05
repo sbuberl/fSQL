@@ -1900,7 +1900,7 @@ class Environment
                         return $this->set_error("Column named '$columnName' does not exist in table '$tableName'");
                     }
 
-                    $columnDef = &$columns[$columnName];
+                    $columnDef = $columns[$columnName];
                     if (preg_match("/(?:SET\s+DEFAULT\s+((?:[\+\-]\s*)?\d+(?:\.\d+)?|NULL|'.*?(?<!\\\\)')|DROP\s+DEFAULT)/is", $the_rest, $defaults)) {
                         if (!empty($defaults[1])) {
                             $default = $this->parseDefault($defaults[1], $columnDef['type'], $columnDef['null'], $columnDef['restraint']);
@@ -1908,7 +1908,7 @@ class Environment
                             $default = $this->get_type_default_value($columnDef['type'], $columnDef['null']);
                         }
 
-                        $columnDef['default'] = $default;
+                        $columns[$columnName]['default'] = $default;
                         $tableObj->setColumns($columns);
                     } elseif (preg_match("/\ADROP\s+IDENTITY/i", $the_rest, $defaults)) {
                         if (!$columnDef['auto']) {
