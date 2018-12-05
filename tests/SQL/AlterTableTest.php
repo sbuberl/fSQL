@@ -86,4 +86,103 @@ class AlterTableTest extends BaseTest
         $columns = $table->getColumns();
         $this->assertEquals($columns['id']['key'], 'p');
     }
+
+    public function testAlterTableAlterColumnBadColumn()
+    {
+        $table = CachedTable::create($this->fsql->current_schema(), 'students', self::$columnsWithoutKey);
+        $result = $this->fsql->query("ALTER TABLE students ALTER COLUMN garbage DROP DEFAULT");
+        $this->assertFalse($result);
+        $this->assertEquals("Column named 'garbage' does not exist in table 'students'", trim($this->fsql->error()));
+    }
+
+    public function testAlterTableAlterColumnSetDefault()
+    {
+        $table = CachedTable::create($this->fsql->current_schema(), 'students', self::$columnsWithoutKey);
+        $result = $this->fsql->query("ALTER TABLE students ALTER COLUMN gpa SET DEFAULT 4.0");
+        $this->assertTrue($result);
+        $columns = $table->getColumns();
+        $this->assertEquals($columns['gpa']['default'], 4.0);
+    }
+
+    public function testAlterTableAlterColumnDropDefault()
+    {
+        $table = CachedTable::create($this->fsql->current_schema(), 'students', self::$columnsWithoutKey);
+        $result = $this->fsql->query("ALTER TABLE students ALTER COLUMN zip DROP DEFAULT");
+        $this->assertTrue($result);
+        $columns = $table->getColumns();
+        $this->assertEquals($columns['zip']['default'], 0.0);
+    }
+
+    public function testAlterTableAlterColumnDropIdentityNotAuto()
+    {
+        $table = CachedTable::create($this->fsql->current_schema(), 'students', self::$columnsWithoutKey);
+        $result = $this->fsql->query("ALTER TABLE students ALTER COLUMN firstName DROP IDENTITY");
+        $this->assertFalse($result);
+        $this->assertEquals('Column firstName is not an identity column', trim($this->fsql->error()));
+    }
+
+    public function testAlterTableAlterColumnDropIdentity()
+    {
+        $table = CachedTable::create($this->fsql->current_schema(), 'students', self::$columnsWithoutKey);
+        $result = $this->fsql->query("ALTER TABLE students ALTER COLUMN id DROP IDENTITY");
+        $this->assertTrue($result);
+        $columns = $table->getColumns();
+        $this->assertNull($table->getIdentity());
+        $this->assertEquals($columns['id']['auto'], 0);
+        $this->assertEmpty($columns['id']['restraint']);
+    }
+
+    public function testAlterTableAlterColumnIdentityNoAuto()
+    {
+        $table = CachedTable::create($this->fsql->current_schema(), 'students', self::$columnsWithoutKey);
+        $result = $this->fsql->query('ALTER TABLE students ALTER COLUMN zip RESTART');
+        $this->assertFalse($result);
+        $this->assertEquals('Column zip is not an identity column', trim($this->fsql->error()));
+    }
+
+    public function testAlterTableAlterColumnIdentity()
+    {
+        $table = CachedTable::create($this->fsql->current_schema(), 'students', self::$columnsWithoutKey);
+        $result = $this->fsql->query('ALTER TABLE students ALTER COLUMN id RESTART WITH 5');
+        $this->assertTrue($result);
+        $identity = $table->getIdentity();
+        $this->assertEquals($identity->current, 5);
+    }
+
+    public function testAlterTableDropPrimaryKeyNoKey()
+    {
+        $table = CachedTable::create($this->fsql->current_schema(), 'students', self::$columnsWithoutKey);
+        $result = $this->fsql->query('ALTER TABLE students DROP PRIMARY KEY');
+        $this->assertFalse($result);
+        $this->assertEquals('No primary key found', trim($this->fsql->error()));
+    }
+
+    public function testAlterTableDropPrimaryKey()
+    {
+        $table = CachedTable::create($this->fsql->current_schema(), 'students', self::$columnsWithKey);
+        $result = $this->fsql->query('ALTER TABLE students DROP PRIMARY KEY');
+        $this->assertTrue($result);
+        $columns = $table->getColumns();
+        $this->assertEquals($columns['id']['key'], 'n');
+    }
+
+    public function testAlterTableRenameTableExists()
+    {
+        $table = CachedTable::create($this->fsql->current_schema(), 'students', self::$columnsWithKey);
+        $table2 = CachedTable::create($this->fsql->current_schema(), 'people', self::$columnsWithKey);
+        $result = $this->fsql->query('ALTER TABLE students RENAME TO people');
+        $this->assertFalse($result);
+        $this->assertEquals('Destination table db1.public.people already exists', trim($this->fsql->error()));
+    }
+
+    public function testAlterTableRenameTable()
+    {
+        $table = CachedTable::create($this->fsql->current_schema(), 'students', self::$columnsWithKey);
+        $result = $this->fsql->query('ALTER TABLE students RENAME TO people');
+        $this->assertTrue($result);
+        $db = $this->fsql->get_database("db1");
+        $schema = $db->getSchema('public');
+        $people = $schema->getTable('people');
+        $this->assertTrue($people->exists());
+    }
 }
