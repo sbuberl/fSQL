@@ -159,6 +159,11 @@ class Environment
         return $this->set_error("Table {$table_name} is locked for reading only");
     }
 
+    private function getTypeParseRegex()
+    {
+        return '(?:TINY|MEDIUM|LONG)?(?:TEXT|BLOB)|(?:VAR)?(?:CHAR|BINARY)|INTEGER|(?:TINY|SMALL|MEDIUM|BIG)?INT|FLOAT|REAL|DOUBLE(?: PRECISION)?|BIT|BOOLEAN|DEC(?:IMAL)?|NUMERIC|DATE(?:TIME)?|TIME(?:STAMP)?|YEAR|ENUM|SET';
+    }
+
     public function list_dbs()
     {
         return array_keys($this->databases);
@@ -506,8 +511,10 @@ class Environment
                 return false;
             }
 
+            $typeRegex = $this->getTypeParseRegex();
+
             if (!isset($matches[3])) {
-                preg_match_all("/(?:(?:CONSTRAINT\s+(?:`?[^\W\d]\w*`?\s+)?)?(KEY|INDEX|PRIMARY\s+KEY|UNIQUE)(?:\s+`?([^\W\d]\w*)`?)?\s*\(`?(.+?)`?\))|(?:`?([^\W\d]\w*?)`?(?:\s+((?:TINY|MEDIUM|LONG)?(?:TEXT|BLOB)|(?:VAR)?(?:CHAR|BINARY)|INTEGER|(?:TINY|SMALL|MEDIUM|BIG)?INT|FLOAT|REAL|DOUBLE(?: PRECISION)?|BIT|BOOLEAN|DEC(?:IMAL)?|NUMERIC|DATE(?:TIME)?|TIME(?:STAMP)?|YEAR|ENUM|SET)(?:\((.+?)\))?)\s*(UNSIGNED\s+)?(?:GENERATED\s+(BY\s+DEFAULT|ALWAYS)\s+AS\s+IDENTITY(?:\s*\((.*?)\))?)?(.*?)?(?:,|\)|$))/is", trim($column_list), $Columns);
+                preg_match_all("/(?:(?:CONSTRAINT\s+(?:`?[^\W\d]\w*`?\s+)?)?(KEY|INDEX|PRIMARY\s+KEY|UNIQUE)(?:\s+`?([^\W\d]\w*)`?)?\s*\(`?(.+?)`?\))|(?:`?([^\W\d]\w*?)`?(?:\s+({$typeRegex})(?:\((.+?)\))?)\s*(UNSIGNED\s+)?(?:GENERATED\s+(BY\s+DEFAULT|ALWAYS)\s+AS\s+IDENTITY(?:\s*\((.*?)\))?)?(.*?)?(?:,|\)|$))/is", trim($column_list), $Columns);
 
                 if (!$Columns) {
                     return $this->set_error('Parsing error in CREATE TABLE query');
@@ -1874,11 +1881,91 @@ class Environment
 
             $tableName = $tableNamePieces[2];
             $columns = $tableObj->getColumns();
+            $typeRegex = $this->getTypeParseRegex();
+
 
             preg_match_all("/(?:ADD|ALTER|DROP|RENAME).*?(?:,|\Z)/is", trim($changes), $specs);
             $specCount = count($specs[0]);
             for ($i = 0; $i < $specCount; ++$i) {
-                if (preg_match("/\AADD\s+(?:CONSTRAINT\s+`?[^\W\d]\w*`?\s+)?PRIMARY\s+KEY\s*\((.+?)\)/is", $specs[0][$i], $matches)) {
+                if (preg_match("/\AADD\s+(?:COLUMN\s+)?(?:`?([^\W\d]\w*?)`?(?:\s+({$typeRegex})(?:\((.+?)\))?)\s*(UNSIGNED\s+)?(?:GENERATED\s+(BY\s+DEFAULT|ALWAYS)\s+AS\s+IDENTITY(?:\s*\((.*?)\))?)?(.*?)?(?:,|\)|$))/is", $specs[0][$i], $matches)) {
+                    $name = $matches[1];
+                    $typeName = $matches[2];
+                    $options = $matches[7];
+
+                    if (isset($columns[$name])) {
+                        return $this->set_error("Column {$name} already exists");
+                    }
+
+                    $type = Types::getTypeCode($typeName);
+
+                    if (preg_match("/\bnot\s+null\b/i", $options)) {
+                        $null = 0;
+                    } else {
+                        $null = 1;
+                    }
+
+                    $auto = 0;
+                    $restraint = null;
+                    if (!empty($matches[5])) {
+                        $auto = 1;
+                        $always = (int) !strcasecmp($matches[5], 'ALWAYS');
+                        $parsed = $this->parse_sequence_options($matches[6]);
+                        if ($parsed === false) {
+                            return false;
+                        }
+
+                        $restraint = $this->load_create_sequence($parsed);
+                        $start = $restraint[0];
+                        array_unshift($restraint, $start, $always);
+
+                        $null = 0;
+                    } elseif (preg_match('/\bAUTO_?INCREMENT\b/i', $options)) {
+                        $auto = 1;
+                        $restraint = array(1, 0, 1, 1, 1, PHP_INT_MAX, 0);
+                    }
+
+                    if ($auto) {
+                        if ($type !== Types::INTEGER && $type !== Types::FLOAT) {
+                            return $this->set_error('Identity columns and autoincrement only allowed on numeric columns');
+                        } elseif ($hasIdentity) {
+                            return $this->set_error('A table can only have one identity column.');
+                        }
+                        $hasIdentity = true;
+                    }
+
+                    if ($type === Types::ENUM) {
+                        preg_match_all("/'(.*?(?<!\\\\))'/", $Columns[6][$c], $values);
+                        $restraint = $values[1];
+                    }
+
+                    if (preg_match("/DEFAULT\s+((?:[\+\-]\s*)?\d+(?:\.\d+)?|NULL|'.*?(?<!\\\\)')/is", $options, $matches)) {
+                        if ($auto) {
+                            return $this->set_error('Can not specify a default value for an identity column');
+                        }
+
+                        $default = $this->parseDefault($matches[1], $type, $null, $restraint);
+                    } else {
+                        $default = $this->get_type_default_value($type, $null);
+                    }
+
+                    if (preg_match('/(PRIMARY\s+KEY|UNIQUE(?:\s+KEY)?)/is', $options, $keyMatches)) {
+                        $keyType = strtolower($keyMatches[1]);
+                        $key = $keyType[0];
+                    } else {
+                        $key = 'n';
+                    }
+
+                    $columns[$name] = ['type' => $type, 'auto' => $auto, 'default' => $default, 'key' => $key, 'null' => $null, 'restraint' => $restraint];
+                    $tableObj->setColumns($columns);
+
+                    $cursor = $tableObj->getWriteCursor();
+                    $update = [count($columns) - 1 => $default];
+                    foreach($cursor as $entry) {
+                        $cursor->updateRow($update);
+                    }
+                    $tableObj->commit();
+                    return true;
+                } elseif (preg_match("/\AADD\s+(?:CONSTRAINT\s+`?[^\W\d]\w*`?\s+)?PRIMARY\s+KEY\s*\((.+?)\)/is", $specs[0][$i], $matches)) {
                     $columnName = $matches[1];
                     if (!isset($columns[$columnName])) {
                         return $this->set_error("Column named '$columnName' does not exist in table '$tableName'");
@@ -1897,7 +1984,7 @@ class Environment
                 } elseif (preg_match("/\AALTER(?:\s+(?:COLUMN))?\s+`?([^\W\d]\w*)`?\s+(.+?)(?:,|;|\Z)/is", $specs[0][$i], $matches)) {
                     list(, $columnName, $the_rest) = $matches;
                     if (!isset($columns[$columnName])) {
-                        return $this->set_error("Column named '$columnName' does not exist in table '$tableName'");
+                        return $this->set_error("Column named $columnName does not exist in table $tableName");
                     }
 
                     $columnDef = $columns[$columnName];

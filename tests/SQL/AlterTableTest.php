@@ -11,18 +11,32 @@ class AlterTableTest extends BaseTest
 
     private static $columnsWithKey = [
         'id' => ['type' => 'i', 'auto' => 1, 'default' => 0, 'key' => 'p', 'null' => 0, 'restraint' => [3, 0, 1, 1, 1, 10000, 0]],
-        'firstName' => ['type' => 's', 'auto' => 0, 'default' => null, 'key' => 'n', 'null' => 1, 'restraint' => []],
-        'lastName' => ['type' => 's', 'auto' => 0, 'default' => 'blah', 'key' => 'n', 'null' => 0, 'restraint' => []],
-        'zip' => ['type' => 'i', 'auto' => 0, 'default' => 12345, 'key' => 'n', 'null' => 0, 'restraint' => []],
-        'gpa' => ['type' => 'f', 'auto' => 0, 'default' => 11000000.0, 'key' => 'n', 'null' => 0, 'restraint' => []],
+        'firstName' => ['type' => 's', 'auto' => 0, 'default' => '', 'key' => 'n', 'null' => 0, 'restraint' => []],
+        'lastName' => ['type' => 's', 'auto' => 0, 'default' => '', 'key' => 'n', 'null' => 0, 'restraint' => []],
+        'email' => ['type' => 's', 'auto' => 0, 'default' => '', 'key' => 'n', 'null' => 0, 'restraint' => []],
+        'address' => ['type' => 's', 'auto' => 0, 'default' => '', 'key' => 'n', 'null' => 0, 'restraint' => []],
+        'city' => ['type' => 's', 'auto' => 0, 'default' => '', 'key' => 'n', 'null' => 0, 'restraint' => []],
+        'state' => ['type' => 's', 'auto' => 0, 'default' => '', 'key' => 'n', 'null' => 0, 'restraint' => []],
+        'zip' => ['type' => 'i', 'auto' => 0, 'default' => 0, 'key' => 'n', 'null' => 0, 'restraint' => []],
     ];
 
     private static $columnsWithoutKey = [
         'id' => ['type' => 'i', 'auto' => 1, 'default' => 0, 'key' => 'n', 'null' => 0, 'restraint' => [3, 0, 1, 1, 1, 10000, 0]],
-        'firstName' => ['type' => 's', 'auto' => 0, 'default' => null, 'key' => 'n', 'null' => 1, 'restraint' => []],
-        'lastName' => ['type' => 's', 'auto' => 0, 'default' => 'blah', 'key' => 'n', 'null' => 0, 'restraint' => []],
-        'zip' => ['type' => 'i', 'auto' => 0, 'default' => 12345, 'key' => 'n', 'null' => 0, 'restraint' => []],
-        'gpa' => ['type' => 'f', 'auto' => 0, 'default' => 11000000.0, 'key' => 'n', 'null' => 0, 'restraint' => []],
+        'firstName' => ['type' => 's', 'auto' => 0, 'default' => '', 'key' => 'n', 'null' => 0, 'restraint' => []],
+        'lastName' => ['type' => 's', 'auto' => 0, 'default' => '', 'key' => 'n', 'null' => 0, 'restraint' => []],
+        'email' => ['type' => 's', 'auto' => 0, 'default' => '', 'key' => 'n', 'null' => 0, 'restraint' => []],
+        'address' => ['type' => 's', 'auto' => 0, 'default' => '', 'key' => 'n', 'null' => 0, 'restraint' => []],
+        'city' => ['type' => 's', 'auto' => 0, 'default' => '', 'key' => 'n', 'null' => 0, 'restraint' => []],
+        'state' => ['type' => 's', 'auto' => 0, 'default' => '', 'key' => 'n', 'null' => 0, 'restraint' => []],
+        'zip' => ['type' => 'i', 'auto' => 0, 'default' => 0, 'key' => 'n', 'null' => 0, 'restraint' => []],
+    ];
+
+    private static $entries = [
+        [1, 'George', 'Washington', 'gwashington@usa.gov', '3200 Mt Vernon Hwy', 'Mount Vernon', 'VA', 22121],
+        [2, 'John', 'Adams', 'jadams@usa.gov', '1250 Hancock St', 'Quincy', 'MA', '02169'],
+        [3, 'Thomas', 'Jefferson', 'tjefferson@usa.gov', '931 Thomas Jefferson Pkwy',  'Charlottesville', 'VA', '22902'],
+        [4, 'James', 'Madison', 'jmadison@usa.gov', '11350 Constitution Hwy',  'Orange', 'VA', 22960],
+        [5, 'James', 'Monroe', 'jmonroe@usa.gov', '2050 James Monroe Parkway', 'Charlottesville', 'VA', 22902],
     ];
 
     public function setUp()
@@ -62,6 +76,33 @@ class AlterTableTest extends BaseTest
         $this->assertTrue($result);
     }
 
+    public function testAlterTableAddColumnExists()
+    {
+        CachedTable::create($this->fsql->current_schema(), 'students', self::$columnsWithKey);
+        $result = $this->fsql->query("ALTER TABLE students ADD COLUMN zip INT");
+        $this->assertFalse($result);
+        $this->assertEquals("Column zip already exists", trim($this->fsql->error()));
+    }
+
+    public function testAlterTableAddColumn()
+    {
+        $table = CachedTable::create($this->fsql->current_schema(), 'students', self::$columnsWithKey);
+        $cursor = $table->getWriteCursor();
+        foreach (self::$entries as $entry) {
+            $cursor->appendRow($entry);
+        }
+        $table->commit();
+
+        $result = $this->fsql->query("ALTER TABLE students ADD COLUMN major TEXT NULL");
+        $this->assertTrue($result);
+        $columns = $table->getColumns();
+        $this->assertTrue(isset($columns['major']));
+        $entries = $table->getEntries();
+        foreach($entries as $entry) {
+            $this->assertTrue(isset($entry[8]));
+        }
+    }
+
     public function testAlterTableAddPrimaryKeyExists()
     {
         CachedTable::create($this->fsql->current_schema(), 'students', self::$columnsWithKey);
@@ -92,7 +133,7 @@ class AlterTableTest extends BaseTest
         $table = CachedTable::create($this->fsql->current_schema(), 'students', self::$columnsWithoutKey);
         $result = $this->fsql->query("ALTER TABLE students ALTER COLUMN garbage DROP DEFAULT");
         $this->assertFalse($result);
-        $this->assertEquals("Column named 'garbage' does not exist in table 'students'", trim($this->fsql->error()));
+        $this->assertEquals("Column named garbage does not exist in table students", trim($this->fsql->error()));
     }
 
     public function testAlterTableAlterColumnSetDefault()
