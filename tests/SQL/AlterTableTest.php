@@ -139,10 +139,10 @@ class AlterTableTest extends BaseTest
     public function testAlterTableAlterColumnSetDefault()
     {
         $table = CachedTable::create($this->fsql->current_schema(), 'students', self::$columnsWithoutKey);
-        $result = $this->fsql->query("ALTER TABLE students ALTER COLUMN gpa SET DEFAULT 4.0");
+        $result = $this->fsql->query("ALTER TABLE students ALTER COLUMN zip SET DEFAULT 12345");
         $this->assertTrue($result);
         $columns = $table->getColumns();
-        $this->assertEquals($columns['gpa']['default'], 4.0);
+        $this->assertEquals($columns['zip']['default'], 12345);
     }
 
     public function testAlterTableAlterColumnDropDefault()
