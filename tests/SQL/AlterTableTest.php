@@ -190,6 +190,34 @@ class AlterTableTest extends BaseTest
         $this->assertEquals($identity->current, 5);
     }
 
+    public function testAlterTableDropColumnNotExist()
+    {
+        $table = CachedTable::create($this->fsql->current_schema(), 'students', self::$columnsWithoutKey);
+        $result = $this->fsql->query("ALTER TABLE students DROP COLUMN major");
+        $this->assertFalse($result);
+        $this->assertEquals('Column named major does not exist in table students', trim($this->fsql->error()));
+    }
+
+    public function testAlterTableDropColumn()
+    {
+        $table = CachedTable::create($this->fsql->current_schema(), 'students', self::$columnsWithoutKey);
+        $cursor = $table->getWriteCursor();
+        foreach (self::$entries as $entry) {
+            $cursor->appendRow($entry);
+        }
+        $table->commit();
+        $result = $this->fsql->query("ALTER TABLE students DROP COLUMN zip");
+        $this->assertTrue($result);
+
+        $table2 = $this->fsql->current_schema()->getTable('students');
+        $columns = $table2->getColumns();
+        $entries = $table2->getEntries();
+        $this->assertFalse(isset($columns['zip']));
+        foreach ($entries as $entry) {
+            $this->assertFalse(isset($entry[7]));
+        }
+    }
+
     public function testAlterTableDropPrimaryKeyNoKey()
     {
         $table = CachedTable::create($this->fsql->current_schema(), 'students', self::$columnsWithoutKey);

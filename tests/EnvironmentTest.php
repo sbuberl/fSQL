@@ -4,7 +4,7 @@ require_once __DIR__.'/BaseTest.php';
 
 use FSQL\Environment;
 
-class Test extends BaseTest
+class EnvironmentTest extends BaseTest
 {
     private $fsql;
 

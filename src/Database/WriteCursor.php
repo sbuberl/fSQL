@@ -66,6 +66,18 @@ class WriteCursor extends TableCursor
         }
     }
 
+    public function deleteColumn($column)
+    {
+        $rowId = $this->currentRowId;
+        if($rowId !== false) {
+            unset($this->entries[$rowId][$column]);
+            if(!isset($this->updatedRows[$rowId]))
+                $this->updatedRows[$rowId] = [];
+            $this->updatedRows[$rowId] = [];
+        }
+        return false;
+    }
+
     public function deleteRow()
     {
         $rowId = $this->currentRowId;

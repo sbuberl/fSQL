@@ -104,6 +104,36 @@ class CachedTable extends Table
         $this->dataLockFile->drop();
     }
 
+    public function dropColumn($columnName) {
+        $this->dataLockFile->acquireWrite();
+        $this->columnsLockFile->acquireWrite();
+        $this->columnsFile->acquireWrite();
+        $this->dataFile->acquireWrite();
+
+        $columnIndex = array_search($columnName, array_keys($this->columns));
+
+        $cursor = $this->getWriteCursor();
+        foreach($cursor as $entry) {
+            $cursor->deleteColumn($columnIndex);
+        }
+
+        $this->commit();
+
+        unset($this->columns[$columnName]);
+
+        $toprint = $this->printColumns($this->columns);
+        $columnsHandle = $this->columnsFile->getHandle();
+        ftruncate($columnsHandle, 0);
+        fwrite($columnsHandle, $toprint);
+
+        $this->columnsLockFile->write();
+
+        $this->dataFile->releaseWrite();
+        $this->dataLockFile->releaseWrite();
+        $this->columnsFile->releaseWrite();
+        $this->columnsLockFile->releaseWrite();
+    }
+
     public function truncate()
     {
         $this->dataLockFile->acquireWrite();

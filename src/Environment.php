@@ -2021,6 +2021,14 @@ class Environment
                     }
 
                     return true;
+                } elseif (preg_match("/\ADROP\s+(?:COLUMN\s+)?`?([^\W\d]\w*)`?\s*(?:,|;|\Z)/is", $specs[0][$i], $matches)) {
+                    $columnName = $matches[1];
+                    if (!isset($columns[$columnName])) {
+                        return $this->set_error("Column named $columnName does not exist in table $tableName");
+                    }
+
+                    $tableObj->dropColumn($columnName);
+                    return true;
                 } elseif (preg_match("/\ADROP\s+PRIMARY\s+KEY/is", $specs[0][$i], $matches)) {
                     $found = false;
                     foreach ($columns as $name => $column) {
