@@ -1,6 +1,9 @@
 <?php
 
 namespace FSQL;
+error_reporting(E_ALL);
+ini_set('display_errors', TRUE);
+ini_set('display_startup_errors', TRUE);
 
 define('FSQL_TRUE', 3);
 define('FSQL_FALSE', 0);
@@ -13,7 +16,7 @@ if (!defined('PHP_INT_MIN')) {
 
 define('FSQL_INCLUDE_PATH', __DIR__);
 
-require 'vendor/autoload.php';
+require dirname(__DIR__).'/vendor/autoload.php';
 
 use FSQL\Database\Database;
 use FSQL\Database\Sequence;
@@ -1955,32 +1958,11 @@ class Environment
                         $key = 'n';
                     }
 
-                    $columns[$name] = ['type' => $type, 'auto' => $auto, 'default' => $default, 'key' => $key, 'null' => $null, 'restraint' => $restraint];
-                    $tableObj->setColumns($columns);
-
-                    $cursor = $tableObj->getWriteCursor();
-                    $update = [count($columns) - 1 => $default];
-                    foreach($cursor as $entry) {
-                        $cursor->updateRow($update);
-                    }
-                    $tableObj->commit();
-                    return true;
+                    $statement = new Statements\AddColumn($this, $tableNamePieces, $name, $type, $auto, $default, $key, $null, $restraint);
+                    return $statement->execute();
                 } elseif (preg_match("/\AADD\s+(?:CONSTRAINT\s+`?[^\W\d]\w*`?\s+)?PRIMARY\s+KEY\s*\((.+?)\)/is", $specs[0][$i], $matches)) {
-                    $columnName = $matches[1];
-                    if (!isset($columns[$columnName])) {
-                        return $this->set_error("Column named '$columnName' does not exist in table '$tableName'");
-                    }
-
-                    foreach ($columns as $name => $column) {
-                        if ($column['key'] == 'p') {
-                            return $this->set_error('Primary key already exists');
-                        }
-                    }
-
-                    $columns[$columnName]['key'] = 'p';
-                    $tableObj->setColumns($columns);
-
-                    return true;
+                    $statement = new Statements\AddPrimaryKey($this, $tableNamePieces, $matches[1]);
+                    return $statement->execute();
                 } elseif (preg_match("/\AALTER(?:\s+(?:COLUMN))?\s+`?([^\W\d]\w*)`?\s+(.+?)(?:,|;|\Z)/is", $specs[0][$i], $matches)) {
                     list(, $columnName, $the_rest) = $matches;
                     if (!isset($columns[$columnName])) {
@@ -1989,81 +1971,39 @@ class Environment
 
                     $columnDef = $columns[$columnName];
                     if (preg_match("/(?:SET\s+DEFAULT\s+((?:[\+\-]\s*)?\d+(?:\.\d+)?|NULL|'.*?(?<!\\\\)')|DROP\s+DEFAULT)/is", $the_rest, $defaults)) {
-                        if (!empty($defaults[1])) {
-                            $default = $this->parseDefault($defaults[1], $columnDef['type'], $columnDef['null'], $columnDef['restraint']);
+                        if(!empty($defaults[1])) {
+                            $statement = new Statements\SetDefault($this, $tableNamePieces, $columnName, $defaults[1]);
                         } else {
-                            $default = $this->get_type_default_value($columnDef['type'], $columnDef['null']);
+                            $statement = new Statements\DropDefault($this, $tableNamePieces, $columnName);
                         }
-
-                        $columns[$columnName]['default'] = $default;
-                        $tableObj->setColumns($columns);
+                        return $statement->execute();
                     } elseif (preg_match("/\ADROP\s+IDENTITY/i", $the_rest, $defaults)) {
-                        if (!$columnDef['auto']) {
-                            return $this->set_error("Column $columnName is not an identity column");
-                        }
-                        $tableObj->dropIdentity();
+                        $statement = new Statements\DropIdentity($this, $tableNamePieces, $columnName);
+                        return $statement->execute();
                     } else {
                         $parsed = $this->parse_sequence_options($the_rest, true);
                         if ($parsed === false) {
                             return false;
                         } elseif (!empty($parsed)) {
-                            if (!$columnDef['auto']) {
-                                return $this->set_error("Column $columnName is not an identity column");
-                            }
-
-                            $identity = $tableObj->getIdentity();
-                            $result = $identity->alter($parsed);
-                            if ($result !== true) {
-                                $identity->load();  // refresh temp changes made
-                                return $this->set_error($result);
-                            }
+                            $statement = new Statements\AlterIdentity($this, $tableNamePieces, $columnName, $parsed);
+                            return $statement->execute();
                         }
                     }
 
                     return true;
                 } elseif (preg_match("/\ADROP\s+(?:COLUMN\s+)?`?([^\W\d]\w*)`?\s*(?:,|;|\Z)/is", $specs[0][$i], $matches)) {
-                    $columnName = $matches[1];
-                    if (!isset($columns[$columnName])) {
-                        return $this->set_error("Column named $columnName does not exist in table $tableName");
-                    }
-
-                    $tableObj->dropColumn($columnName);
-                    return true;
+                    $statement = new Statements\DropColumn($this, $tableNamePieces, $matches[1]);
+                    return $statement->execute();
                 } elseif (preg_match("/\ADROP\s+PRIMARY\s+KEY/is", $specs[0][$i], $matches)) {
-                    $found = false;
-                    foreach ($columns as $name => $column) {
-                        if ($column['key'] == 'p') {
-                            $columns[$name]['key'] = 'n';
-                            $found = true;
-                        }
-                    }
-
-                    if ($found) {
-                        $tableObj->setColumns($columns);
-
-                        return true;
-                    } else {
-                        return $this->set_error('No primary key found');
-                    }
+                    $statement = new Statements\DropPrimaryKey($this, $tableNamePieces);
+                    return $statement->execute();
                 } elseif (preg_match("/\ARENAME\s+(?:TO\s+)?(`?(?:[^\W\d]\w*`?\.`?){0,2}[^\W\d]\w*`?)/is", $specs[0][$i], $matches)) {
                     $newTableNamePieces = $this->parse_relation_name($matches[1]);
                     if ($newTableNamePieces === false) {
                         return false;
                     }
-
-                    $schema = $tableObj->schema();
-
-                    $newSchema = $this->find_schema($newTableNamePieces[0], $newTableNamePieces[1]);
-                    if ($newSchema === false) {
-                        return false;
-                    }
-
-                    $newTable = $newSchema->getTable($newTableNamePieces[2]);
-                    if ($newTable->exists()) {
-                        return $this->set_error("Destination table {$newTable->fullName()} already exists");
-                    }
-
-                    return $schema->renameTable($tableName, $newTable->name(), $newSchema);
+                    $statement = new Statements\RenameTable($this, $tableNamePieces, $newTableNamePieces);
+                    return $statement->execute();
                 } else {
                     return $this->set_error('Invalid ALTER TABLE query');
                 }
@@ -2073,7 +2013,7 @@ class Environment
         }
     }
 
-    private function parseDefault($default, $type, $null, $restraint)
+    public function parseDefault($default, $type, $null, $restraint)
     {
         if (strcasecmp($default, 'NULL')) {
             if (preg_match("/\A'(.*)'\Z/is", $default, $matches)) {
