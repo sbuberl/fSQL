@@ -33,8 +33,8 @@ class AlterTableTest extends BaseTest
 
     private static $entries = [
         [1, 'George', 'Washington', 'gwashington@usa.gov', '3200 Mt Vernon Hwy', 'Mount Vernon', 'VA', 22121],
-        [2, 'John', 'Adams', 'jadams@usa.gov', '1250 Hancock St', 'Quincy', 'MA', '02169'],
-        [3, 'Thomas', 'Jefferson', 'tjefferson@usa.gov', '931 Thomas Jefferson Pkwy',  'Charlottesville', 'VA', '22902'],
+        [2, 'John', 'Adams', 'jadams@usa.gov', '1250 Hancock St', 'Quincy', 'MA', 21069],
+        [3, 'Thomas', 'Jefferson', 'tjefferson@usa.gov', '931 Thomas Jefferson Pkwy',  'Charlottesville', 'VA', 22902],
         [4, 'James', 'Madison', 'jmadison@usa.gov', '11350 Constitution Hwy',  'Orange', 'VA', 22960],
         [5, 'James', 'Monroe', 'jmonroe@usa.gov', '2050 James Monroe Parkway', 'Charlottesville', 'VA', 22902],
     ];
@@ -134,6 +134,26 @@ class AlterTableTest extends BaseTest
         $result = $this->fsql->query("ALTER TABLE students ALTER COLUMN garbage DROP DEFAULT");
         $this->assertFalse($result);
         $this->assertEquals("Column named garbage does not exist in table students", trim($this->fsql->error()));
+    }
+
+    public function testAlterTableAlterColumnSetDataType()
+    {
+        $table = CachedTable::create($this->fsql->current_schema(), 'students', self::$columnsWithoutKey);
+        $cursor = $table->getWriteCursor();
+        foreach (self::$entries as $entry) {
+            $cursor->appendRow($entry);
+        }
+        $table->commit();
+
+        $result = $this->fsql->query("ALTER TABLE students ALTER COLUMN zip SET DATA TYPE TEXT");
+        $this->assertTrue($result);
+        $columns = $table->getColumns();
+        $this->assertEquals($columns['zip']['type'], 's');
+        $entries = $table->getEntries();
+        foreach($entries as $entry) {
+            var_dump($entry);
+            $this->assertTrue(is_string($entry[7]));
+        }
     }
 
     public function testAlterTableAlterColumnSetDefault()

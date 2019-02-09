@@ -1970,7 +1970,11 @@ class Environment
                     }
 
                     $columnDef = $columns[$columnName];
-                    if (preg_match("/(?:SET\s+DEFAULT\s+((?:[\+\-]\s*)?\d+(?:\.\d+)?|NULL|'.*?(?<!\\\\)')|DROP\s+DEFAULT)/is", $the_rest, $defaults)) {
+                    if (preg_match("/SET\s+DATA\s+TYPE\s+({$typeRegex})(\s+UNSIGNED)?/is", $the_rest, $types)) {
+                        $type = Types::getTypeCode($types[1]);
+                        $statement = new Statements\SetDataType($this, $tableNamePieces, $columnName, $type, $this->functions);
+                        return $statement->execute();
+                    } else if (preg_match("/(?:SET\s+DEFAULT\s+((?:[\+\-]\s*)?\d+(?:\.\d+)?|NULL|'.*?(?<!\\\\)')|DROP\s+DEFAULT)/is", $the_rest, $defaults)) {
                         if(!empty($defaults[1])) {
                             $statement = new Statements\SetDefault($this, $tableNamePieces, $columnName, $defaults[1]);
                         } else {
