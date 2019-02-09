@@ -1,10 +1,10 @@
 <?php
 
-namespace FSQL\Statements;
+namespace FSQL\Statements\AlterTableActions;
 
 use FSQL\Environment;
 
-class AlterIdentity extends Statement
+class AlterIdentity extends BaseAction
 {
     private $tableName;
     private $columnName;

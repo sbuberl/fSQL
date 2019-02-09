@@ -1,14 +1,13 @@
 <?php
 
-namespace FSQL\Statements;
+namespace FSQL\Statements\AlterTableActions;
 
 use FSQL\Environment;
 
-class DropDefault extends Statement
+class DropIdentity extends BaseAction
 {
     private $tableName;
     private $columnName;
-    private $default;
 
     public function  __construct(Environment $environment, array $tableName, $columnName)
     {
@@ -26,10 +25,11 @@ class DropDefault extends Statement
 
         $columns = $table->getColumns();
         $column = $columns[$this->columnName];
-        $default = $this->environment->get_type_default_value($column['type'], $column['null']);
+        if (!$column['auto']) {
+            return $this->environment->set_error("Column {$this->columnName} is not an identity column");
+        }
 
-        $columns[$this->columnName]['default'] = $default;
-        $table->setColumns($columns);
+        $table->dropIdentity();
         return true;
     }
 }

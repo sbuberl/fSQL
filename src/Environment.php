@@ -1,9 +1,6 @@
 <?php
 
 namespace FSQL;
-error_reporting(E_ALL);
-ini_set('display_errors', TRUE);
-ini_set('display_startup_errors', TRUE);
 
 define('FSQL_TRUE', 3);
 define('FSQL_FALSE', 0);
@@ -1886,9 +1883,9 @@ class Environment
             $columns = $tableObj->getColumns();
             $typeRegex = $this->getTypeParseRegex();
 
-
             preg_match_all("/(?:ADD|ALTER|DROP|RENAME).*?(?:,|\Z)/is", trim($changes), $specs);
             $specCount = count($specs[0]);
+            $actions = [];
             for ($i = 0; $i < $specCount; ++$i) {
                 if (preg_match("/\AADD\s+(?:COLUMN\s+)?(?:`?([^\W\d]\w*?)`?(?:\s+({$typeRegex})(?:\((.+?)\))?)\s*(UNSIGNED\s+)?(?:GENERATED\s+(BY\s+DEFAULT|ALWAYS)\s+AS\s+IDENTITY(?:\s*\((.*?)\))?)?(.*?)?(?:,|\)|$))/is", $specs[0][$i], $matches)) {
                     $name = $matches[1];
@@ -1958,11 +1955,9 @@ class Environment
                         $key = 'n';
                     }
 
-                    $statement = new Statements\AddColumn($this, $tableNamePieces, $name, $type, $auto, $default, $key, $null, $restraint);
-                    return $statement->execute();
+                    $actions[] = new Statements\AlterTableActions\AddColumn($this, $tableNamePieces, $name, $type, $auto, $default, $key, $null, $restraint);
                 } elseif (preg_match("/\AADD\s+(?:CONSTRAINT\s+`?[^\W\d]\w*`?\s+)?PRIMARY\s+KEY\s*\((.+?)\)/is", $specs[0][$i], $matches)) {
-                    $statement = new Statements\AddPrimaryKey($this, $tableNamePieces, $matches[1]);
-                    return $statement->execute();
+                    $actions[] = new Statements\AlterTableActions\AddPrimaryKey($this, $tableNamePieces, $matches[1]);
                 } elseif (preg_match("/\AALTER(?:\s+(?:COLUMN))?\s+`?([^\W\d]\w*)`?\s+(.+?)(?:,|;|\Z)/is", $specs[0][$i], $matches)) {
                     list(, $columnName, $the_rest) = $matches;
                     if (!isset($columns[$columnName])) {
@@ -1972,46 +1967,40 @@ class Environment
                     $columnDef = $columns[$columnName];
                     if (preg_match("/SET\s+DATA\s+TYPE\s+({$typeRegex})(\s+UNSIGNED)?/is", $the_rest, $types)) {
                         $type = Types::getTypeCode($types[1]);
-                        $statement = new Statements\SetDataType($this, $tableNamePieces, $columnName, $type, $this->functions);
-                        return $statement->execute();
+                        $actions[] = new Statements\AlterTableActions\SetDataType($this, $tableNamePieces, $columnName, $type, $this->functions);
                     } else if (preg_match("/(?:SET\s+DEFAULT\s+((?:[\+\-]\s*)?\d+(?:\.\d+)?|NULL|'.*?(?<!\\\\)')|DROP\s+DEFAULT)/is", $the_rest, $defaults)) {
                         if(!empty($defaults[1])) {
-                            $statement = new Statements\SetDefault($this, $tableNamePieces, $columnName, $defaults[1]);
+                            $actions[] = new Statements\AlterTableActions\SetDefault($this, $tableNamePieces, $columnName, $defaults[1]);
                         } else {
-                            $statement = new Statements\DropDefault($this, $tableNamePieces, $columnName);
+                            $actions[] = new Statements\AlterTableActions\DropDefault($this, $tableNamePieces, $columnName);
                         }
-                        return $statement->execute();
                     } elseif (preg_match("/\ADROP\s+IDENTITY/i", $the_rest, $defaults)) {
-                        $statement = new Statements\DropIdentity($this, $tableNamePieces, $columnName);
-                        return $statement->execute();
+                        $actions[] = new Statements\AlterTableActions\DropIdentity($this, $tableNamePieces, $columnName);
                     } else {
                         $parsed = $this->parse_sequence_options($the_rest, true);
                         if ($parsed === false) {
                             return false;
                         } elseif (!empty($parsed)) {
-                            $statement = new Statements\AlterIdentity($this, $tableNamePieces, $columnName, $parsed);
-                            return $statement->execute();
+                            $actions[] = new Statements\AlterTableActions\AlterIdentity($this, $tableNamePieces, $columnName, $parsed);
                         }
                     }
-
-                    return true;
                 } elseif (preg_match("/\ADROP\s+(?:COLUMN\s+)?`?([^\W\d]\w*)`?\s*(?:,|;|\Z)/is", $specs[0][$i], $matches)) {
-                    $statement = new Statements\DropColumn($this, $tableNamePieces, $matches[1]);
-                    return $statement->execute();
+                    $actions[] = new Statements\AlterTableActions\DropColumn($this, $tableNamePieces, $matches[1]);
                 } elseif (preg_match("/\ADROP\s+PRIMARY\s+KEY/is", $specs[0][$i], $matches)) {
-                    $statement = new Statements\DropPrimaryKey($this, $tableNamePieces);
-                    return $statement->execute();
+                    $actions[] = new Statements\AlterTableActions\DropPrimaryKey($this, $tableNamePieces);
                 } elseif (preg_match("/\ARENAME\s+(?:TO\s+)?(`?(?:[^\W\d]\w*`?\.`?){0,2}[^\W\d]\w*`?)/is", $specs[0][$i], $matches)) {
                     $newTableNamePieces = $this->parse_relation_name($matches[1]);
                     if ($newTableNamePieces === false) {
                         return false;
                     }
-                    $statement = new Statements\RenameTable($this, $tableNamePieces, $newTableNamePieces);
-                    return $statement->execute();
+                    $actions[] = new Statements\RenameTable($this, $tableNamePieces, $newTableNamePieces);
                 } else {
                     return $this->set_error('Invalid ALTER TABLE query');
                 }
             }
+
+            $statement = new Statements\AlterTable($this, $tableNamePieces, $actions);
+            return $statement->execute();
         } else {
             return $this->set_error('Invalid ALTER TABLE query');
         }

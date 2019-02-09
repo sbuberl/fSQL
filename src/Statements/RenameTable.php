@@ -3,8 +3,9 @@
 namespace FSQL\Statements;
 
 use FSQL\Environment;
+use FSQL\Statements\AlterTableActions\Action;
 
-class RenameTable extends Statement
+class RenameTable extends Statement implements Action
 {
     private $oldName;
     private $newName;

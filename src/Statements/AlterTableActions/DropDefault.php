@@ -1,21 +1,20 @@
 <?php
 
-namespace FSQL\Statements;
+namespace FSQL\Statements\AlterTableActions;
 
 use FSQL\Environment;
 
-class SetDefault extends Statement
+class DropDefault extends BaseAction
 {
     private $tableName;
     private $columnName;
     private $default;
 
-    public function  __construct(Environment $environment, array $tableName, $columnName, $default)
+    public function  __construct(Environment $environment, array $tableName, $columnName)
     {
         parent:: __construct($environment);
         $this->tableName = $tableName;
         $this->columnName = $columnName;
-        $this->default = $default;
     }
 
     public function execute()
@@ -27,7 +26,7 @@ class SetDefault extends Statement
 
         $columns = $table->getColumns();
         $column = $columns[$this->columnName];
-        $default = $this->environment->parseDefault($this->default, $column['type'], $column['null'], $column['restraint']);
+        $default = $this->environment->get_type_default_value($column['type'], $column['null']);
 
         $columns[$this->columnName]['default'] = $default;
         $table->setColumns($columns);

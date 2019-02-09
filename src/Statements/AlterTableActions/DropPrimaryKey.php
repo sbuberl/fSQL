@@ -1,10 +1,10 @@
 <?php
 
-namespace FSQL\Statements;
+namespace FSQL\Statements\AlterTableActions;
 
 use FSQL\Environment;
 
-class DropPrimaryKey extends Statement
+class DropPrimaryKey extends BaseAction
 {
     private $tableName;
 

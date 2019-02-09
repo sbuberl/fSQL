@@ -1,10 +1,10 @@
 <?php
 
-namespace FSQL\Statements;
+namespace FSQL\Statements\AlterTableActions;
 
 use FSQL\Environment;
 
-class AddColumn extends Statement
+class AddColumn extends BaseAction
 {
     private $tableName;
     private $columnName;

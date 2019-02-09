@@ -1,10 +1,10 @@
 <?php
 
-namespace FSQL\Statements;
+namespace FSQL\Statements\AlterTableActions;
 
 use FSQL\Environment;
 
-class AddPrimaryKey extends Statement
+class DropColumn extends BaseAction
 {
     private $tableName;
     private $columnName;
@@ -22,21 +22,13 @@ class AddPrimaryKey extends Statement
         if ($table === false) {
             return false;
         }
-
         $tableName = $table->name();
         $columns = $table->getColumns();
         if (!isset($columns[$this->columnName])) {
-            return $this->environment->set_error("Column named '{$this->columnName}' does not exist in table '$tableName'");
+            return $this->environment->set_error("Column named {$this->columnName} does not exist in table $tableName");
         }
 
-        foreach ($columns as $name => $column) {
-            if ($column['key'] == 'p') {
-                return $this->environment->set_error('Primary key already exists');
-            }
-        }
-
-        $columns[$this->columnName]['key'] = 'p';
-        $table->setColumns($columns);
+        $table->dropColumn($this->columnName);
         return true;
     }
 }

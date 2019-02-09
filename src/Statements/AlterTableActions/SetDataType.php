@@ -1,11 +1,11 @@
 <?php
 
-namespace FSQL\Statements;
+namespace FSQL\Statements\AlterTableActions;
 
 use FSQL\Environment;
 use FSQL\Functions;
 
-class SetDataType extends Statement
+class SetDataType extends BaseAction
 {
     private $tableName;
     private $columnName;

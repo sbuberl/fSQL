@@ -1,19 +1,21 @@
 <?php
 
-namespace FSQL\Statements;
+namespace FSQL\Statements\AlterTableActions;
 
 use FSQL\Environment;
 
-class DropIdentity extends Statement
+class SetDefault extends BaseAction
 {
     private $tableName;
     private $columnName;
+    private $default;
 
-    public function  __construct(Environment $environment, array $tableName, $columnName)
+    public function  __construct(Environment $environment, array $tableName, $columnName, $default)
     {
         parent:: __construct($environment);
         $this->tableName = $tableName;
         $this->columnName = $columnName;
+        $this->default = $default;
     }
 
     public function execute()
@@ -25,11 +27,10 @@ class DropIdentity extends Statement
 
         $columns = $table->getColumns();
         $column = $columns[$this->columnName];
-        if (!$column['auto']) {
-            return $this->environment->set_error("Column {$this->columnName} is not an identity column");
-        }
+        $default = $this->environment->parseDefault($this->default, $column['type'], $column['null'], $column['restraint']);
 
-        $table->dropIdentity();
+        $columns[$this->columnName]['default'] = $default;
+        $table->setColumns($columns);
         return true;
     }
 }
