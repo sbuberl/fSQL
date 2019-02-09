@@ -151,7 +151,6 @@ class AlterTableTest extends BaseTest
         $this->assertEquals($columns['zip']['type'], 's');
         $entries = $table->getEntries();
         foreach($entries as $entry) {
-            var_dump($entry);
             $this->assertTrue(is_string($entry[7]));
         }
     }
@@ -273,5 +272,17 @@ class AlterTableTest extends BaseTest
         $schema = $db->getSchema('public');
         $people = $schema->getTable('people');
         $this->assertTrue($people->exists());
+    }
+
+    public function testAlterTableMultipleActions()
+    {
+        $table = CachedTable::create($this->fsql->current_schema(), 'students', self::$columnsWithKey);
+        $result = $this->fsql->query('ALTER TABLE students ALTER COLUMN zip SET DEFAULT 12345, ALTER COLUMN id SET GENERATED ALWAYS RESTART WITH 5');
+        $this->assertTrue($result);
+        $columns = $table->getColumns();
+        $this->assertEquals($columns['zip']['default'], 12345);
+        $identity = $table->getIdentity();
+        $this->assertEquals($identity->getAlways(), true);
+        $this->assertEquals($identity->current, 5);
     }
 }
