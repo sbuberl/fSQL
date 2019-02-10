@@ -1868,9 +1868,8 @@ class Environment
 
     private function query_alter_table($definition, $ifExists)
     {
-        if (preg_match("/\A(`?(?:[^\W\d]\w*`?\.`?){0,2}[^\W\d]\w*`?)\s+(.*)/is", $definition, $matches)) {
-            list(, $fullTableName, $changes) = $matches;
-
+        if (preg_match("/\A(`?(?:[^\W\d]\w*`?\.`?){0,2}[^\W\d]\w*`?)\s+(.*)/is", $definition, $matches, PREG_OFFSET_CAPTURE)) {
+            $fullTableName = $matches[1][0];
             $tableNamePieces = $this->parse_relation_name($fullTableName);
             $tableObj = $this->find_table($tableNamePieces);
             if ($tableObj === false) {
@@ -1883,11 +1882,14 @@ class Environment
             $columns = $tableObj->getColumns();
             $typeRegex = $this->getTypeParseRegex();
 
-            preg_match_all("/(?:ADD|ALTER|DROP|RENAME).*?(?:,|\Z)/is", trim($changes), $specs);
-            $specCount = count($specs[0]);
+            $updates = $matches[2][0];
+            $currentPos = $matches[2][1];
+            $stop = false;
             $actions = [];
-            for ($i = 0; $i < $specCount; ++$i) {
-                if (preg_match("/\AADD\s+(?:COLUMN\s+)?(?:`?([^\W\d]\w*?)`?(?:\s+({$typeRegex})(?:\((.+?)\))?)\s*(UNSIGNED\s+)?(?:GENERATED\s+(BY\s+DEFAULT|ALWAYS)\s+AS\s+IDENTITY(?:\s*\((.*?)\))?)?(.*?)?(?:,|\)|$))/is", $specs[0][$i], $matches)) {
+            while (!$stop && preg_match("/\s*((?:ADD|ALTER|DROP|RENAME).+?)(\s*,\s*|\Z)/Ais", $definition, $colmatches, 0, $currentPos)) {
+                $stop = empty($colmatches[2]);
+
+                if (preg_match("/ADD\s+(?:COLUMN\s+)?(?:`?([^\W\d]\w*?)`?(?:\s+({$typeRegex})(?:\((.+?)\))?)\s*(UNSIGNED\s+)?(?:GENERATED\s+(BY\s+DEFAULT|ALWAYS)\s+AS\s+IDENTITY(?:\s*\((.*?)\))?)?(.*?)?(?:,|\)|$))/Ais", $definition, $matches, 0, $currentPos)) {
                     $name = $matches[1];
                     $typeName = $matches[2];
                     $options = $matches[7];
@@ -1956,9 +1958,9 @@ class Environment
                     }
 
                     $actions[] = new Statements\AlterTableActions\AddColumn($this, $tableNamePieces, $name, $type, $auto, $default, $key, $null, $restraint);
-                } elseif (preg_match("/\AADD\s+(?:CONSTRAINT\s+`?[^\W\d]\w*`?\s+)?PRIMARY\s+KEY\s*\((.+?)\)/is", $specs[0][$i], $matches)) {
+                } elseif (preg_match("/ADD\s+(?:CONSTRAINT\s+`?[^\W\d]\w*`?\s+)?PRIMARY\s+KEY\s*\((.+?)\)/Ais", $definition, $matches, 0, $currentPos)) {
                     $actions[] = new Statements\AlterTableActions\AddPrimaryKey($this, $tableNamePieces, $matches[1]);
-                } elseif (preg_match("/\AALTER(?:\s+(?:COLUMN))?\s+`?([^\W\d]\w*)`?\s+(.+?)(?:,|;|\Z)/is", $specs[0][$i], $matches)) {
+                } elseif (preg_match("/ALTER(?:\s+(?:COLUMN))?\s+`?([^\W\d]\w*)`?\s+(.+?)(?:,|;|\Z)/Ais", $definition, $matches, 0, $currentPos)) {
                     list(, $columnName, $the_rest) = $matches;
                     if (!isset($columns[$columnName])) {
                         return $this->set_error("Column named $columnName does not exist in table $tableName");
@@ -1974,7 +1976,7 @@ class Environment
                         } else {
                             $actions[] = new Statements\AlterTableActions\DropDefault($this, $tableNamePieces, $columnName);
                         }
-                    } elseif (preg_match("/\ADROP\s+IDENTITY/i", $the_rest, $defaults)) {
+                    } elseif (preg_match("/\ADROP\s+IDENTITY/is", $the_rest, $defaults)) {
                         $actions[] = new Statements\AlterTableActions\DropIdentity($this, $tableNamePieces, $columnName);
                     } else {
                         $parsed = $this->parse_sequence_options($the_rest, true);
@@ -1984,11 +1986,11 @@ class Environment
                             $actions[] = new Statements\AlterTableActions\AlterIdentity($this, $tableNamePieces, $columnName, $parsed);
                         }
                     }
-                } elseif (preg_match("/\ADROP\s+(?:COLUMN\s+)?`?([^\W\d]\w*)`?\s*(?:,|;|\Z)/is", $specs[0][$i], $matches)) {
+                } elseif (preg_match("/DROP\s+(?:COLUMN\s+)?`?([^\W\d]\w*)`?\s*(?:,|;|\Z)/Ais", $definition, $matches, 0, $currentPos)) {
                     $actions[] = new Statements\AlterTableActions\DropColumn($this, $tableNamePieces, $matches[1]);
-                } elseif (preg_match("/\ADROP\s+PRIMARY\s+KEY/is", $specs[0][$i], $matches)) {
+                } elseif (preg_match("/DROP\s+PRIMARY\s+KEY/Ais", $definition, $matches, 0, $currentPos)) {
                     $actions[] = new Statements\AlterTableActions\DropPrimaryKey($this, $tableNamePieces);
-                } elseif (preg_match("/\ARENAME\s+(?:TO\s+)?(`?(?:[^\W\d]\w*`?\.`?){0,2}[^\W\d]\w*`?)/is", $specs[0][$i], $matches)) {
+                } elseif (preg_match("/RENAME\s+(?:TO\s+)?(`?(?:[^\W\d]\w*`?\.`?){0,2}[^\W\d]\w*`?)/Ais", $definition, $matches, 0, $currentPos)) {
                     $newTableNamePieces = $this->parse_relation_name($matches[1]);
                     if ($newTableNamePieces === false) {
                         return false;
@@ -1997,6 +1999,8 @@ class Environment
                 } else {
                     return $this->set_error('Invalid ALTER TABLE query');
                 }
+
+                $currentPos += strlen($colmatches[0]);
             }
 
             $statement = new Statements\AlterTable($this, $tableNamePieces, $actions);

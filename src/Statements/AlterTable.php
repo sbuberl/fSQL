@@ -21,7 +21,6 @@ class AlterTable extends Statement
         foreach($this->actions as $action) {
             $passed = $action->execute();
             if (!$passed) {
-                var_dump($action);
                 return $passed;
             }
         }
