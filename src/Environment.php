@@ -503,8 +503,9 @@ class Environment
 
     private function query_create_table($definition, $temporary, $ifNotExists)
     {
-        if (preg_match("/\A(`?(?:[^\W\d]\w*`?\.`?){0,2}[^\W\d]\w*`?)(?:\s*\((.+)\)|\s+LIKE\s+(`?(?:[^\W\d]\w*`?\.`?){0,2}[^\W\d]\w*`?)(?:\s+([\w\s}]+))?)\s*[;]?/is", $definition, $matches)) {
-            list(, $full_table_name, $column_list) = $matches;
+        if (preg_match("/\A(`?(?:[^\W\d]\w*`?\.`?){0,2}[^\W\d]\w*`?)(?:\s*\((.+)\)|\s+LIKE\s+(`?(?:[^\W\d]\w*`?\.`?){0,2}[^\W\d]\w*`?)(?:\s+([\w\s}]+))?)\s*[;]?/is", $definition, $matches, PREG_OFFSET_CAPTURE)) {
+            $full_table_name = $matches[1][0];
+            $column_list = $matches[2][0];
 
             $table_name_pieces = $this->parse_relation_name($full_table_name);
             if ($table_name_pieces === false) {
@@ -513,37 +514,36 @@ class Environment
 
             $typeRegex = $this->getTypeParseRegex();
 
+            $currentPos = $matches[2][1];
+
             if (!isset($matches[3])) {
-                preg_match_all("/(?:(?:CONSTRAINT\s+(?:`?[^\W\d]\w*`?\s+)?)?(KEY|INDEX|PRIMARY\s+KEY|UNIQUE)(?:\s+`?([^\W\d]\w*)`?)?\s*\(`?(.+?)`?\))|(?:`?([^\W\d]\w*?)`?(?:\s+({$typeRegex})(?:\((.+?)\))?)\s*(UNSIGNED\s+)?(?:GENERATED\s+(BY\s+DEFAULT|ALWAYS)\s+AS\s+IDENTITY(?:\s*\((.*?)\))?)?(.*?)?(?:,|\)|$))/is", trim($column_list), $Columns);
-
-                if (!$Columns) {
-                    return $this->set_error('Parsing error in CREATE TABLE query');
-                }
-
-                $new_columns = array();
+                $newColumns = [];
                 $hasIdentity = false;
+                $queryLength = strlen($definition);
+                while ($currentPos < $queryLength) {
+                    if (preg_match("/(?:(?:CONSTRAINT\s+(?:`?[^\W\d]\w*`?\s+)?)?(KEY|INDEX|PRIMARY\s+KEY|UNIQUE)(?:\s+`?([^\W\d]\w*)`?)?\s*\(`?(.+?)`?\))(?:\s*,\s*|\)|$)/Ais", $definition, $columns, 0, $currentPos)) {
+                        $currentPos += strlen($columns[0]);
 
-                $numColums = count($Columns[0]);
-                for ($c = 0; $c < $numColums; ++$c) {
-                    if ($Columns[1][$c]) {
-                        if (!$Columns[3][$c]) {
-                            return $this->set_error("Parse Error: Excepted column name in \"{$Columns[1][$c]}\"");
+                        if (!$columns[3]) {
+                            return $this->set_error("Parse Error: Excepted column name in \"{$columns[1]}\"");
                         }
 
-                        $keytype = strtolower($Columns[1][$c]);
-                        if ($keytype === 'index') {
-                            $keytype = 'key';
+                        $keyType = strtolower($columns[1]);
+                        if ($keyType === 'index') {
+                            $keyType = 'key';
                         }
-                        $keycolumns = explode(',', $Columns[3][$c]);
-                        foreach ($keycolumns as $keycolumn) {
-                            $new_columns[trim($keycolumn)]['key'] = $keytype[0];
+                        $keyColumns = explode(',', $columns[3]);
+                        foreach ($keyColumns as $keyColumn) {
+                            $newColumns[trim($keyColumn)]['key'] = $keyType[0];
                         }
-                    } else {
-                        $name = $Columns[4][$c];
-                        $typeName = $Columns[5][$c];
-                        $options = $Columns[10][$c];
+                    } else if (preg_match("/(?:`?([^\W\d]\w*?)`?(?:\s+({$typeRegex})(?:\((.+?)\))?)\s*(UNSIGNED\s+)?(?:GENERATED\s+(BY\s+DEFAULT|ALWAYS)\s+AS\s+IDENTITY(?:\s*\((.*?)\))?)?(.*?)?(?:\s*,\s*|\)|$))/Ais", $definition, $columns, 0, $currentPos)) {
+                        $currentPos += strlen($columns[0]);
 
-                        if (isset($new_columns[$name])) {
+                        $name = $columns[1];
+                        $typeName = $columns[2];
+                        $options = $columns[7];
+
+                        if (isset($newColumns[$name])) {
                             return $this->set_error("Column '{$name}' redefined");
                         }
 
@@ -559,10 +559,10 @@ class Environment
 
                         $auto = 0;
                         $restraint = null;
-                        if (!empty($Columns[8][$c])) {
+                        if (!empty($columns[5])) {
                             $auto = 1;
-                            $always = (int) !strcasecmp($Columns[8][$c], 'ALWAYS');
-                            $parsed = $this->parse_sequence_options($Columns[9][$c]);
+                            $always = (int) !strcasecmp($columns[5], 'ALWAYS');
+                            $parsed = $this->parse_sequence_options($columns[6]);
                             if ($parsed === false) {
                                 return false;
                             }
@@ -587,7 +587,7 @@ class Environment
                         }
 
                         if ($type === Types::ENUM) {
-                            preg_match_all("/'(.*?(?<!\\\\))'/", $Columns[6][$c], $values);
+                            preg_match_all("/'(.*?(?<!\\\\))'/", $columns[3], $values);
                             $restraint = $values[1];
                         }
 
@@ -601,21 +601,24 @@ class Environment
                             $default = $this->get_type_default_value($type, $null);
                         }
 
-                        if (preg_match('/(PRIMARY\s+KEY|UNIQUE(?:\s+KEY)?)/is', $options, $keymatches)) {
-                            $keytype = strtolower($keymatches[1]);
-                            $key = $keytype{0};
+                        if (preg_match('/(PRIMARY\s+KEY|UNIQUE(?:\s+KEY)?)/is', $options, $keyMatches)) {
+                            $keyType = strtolower($keyMatches[1]);
+                            $key = $keyType{0};
                         } else {
                             $key = 'n';
                         }
 
-                        $new_columns[$name] = array('type' => $type, 'auto' => $auto, 'default' => $default, 'key' => $key, 'null' => $null, 'restraint' => $restraint);
+                        $newColumns[$name] = ['type' => $type, 'auto' => $auto, 'default' => $default, 'key' => $key, 'null' => $null, 'restraint' => $restraint];
+                    }
+                    else {
+                        return $this->set_error('Parsing error in CREATE TABLE query');
                     }
                 }
 
-                return new Statements\CreateTable($this, $table_name_pieces, $ifNotExists, $temporary, $new_columns);
+                return new Statements\CreateTable($this, $table_name_pieces, $ifNotExists, $temporary, $newColumns);
             } else {
-                $likeClause = isset($matches[4]) ? $matches[4] : '';
-                $likeTablePieces = $this->parse_relation_name($matches[3]);
+                $likeClause = isset($matches[4][0]) ? $matches[4][0] : '';
+                $likeTablePieces = $this->parse_relation_name($matches[3][0]);
                 if ($likeTablePieces === false) {
                     return false;
                 }
@@ -1882,7 +1885,6 @@ class Environment
             $columns = $tableObj->getColumns();
             $typeRegex = $this->getTypeParseRegex();
 
-            $updates = $matches[2][0];
             $currentPos = $matches[2][1];
             $stop = false;
             $actions = [];
