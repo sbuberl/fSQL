@@ -587,8 +587,8 @@ class Environment
                         }
 
                         if ($type === Types::ENUM) {
-                            preg_match_all("/'(.*?(?<!\\\\))'/", $columns[3], $values);
-                            $restraint = $values[1];
+                            $enumList = substr($columns[3], 1, -1);
+                            $restraint = preg_split("/'\s*,\s*'/", $enumList);
                         }
 
                         if (preg_match("/DEFAULT\s+((?:[\+\-]\s*)?\d+(?:\.\d+)?|NULL|'.*?(?<!\\\\)')/is", $options, $matches)) {
@@ -1938,8 +1938,8 @@ class Environment
                     }
 
                     if ($type === Types::ENUM) {
-                        preg_match_all("/'(.*?(?<!\\\\))'/", $Columns[6][$c], $values);
-                        $restraint = $values[1];
+                        $enumList = substr($columns[3], 1, -1);
+                        $restraint = preg_split("/'\s*,\s*'/", $enumList);
                     }
 
                     if (preg_match("/DEFAULT\s+((?:[\+\-]\s*)?\d+(?:\.\d+)?|NULL|'.*?(?<!\\\\)')/is", $options, $matches)) {
