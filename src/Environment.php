@@ -1083,7 +1083,7 @@ class Environment
             $hasNotMatched = false;
             $matches_clause = trim($matches_clause);
             while (!empty($matches_clause)) {
-                if (preg_match("/\AWHEN\s+MATCHED\s+(?:AND\s+(.+?)\s+)?THEN\s+UPDATE\s+SET\s+(.+?)(\s+when\s+.+|\s*\Z)/is", $matches_clause, $clause)) {
+                if (preg_match("/\A\s*WHEN\s+MATCHED\s+(?:AND\s+(.+?)\s+)?THEN\s+UPDATE\s+SET\s+(.+?)(\s+when\s+.+|\s*\Z)/is", $matches_clause, $clause)) {
                     if ($hasMatched) {
                         return $this->set_error('Can only have one WHEN MATCHED clause');
                     }
@@ -1112,14 +1112,14 @@ class Environment
                         $updateCode = "if($updateAndExpr) { $updateCode } else { return false; }";
                     }
                     $hasMatched = true;
-                } elseif (preg_match("/\AWHEN\s+NOT\s+MATCHED\s+(?:AND\s+(.+?)\s+)?THEN\s+INSERT\s*(?:\((.+?)\))?\s*VALUES\s*\((.+?)\)(\s+when\s+.+|\s*\Z)/is", $matches_clause, $clause)) {
+                } elseif (preg_match("/\A\s*WHEN\s+NOT\s+MATCHED\s+(?:AND\s+(.+?)\s+)?THEN\s+INSERT\s*(?:\((.+?)\))?\s*VALUES\s*\((.+?)\)(\s+when\s+.+|\s*\Z)/is", $matches_clause, $clause)) {
                     if ($hasNotMatched) {
                         return $this->set_error('Can only have one WHEN NOT MATCHED clause');
                     }
                     list(, $andClause, $columnList, $values, $matches_clause) = $clause;
                     $columnList = trim($columnList);
                     if (!empty($columnList)) {
-                        $columns = preg_split("/\s*,\s*/", columnList);
+                        $columns = preg_split("/\s*,\s*/", $columnList);
                     } else {
                         $columns = $dest_table_column_names;
                     }
@@ -1162,7 +1162,7 @@ class Environment
 
             $affected = 0;
             $srcCursor = $src_table->getWriteCursor();
-            $destCursor = $dest->getWriteCursor();
+            $destCursor = $dest_table->getWriteCursor();
             foreach ($srcCursor as $srcRowId => $entry) {
                 $destRowId = $joinMatches[$srcRowId];
                 if ($destRowId === false) {
@@ -1173,11 +1173,9 @@ class Environment
                     }
                 } else {
                     $destCursor->seek($destRowId);
-                    $destRow = $destCursor->getRow();
-                    $entry = array_merge($entry, $destRow);
                     $updates = eval($updateCode);
                     if ($updates !== false) {
-                        $destCursor->updateRow($destRowId, $updates);
+                        $destCursor->updateRow($updates);
                         ++$affected;
                     }
                 }
