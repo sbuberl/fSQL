@@ -1685,6 +1685,10 @@ class Environment
     private function build_where($statement, $join_info, $where_type)
     {
         if ($statement) {
+            if (preg_match('/\A\s*\((.+?)\)/is', $statement, $matches)) {
+                $statement =  $matches[1];
+            }
+
             preg_match_all("/(\A\s*|\s+(?:AND|OR)\s+)(NOT\s+)?(\S+?)(\s*(?:!=|<>|>=|<=>?|>|<|=)\s*|\s+(?:IS(?:\s+NOT)?|(?:NOT\s+)?IN|(?:NOT\s+)?R?LIKE|(?:NOT\s+)?REGEXP)\s+)(\((.*?)\)|'.*?'|\S+)/is", $statement, $WHERE, PREG_SET_ORDER);
 
             if (empty($WHERE)) {
