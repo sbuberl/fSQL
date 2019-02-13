@@ -1083,26 +1083,31 @@ class Environment
             $hasNotMatched = false;
             $matches_clause = trim($matches_clause);
             while (!empty($matches_clause)) {
-                if (preg_match("/\A\s*WHEN\s+MATCHED\s+(?:AND\s+(.+?)\s+)?THEN\s+UPDATE\s+SET\s+(.+?)(\s+when\s+.+|\s*\Z)/is", $matches_clause, $clause)) {
+                if (preg_match("/\A\s*WHEN\s+MATCHED\s+(?:AND\s+(.+?)\s+)?THEN\s+(DELETE|UPDATE\s+SET\s+(.+?))(\s+when\s+.+|\s*;?\s*\Z)/is", $matches_clause, $clause)) {
                     if ($hasMatched) {
                         return $this->set_error('Can only have one WHEN MATCHED clause');
                     }
-                    list(, $andClause, $setList, $matches_clause) = $clause;
-                    $sets = $this->parseSetClause($setList, $dest_table_columns, $dest_alias);
-                    if ($sets === false) {
-                        return false;
-                    }
-
+                    list(, $andClause, $operation, $setList, $matches_clause) = $clause;
+                    $isDelete = !strncasecmp($operation, "DELETE", 6);
                     $updateCode = '';
-                    foreach ($sets as $set) {
-                        $valueExpr = $this->build_expression($set[1], $joined_info, self::$WHERE_NORMAL);
-                        if ($valueExpr === false) {
+                    if(!$isDelete) {
+                        $sets = $this->parseSetClause($setList, $dest_table_columns, $dest_alias);
+                        if ($sets === false) {
                             return false;
                         }
-                        $colIndex = $dest_column_indices[$set[0]];
-                        $updateCode .= $colIndex." => $valueExpr, ";
+
+                        foreach ($sets as $set) {
+                            $valueExpr = $this->build_expression($set[1], $joined_info, self::$WHERE_NORMAL);
+                            if ($valueExpr === false) {
+                                return false;
+                            }
+                            $colIndex = $dest_column_indices[$set[0]];
+                            $updateCode .= $colIndex." => $valueExpr, ";
+                        }
+                        $updateCode = 'return ['.substr($updateCode, 0, -2).'];';
+                    } else {
+                        $updateCode = 'return $destCursor->deleteRow();';
                     }
-                    $updateCode = 'return array('.substr($updateCode, 0, -2).');';
 
                     if (!empty($andClause)) {
                         $updateAndExpr = $this->build_where($andClause, $joined_info, self::$WHERE_NORMAL);
@@ -1172,10 +1177,15 @@ class Environment
                         ++$affected;
                     }
                 } else if($destRowId !== false && $hasMatched) {
-                    $destCursor->seek($destRowId);
-                    $updates = eval($updateCode);
-                    if ($updates !== false) {
-                        $destCursor->updateRow($updates);
+                    $found = $destCursor->findKey($destRowId);
+                    if(!$isDelete) {
+                        $updates = eval($updateCode);
+                        if ($updates !== false) {
+                            $destCursor->updateRow($updates);
+                            ++$affected;
+                        }
+                    } else {
+                        $updates = eval($updateCode);
                         ++$affected;
                     }
                 }

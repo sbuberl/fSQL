@@ -109,6 +109,39 @@ class MergeTest extends BaseTest
         $this->assertEquals($expected, $results);
     }
 
+    public function testMergeDeleteOnly()
+    {
+        $products = CachedTable::create($this->fsql->current_schema(), 'products', self::$columns);
+        $cursor = $products->getWriteCursor();
+        foreach (self::$productEntries as $entry) {
+            $cursor->appendRow($entry);
+        }
+        $products->commit();
+
+        $updated = CachedTable::create($this->fsql->current_schema(), 'updated', self::$columns);
+        $cursor = $updated->getWriteCursor();
+        foreach (self::$updatedEntries as $entry) {
+            $cursor->appendRow($entry);
+        }
+        $updated->commit();
+
+        $result = $this->fsql->query('MERGE INTO products AS TARGET
+            USING updated AS SOURCE
+            ON (TARGET.id = SOURCE.id)
+            WHEN MATCHED THEN DELETE');
+        $this->assertTrue($result !== false);
+
+        $result = $this->fsql->query('SELECT * FROM products');
+        $this->assertTrue($result !== false);
+
+        $expected = [
+            [103, 'BISCUIT', 20.00],
+        ];
+
+        $results = $this->fsql->fetch_all($result, ResultSet::FETCH_NUM);
+        $this->assertEquals($expected, $results);
+    }
+
     public function testMergeUpdateAndInsert()
     {
         $products = CachedTable::create($this->fsql->current_schema(), 'products', self::$columns);
