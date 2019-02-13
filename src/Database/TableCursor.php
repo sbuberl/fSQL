@@ -59,6 +59,25 @@ class TableCursor implements \SeekableIterator, \Countable
         }
     }
 
+    public function findKey($findKey)
+    {
+        reset($this->entries);
+        $key = key($this->entries);
+        if($key !== null  && $key === $findKey) {
+            $this->currentRowId = $key;
+            return true;
+        }
+
+        while( next($this->entries) !== false ) {
+            $key = key($this->entries);
+            if($key !== null  && $key === $findKey) {
+                $this->currentRowId = key($this->entries);
+                return true;
+            }
+        }
+        return false;
+    }
+
     private function updateRowId($result)
     {
         $this->currentRowId = $result !== false ? key($this->entries) : false;
