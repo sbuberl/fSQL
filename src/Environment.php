@@ -1157,7 +1157,7 @@ class Environment
                 $matches_clause = trim($matches_clause);
             }
 
-            $joinMatches = array();
+            $joinMatches = [];
             Utilities::leftJoin($src_table->getEntries(), $dest_table->getEntries(), $join_function, $src_columns_size, $joinMatches);
 
             $affected = 0;
@@ -1165,13 +1165,13 @@ class Environment
             $destCursor = $dest_table->getWriteCursor();
             foreach ($srcCursor as $srcRowId => $entry) {
                 $destRowId = $joinMatches[$srcRowId];
-                if ($destRowId === false) {
+                if ($destRowId === false && $hasNotMatched) {
                     $newRow = eval($insertCode);
                     if ($newRow !== false) {
                         $destCursor->appendRow($newRow);
                         ++$affected;
                     }
-                } else {
+                } else if($destRowId !== false && $hasMatched) {
                     $destCursor->seek($destRowId);
                     $updates = eval($updateCode);
                     if ($updates !== false) {
