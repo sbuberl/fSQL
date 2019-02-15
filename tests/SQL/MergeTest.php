@@ -287,4 +287,44 @@ class MergeTest extends BaseTest
         $results = $this->fsql->fetch_all($result, ResultSet::FETCH_NUM);
         $this->assertEquals($expected, $results);
     }
+
+    public function testMergeUpdateAndInsertAndDelete()
+    {
+        $products = CachedTable::create($this->fsql->current_schema(), 'products', self::$columns);
+        $cursor = $products->getWriteCursor();
+        foreach (self::$productEntries as $entry) {
+            $cursor->appendRow($entry);
+        }
+        $products->commit();
+
+        $updated = CachedTable::create($this->fsql->current_schema(), 'updated', self::$columns);
+        $cursor = $updated->getWriteCursor();
+        foreach (self::$updatedEntries as $entry) {
+            $cursor->appendRow($entry);
+        }
+        $updated->commit();
+
+        $result = $this->fsql->query('MERGE INTO products AS TARGET
+            USING updated AS SOURCE
+            ON (TARGET.id = SOURCE.id)
+            WHEN MATCHED AND SOURCE.id != 102 THEN
+                UPDATE SET TARGET.name = SOURCE.name, TARGET.price = SOURCE.price
+            WHEN MATCHED AND SOURCE.id = 102 THEN
+                DELETE
+            WHEN NOT MATCHED THEN
+                INSERT (id,name,price) VALUES (SOURCE.id,SOURCE.name,SOURCE.price);');
+        $this->assertTrue($result !== false);
+
+        $result = $this->fsql->query('SELECT * FROM products');
+        $this->assertTrue($result !== false);
+
+        $expected = [
+            [101, 'TEA', 10.00],
+            [103, 'BISCUIT', 20.00],
+            [104, 'CHIPS', 22.00],
+        ];
+
+        $results = $this->fsql->fetch_all($result, ResultSet::FETCH_NUM);
+        $this->assertEquals($expected, $results);
+    }
 }
