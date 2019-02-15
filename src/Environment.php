@@ -1082,11 +1082,10 @@ class Environment
             $hasMatched = false;
             $hasNotMatched = false;
             $matches_clause = trim($matches_clause);
+            $matchedClauses = [];
+            $unmatchedClauses = [];
             while (!empty($matches_clause)) {
                 if (preg_match("/\A\s*WHEN\s+MATCHED\s+(?:AND\s+(.+?)\s+)?THEN\s+(DELETE|UPDATE\s+SET\s+(.+?))(\s+when\s+.+|\s*;?\s*\Z)/is", $matches_clause, $clause)) {
-                    if ($hasMatched) {
-                        return $this->set_error('Can only have one WHEN MATCHED clause');
-                    }
                     list(, $andClause, $operation, $setList, $matches_clause) = $clause;
                     $isDelete = !strncasecmp($operation, "DELETE", 6);
                     $updateCode = '';
@@ -1116,11 +1115,9 @@ class Environment
                         }
                         $updateCode = "if($updateAndExpr) { $updateCode } else { return false; }";
                     }
+                    $matchedClauses[] = [$updateCode, $isDelete];
                     $hasMatched = true;
                 } elseif (preg_match("/\A\s*WHEN\s+NOT\s+MATCHED\s+(?:AND\s+(.+?)\s+)?THEN\s+INSERT\s*(?:\((.+?)\))?\s*VALUES\s*\((.+?)\)(\s+when\s+.+|\s*\Z)/is", $matches_clause, $clause)) {
-                    if ($hasNotMatched) {
-                        return $this->set_error('Can only have one WHEN NOT MATCHED clause');
-                    }
                     list(, $andClause, $columnList, $values, $matches_clause) = $clause;
                     $columnList = trim($columnList);
                     if (!empty($columnList)) {
@@ -1154,6 +1151,7 @@ class Environment
                         $insertCode = "if($insertAndExpr) { $insertCode } else { return false; }";
                     }
 
+                    $unmatchedClauses[] = $insertCode;
                     $hasNotMatched = true;
                 } else {
                     return $this->set_error('Unknown MERGE WHEN clause');
@@ -1171,22 +1169,27 @@ class Environment
             foreach ($srcCursor as $srcRowId => $entry) {
                 $destRowId = $joinMatches[$srcRowId];
                 if ($destRowId === false && $hasNotMatched) {
-                    $newRow = eval($insertCode);
-                    if ($newRow !== false) {
-                        $destCursor->appendRow($newRow);
-                        ++$affected;
+                    foreach($unmatchedClauses as $unmatchedCode) {
+                        $newRow = eval($unmatchedCode);
+                        if ($newRow !== false) {
+                            $destCursor->appendRow($newRow);
+                            ++$affected;
+                        }
                     }
                 } else if($destRowId !== false && $hasMatched) {
                     $found = $destCursor->findKey($destRowId);
-                    if(!$isDelete) {
-                        $updates = eval($updateCode);
-                        if ($updates !== false) {
-                            $destCursor->updateRow($updates);
+                    foreach($matchedClauses as $matched) {
+                        list($updateCode, $isDelete) = $matched;
+                        if(!$isDelete) {
+                            $updates = eval($updateCode);
+                            if ($updates !== false) {
+                                $destCursor->updateRow($updates);
+                                ++$affected;
+                            }
+                        } else {
+                            $updates = eval($updateCode);
                             ++$affected;
                         }
-                    } else {
-                        $updates = eval($updateCode);
-                        ++$affected;
                     }
                 }
             }
