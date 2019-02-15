@@ -1079,8 +1079,6 @@ class Environment
 
             $joined_info['offsets'][$dest_alias] = $new_offset;
 
-            $hasMatched = false;
-            $hasNotMatched = false;
             $matches_clause = trim($matches_clause);
             $matchedClauses = [];
             $unmatchedClauses = [];
@@ -1116,7 +1114,6 @@ class Environment
                         $updateCode = "if($updateAndExpr) { $updateCode } else { return false; }";
                     }
                     $matchedClauses[] = [$updateCode, $isDelete];
-                    $hasMatched = true;
                 } elseif (preg_match("/\A\s*WHEN\s+NOT\s+MATCHED\s+(?:AND\s+(.+?)\s+)?THEN\s+INSERT\s*(?:\((.+?)\))?\s*VALUES\s*\((.+?)\)(\s+when\s+.+|\s*\Z)/is", $matches_clause, $clause)) {
                     list(, $andClause, $columnList, $values, $matches_clause) = $clause;
                     $columnList = trim($columnList);
@@ -1152,7 +1149,6 @@ class Environment
                     }
 
                     $unmatchedClauses[] = $insertCode;
-                    $hasNotMatched = true;
                 } else {
                     return $this->set_error('Unknown MERGE WHEN clause');
                 }
@@ -1160,49 +1156,8 @@ class Environment
                 $matches_clause = trim($matches_clause);
             }
 
-            $joinMatches = [];
-            Utilities::leftJoin($src_table->getEntries(), $dest_table->getEntries(), $join_function, $src_columns_size, $joinMatches);
-
-            $affected = 0;
-            $srcCursor = $src_table->getWriteCursor();
-            $destCursor = $dest_table->getWriteCursor();
-            foreach ($srcCursor as $srcRowId => $entry) {
-                $destRowId = $joinMatches[$srcRowId];
-                if ($destRowId === false && $hasNotMatched) {
-                    foreach($unmatchedClauses as $unmatchedCode) {
-                        $newRow = eval($unmatchedCode);
-                        if ($newRow !== false) {
-                            $destCursor->appendRow($newRow);
-                            ++$affected;
-                        }
-                    }
-                } else if($destRowId !== false && $hasMatched) {
-                    $found = $destCursor->findKey($destRowId);
-                    foreach($matchedClauses as $matched) {
-                        list($updateCode, $isDelete) = $matched;
-                        if(!$isDelete) {
-                            $updates = eval($updateCode);
-                            if ($updates !== false) {
-                                $destCursor->updateRow($updates);
-                                ++$affected;
-                            }
-                        } else {
-                            $updates = eval($updateCode);
-                            ++$affected;
-                        }
-                    }
-                }
-            }
-
-            if ($this->auto) {
-                $dest_table->commit();
-            } elseif (!in_array($dest_table, $this->updatedTables)) {
-                $this->updatedTables[] = $dest_table;
-            }
-
-            $this->affected = $affected;
-
-            return true;
+            $statement = new Statements\Merge($this, $dest_table_name_pieces, $src_table_name_pieces, $matchedClauses, $unmatchedClauses, $join_function);
+            return $statement->execute();
         } else {
             return $this->set_error('Invalid MERGE query');
         }
