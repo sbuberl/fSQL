@@ -202,11 +202,11 @@ EOT;
                         }
                     }
 
-                    continue;
+                    continue 2;
                 } elseif (!strcasecmp($select_value, 'NULL')) {
                     $select_line .= 'NULL, ';
                     $selected_columns[] = $select_alias;
-                    continue;
+                    continue 2;
                 } else {
                     $index = $this->environment->find_column($column, $table_name, $this->joinedInfo, 'SELECT clause');
                     if ($index === false) {
@@ -261,7 +261,7 @@ EOT;
                     if (!strcasecmp($select_value, 'NULL')) {
                         $select_line .= 'NULL, ';
                         $selected_columns[] = $select_alias;
-                        continue;
+                        continue 2;
                     } else {
                         $index = $this->environment->find_column($column, $table_name, $this->joinedInfo, 'SELECT clause');
                         if ($index === false) {
