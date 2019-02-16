@@ -2029,13 +2029,8 @@ class Environment
                 list($old, $new) = preg_split("/\s+TO\s+/i", trim($table));
 
                 if (preg_match("/(`?(?:[^\W\d]\w*`?\.`?){0,2}[^\W\d]\w*`?)/is", $old, $table_parts)) {
-                    $old_table_pieces = $this->parse_relation_name($table_parts[1]);
-                    if ($old_table_pieces === false) {
-                        return false;
-                    }
-
-                    $old_schema = $this->find_schema($old_table_pieces[0], $old_table_pieces[1]);
-                    if ($old_schema === false) {
+                    $oldTablePieces = $this->parse_relation_name($table_parts[1]);
+                    if ($oldTablePieces === false) {
                         return false;
                     }
                 } else {
@@ -2043,36 +2038,20 @@ class Environment
                 }
 
                 if (preg_match("/(`?(?:[^\W\d]\w*`?\.`?){0,2}[^\W\d]\w*`?)/is", $new, $table_parts)) {
-                    $new_table_pieces = $this->parse_relation_name($table_parts[1]);
-                    if ($new_table_pieces === false) {
-                        return false;
-                    }
-
-                    $new_schema = $this->find_schema($new_table_pieces[0], $new_table_pieces[1]);
-                    if ($new_schema === false) {
+                    $newTablePieces = $this->parse_relation_name($table_parts[1]);
+                    if ($newTablePieces === false) {
                         return false;
                     }
                 } else {
                     return $this->set_error('Parse error in table listing');
                 }
 
-                $old_table_name = $old_table_pieces[2];
-                $old_table = $old_schema->getTable($old_table_name);
-                if ($old_table->exists()) {
+                $statement = new Statements\RenameTable($this, $oldTablePieces, $newTablePieces);
+                $result = $statement->execute();
+                if(!$result) {
                     return false;
-                } elseif ($old_table->isReadLocked()) {
-                    return $this->error_table_read_lock($old_table_pieces);
                 }
-
-                $new_table_name = $new_table_pieces[2];
-                $new_table = $new_schema->getTable($new_table_name);
-                if ($new_table->exists()) {
-                    return $this->set_error("Destination table {$new_table->fullName()} already exists");
-                }
-
-                return $old_schema->renameTable($old_table_name, $new_table_name, $new_schema);
             }
-
             return true;
         } else {
             return $this->set_error('Invalid RENAME query');
