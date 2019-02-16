@@ -6,22 +6,22 @@ use FSQL\Database\TableCursor;
 
 class TableCursorTest extends BaseTest
 {
-    private static $entries = array(
-        array(1, 'bill', 'smith', 'chicago'),
-        array(2, 'jon', 'doe', 'baltimore'),
-        array(3, 'mary', 'shelley', 'seattle'),
-        array(4, 'stephen', 'king', 'derry'),
-        array(5, 'bart', 'simpson', 'springfield'),
-        array(6, 'jane', 'doe', 'seattle'),
-        array(7, 'bram', 'stoker', 'new york'),
-        array(8, 'douglas', 'adams', 'london'),
-        array(9, 'bill', 'johnson', 'derry'),
-        array(10, 'jon', 'doe', 'new york'),
-    );
+    private static $entries = [
+        [1, 'bill', 'smith', 'chicago'],
+        [2, 'jon', 'doe', 'baltimore'],
+        [3, 'mary', 'shelley', 'seattle'],
+        [4, 'stephen', 'king', 'derry'],
+        [5, 'bart', 'simpson', 'springfield'],
+        [6, 'jane', 'doe', 'seattle'],
+        [7, 'bram', 'stoker', 'new york'],
+        [8, 'douglas', 'adams', 'london'],
+        [9, 'bill', 'johnson', 'derry'],
+        [10, 'jon', 'doe', 'new york'],
+    ];
 
     public function testConstructorEmpty()
     {
-        $empty = array();
+        $empty = [];
         $tableCursor = new TableCursor($empty);
         $this->assertFalse($tableCursor->valid());
         $this->assertFalse($tableCursor->key());
@@ -111,5 +111,18 @@ class TableCursorTest extends BaseTest
 
         $this->assertEquals(8, $tableCursor->key());
         $this->assertEquals(self::$entries[8], $tableCursor->current());
+    }
+
+    public function testFindKey()
+    {
+        $tableCursor = new TableCursor(self::$entries);
+
+        $this->assertEquals(0, $tableCursor->key());
+        $this->assertEquals(self::$entries[0], $tableCursor->current());
+
+        $tableCursor->seek(5);
+
+        $this->assertEquals(5, $tableCursor->key());
+        $this->assertEquals(self::$entries[5], $tableCursor->current());
     }
 }
