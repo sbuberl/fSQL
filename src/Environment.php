@@ -2130,21 +2130,10 @@ class Environment
     private function query_truncate($query)
     {
         if (preg_match("/\ATRUNCATE\s+TABLE\s+(`?(?:[^\W\d]\w*`?\.`?){0,2}[^\W\d]\w*`?)(?:\s+(CONTINUE|RESTART)\s+IDENTITY)?\s*[;]?\Z/is", $query, $matches)) {
-            $table_name_pieces = $this->parse_relation_name($matches[1]);
-            $table = $this->find_table($table_name_pieces);
-            if ($table === false) {
-                return false;
-            } elseif ($table->isReadLocked()) {
-                return $this->error_table_read_lock($table_name_pieces);
-            }
-
-            $table->truncate();
-            if (isset($matches[2]) && !strcasecmp($matches[2], 'RESTART')) {
-                $identity = $table->getIdentity();
-                if ($identity !== null) {
-                    $identity->restart();
-                }
-            }
+            $tableName = $this->parse_relation_name($matches[1]);
+            $restart = isset($matches[2]) && !strcasecmp($matches[2], 'RESTART');
+            $statement = new Statements\Truncate($this, $tableName, $restart);
+            return $statement->execute();
         } else {
             return $this->set_error('Invalid TRUNCATE query');
         }
