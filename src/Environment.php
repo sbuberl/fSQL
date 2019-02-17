@@ -384,6 +384,12 @@ class Environment
     {
         $query = trim($query);
         $function = strstr($query, ' ', true);
+        if($function === false) {
+            $function = strstr($query, ';', true);
+            if($function === false) {
+                $function = $query;
+            }
+        }
         ++$this->query_count;
         $this->error_msg = null;
         switch (strtoupper($function)) {
