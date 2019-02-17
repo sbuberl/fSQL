@@ -2177,9 +2177,8 @@ class Environment
     private function query_use($query)
     {
         if (preg_match("/\AUSE\s+`?([^\W\d]\w*)`?\s*[;]?\Z/is", $query, $matches)) {
-            $this->select_db($matches[1]);
-
-            return true;
+            $statement = new Statements\SetDatabase($this, $matches[1]);
+            return $statement->execute();
         } else {
             return $this->set_error('Invalid USE query');
         }
