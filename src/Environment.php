@@ -31,7 +31,7 @@ class Environment
     public static $WHERE_HAVING_AGG = 9;
 
     private $transaction = null;
-    private $lockedTables = array();
+    public $lockedTables = [];
     private $databases = array();
     private $currentDB = null;
     private $currentSchema = null;
@@ -322,12 +322,12 @@ class Environment
         return $this->query_count;
     }
 
-    private function unlock_tables()
+    public function unlock_tables()
     {
-        foreach (array_keys($this->lockedTables) as $index) {
-            $this->lockedTables[$index]->unlock();
+        foreach ($this->lockedTables as $table) {
+            $table->unlock();
         }
-        $this->lockedTables = array();
+        $this->lockedTables = [];
         return true;
     }
 
@@ -2189,23 +2189,14 @@ class Environment
         if (preg_match("/\ALOCK\s+TABLES\s+(.+?)\s*[;]?\Z/is", $query, $matches)) {
             preg_match_all("/(`?(?:[^\W\d]\w*`?\.`?){0,2}[^\W\d]\w*`?)\s+((?:READ(?:\s+LOCAL)?)|((?:LOW\s+PRIORITY\s+)?WRITE))/is", $matches[1], $rules);
             $numRules = count($rules[0]);
+            $locks = [];
             for ($r = 0; $r < $numRules; ++$r) {
-                $table_name_pieces = $this->parse_relation_name($rules[1][$r]);
-                $table = $this->find_table($table_name_pieces);
-                if ($table !== false) {
-                    return false;
-                }
-
-                if (!strcasecmp(substr($rules[2][$r], 0, 4), 'READ')) {
-                    $table->readLock();
-                } else {  /* WRITE */
-                    $table->writeLock();
-                }
-
-                $lockedTables[] = $table;
+                $tableName = $this->parse_relation_name($rules[1][$r]);
+                $isRead = !strncasecmp($rules[2][$r], 'READ', 4);
+                $locks[] = [$tableName, $isRead];
             }
-
-            return true;
+            $statement = new Statements\Lock($this, $locks);
+            return $statement->execute();
         } else {
             return $this->set_error('Invalid LOCK query');
         }
@@ -2213,7 +2204,8 @@ class Environment
 
     private function query_unlock($query)
     {
-        return $this->query_basic($query, 'UNLOCK', '/\AUNLOCK\s+TABLES\s*[;]?\Z/is', function () { return $this->unlock_tables(); });
+        return $this->query_basic($query, 'UNLOCK', '/\AUNLOCK\s+TABLES\s*[;]?\Z/is', function () { $statement = new Statements\Unlock($this);
+            return $statement->execute(); });
     }
 
     public function parse_value($columnDef, $value)

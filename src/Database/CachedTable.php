@@ -437,6 +437,11 @@ class CachedTable extends Table
         return $this->lock === 'r';
     }
 
+    public function isWriteLocked()
+    {
+        return $this->lock === 'w';
+    }
+
     public function readLock()
     {
         $success = $this->columnsLockFile->acquireRead() && $this->columnsFile->acquireRead()
