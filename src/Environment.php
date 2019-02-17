@@ -430,22 +430,22 @@ class Environment
 
     private function query_begin($query)
     {
-        return $this->query_basic($query, 'BEGIN', '/\ABEGIN(?:\s+WORK)?\s*[;]?\Z/is', function () { return $this->begin(); });
+        return $this->query_basic($query, 'BEGIN', '/\ABEGIN(?:\s+WORK)?\s*[;]?\Z/is', function () { $statement = new Statements\Begin($this); return $statement->execute(); });
     }
 
     private function query_start($query)
     {
-        return $this->query_basic('START', '/\ASTART\s+TRANSACTION\s*[;]?\Z/is', function () { return $this->begin(); });
+        return $this->query_basic($query, 'START', '/\ASTART\s+TRANSACTION\s*[;]?\Z/is', function () { $statement = new Statements\Begin($this); return $statement->execute(); });
     }
 
     private function query_commit($query)
     {
-        return $this->query_basic($query, 'COMMIT', '/\ACOMMIT(?:\s+WORK)?\s*[;]?\Z/is', function () { return $this->commit(); });
+        return $this->query_basic($query, 'COMMIT', '/\ACOMMIT(?:\s+WORK)?\s*[;]?\Z/is', function () { $statement = new Statements\Commit($this); return $statement->execute(); });
     }
 
     private function query_rollback($query)
     {
-        return $this->query_basic($query, 'ROLLBACK', '/\AROLLBACK(?:\s+WORK)?\s*[;]?\Z/is', function () { return $this->rollback(); });
+        return $this->query_basic($query, 'ROLLBACK', '/\AROLLBACK(?:\s+WORK)?\s*[;]?\Z/is', function () { $statement = new Statements\Rollback($this); return $statement->execute(); });
     }
 
     private function query_create($query)
