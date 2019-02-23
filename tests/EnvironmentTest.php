@@ -2,11 +2,35 @@
 
 require_once __DIR__.'/BaseTest.php';
 
+use FSQL\Database\CachedTable;
 use FSQL\Environment;
+use FSQL\ResultSet;
 
 class EnvironmentTest extends BaseTest
 {
     private $fsql;
+
+    private static $columns = [
+        'personId' => ['type' => 'i', 'auto' => 0, 'default' => 0, 'key' => 'n', 'null' => 1, 'restraint' => []],
+        'firstName' => ['type' => 's', 'auto' => 0, 'default' => '', 'key' => 'n', 'null' => 1, 'restraint' => []],
+        'lastName' => ['type' => 's', 'auto' => 0, 'default' => '', 'key' => 'n', 'null' => 1, 'restraint' => []],
+        'city' => ['type' => 's', 'auto' => 0, 'default' => '', 'key' => 'n', 'null' => 1, 'restraint' => []],
+    ];
+
+    private static $entries = [
+        [1, 'bill', 'smith', 'chicago'],
+        [2, 'jon', 'doe', 'baltimore'],
+        [3, 'mary', 'shelley', 'seattle'],
+        [4, 'stephen', 'king', 'derry'],
+        [5, 'bart', 'simpson', 'springfield'],
+        [6, 'jane', 'doe', 'seattle'],
+        [7, 'bram', 'stoker', 'new york'],
+        [8, 'douglas', 'adams', 'london'],
+        [9, 'bill', 'johnson', 'derry'],
+        [10, 'jon', 'doe', 'new york'],
+        [11, 'homer', null, 'boston'],
+        [12, null, 'king', 'tokyo'],
+    ];
 
     public function setUp()
     {
@@ -85,5 +109,58 @@ class EnvironmentTest extends BaseTest
         $this->assertFalse($fakePassed);
         $this->assertEquals(trim($this->fsql->error()), "Schema {$dbName}.{$fakeSchema} does not exist");
         $this->assertEquals($goodSchema, $this->fsql->current_schema()->name());
+    }
+
+    public function testPrepare()
+    {
+      $dbName = 'db1';
+      $passed = $this->fsql->define_db($dbName, parent::$tempDir);
+      $this->fsql->select_db($dbName);
+
+      $table = CachedTable::create($this->fsql->current_schema(), 'customers', self::$columns);
+      $cursor = $table->getWriteCursor();
+      foreach (self::$entries as $entry) {
+          $cursor->appendRow($entry);
+      }
+      $table->commit();
+
+      $expected = [
+        ['stephen', 'king', 'derry'],
+        ['bart', 'simpson', 'springfield'],
+        [null, 'king', 'tokyo'],
+      ];
+
+      $stmt = $this->fsql->prepare("SELECT firstName, lastName, city FROM customers WHERE personId = ? OR lastName = ?");
+      $this->assertTrue($stmt !== false);
+      $stmt->bind_param('is', '5', 'king');
+      $result = $stmt->execute();
+      $this->assertTrue($result !== false);
+
+
+      $results = $this->fsql->fetch_all($result, ResultSet::FETCH_NUM);
+      $this->assertEquals($expected, $results);
+    }
+
+    public function testPrepareInject()
+    {
+      $dbName = 'db1';
+      $passed = $this->fsql->define_db($dbName, parent::$tempDir);
+      $this->fsql->select_db($dbName);
+
+      $table = CachedTable::create($this->fsql->current_schema(), 'customers', self::$columns);
+      $cursor = $table->getWriteCursor();
+      foreach (self::$entries as $entry) {
+          $cursor->appendRow($entry);
+      }
+      $table->commit();
+
+      $stmt = $this->fsql->prepare("SELECT firstName, lastName, city FROM customers WHERE lastName = ?");
+      $this->assertTrue($stmt !== false);
+      $stmt->bind_param('s', 'doe;delete from customers');
+      $result = $stmt->execute();
+      $this->assertTrue($result !== false);
+
+      $results = $this->fsql->fetch_all($result, ResultSet::FETCH_NUM);
+      $this->assertSame([], $results);
     }
 }

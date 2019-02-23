@@ -380,6 +380,18 @@ class Environment
         }
     }
 
+    public function prepare($query)
+    {
+        if(preg_match_all("/\?(?=[^']*(?:'[^']*'[^']*)*$)/", $query, $matches, PREG_OFFSET_CAPTURE)) {
+            $params = [];
+            foreach($matches as $match) {
+                $params[] = $match[0][1];
+            }
+            return new Query($this, $query, $params);
+        }
+        return false;
+    }
+
     public function query($query)
     {
         $query = trim($query);
