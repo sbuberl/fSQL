@@ -19,8 +19,8 @@ use FSQL\Database\Database;
 use FSQL\Database\Sequence;
 use FSQL\Database\Table;
 use FSQL\Database\Transaction;
-use FSQL\Statements\CreateTableLike;
-use FSQL\Statements\Insert;
+use FSQL\Queries\CreateTableLike;
+use FSQL\Queries\Insert;
 
 class Environment
 {
@@ -382,14 +382,7 @@ class Environment
 
     public function prepare($query)
     {
-        if(preg_match_all("/\?(?=[^']*(?:'[^']*'[^']*)*$)/", $query, $matches, PREG_OFFSET_CAPTURE)) {
-            $params = [];
-            foreach($matches as $match) {
-                $params[] = $match[0][1];
-            }
-            return new Query($this, $query, $params);
-        }
-        return false;
+        return new Statement($this, $query);
     }
 
     public function query($query)
@@ -442,22 +435,22 @@ class Environment
 
     private function query_begin($query)
     {
-        return $this->query_basic($query, 'BEGIN', '/\ABEGIN(?:\s+WORK)?\s*[;]?\Z/is', function () { $statement = new Statements\Begin($this); return $statement->execute(); });
+        return $this->query_basic($query, 'BEGIN', '/\ABEGIN(?:\s+WORK)?\s*[;]?\Z/is', function () { $statement = new Queries\Begin($this); return $statement->execute(); });
     }
 
     private function query_start($query)
     {
-        return $this->query_basic($query, 'START', '/\ASTART\s+TRANSACTION\s*[;]?\Z/is', function () { $statement = new Statements\Begin($this); return $statement->execute(); });
+        return $this->query_basic($query, 'START', '/\ASTART\s+TRANSACTION\s*[;]?\Z/is', function () { $statement = new Queries\Begin($this); return $statement->execute(); });
     }
 
     private function query_commit($query)
     {
-        return $this->query_basic($query, 'COMMIT', '/\ACOMMIT(?:\s+WORK)?\s*[;]?\Z/is', function () { $statement = new Statements\Commit($this); return $statement->execute(); });
+        return $this->query_basic($query, 'COMMIT', '/\ACOMMIT(?:\s+WORK)?\s*[;]?\Z/is', function () { $statement = new Queries\Commit($this); return $statement->execute(); });
     }
 
     private function query_rollback($query)
     {
-        return $this->query_basic($query, 'ROLLBACK', '/\AROLLBACK(?:\s+WORK)?\s*[;]?\Z/is', function () { $statement = new Statements\Rollback($this); return $statement->execute(); });
+        return $this->query_basic($query, 'ROLLBACK', '/\AROLLBACK(?:\s+WORK)?\s*[;]?\Z/is', function () { $statement = new Queries\Rollback($this); return $statement->execute(); });
     }
 
     private function query_create($query)
@@ -491,7 +484,7 @@ class Environment
         if (preg_match("/\A(?:`?([^\W\d]\w*)`?\.)?`?([^\W\d]\w*)`?\Z/is", $definition, $matches)) {
             list(, $dbName, $schemaName) = $matches;
 
-            return new Statements\CreateSchema($this, array($dbName, $schemaName), $ifNotExists);
+            return new Queries\CreateSchema($this, array($dbName, $schemaName), $ifNotExists);
         } else {
             return $this->set_error('Invalid CREATE SCHEMA query');
         }
@@ -513,7 +506,7 @@ class Environment
 
             $initialValues = $this->load_create_sequence($parsed);
 
-            return new Statements\CreateSequence($this, $seqNamePieces, $ifNotExists, $initialValues);
+            return new Queries\CreateSequence($this, $seqNamePieces, $ifNotExists, $initialValues);
         } else {
             return $this->set_error('Invalid CREATE SEQUENCE query');
         }
@@ -633,7 +626,7 @@ class Environment
                     }
                 }
 
-                return new Statements\CreateTable($this, $table_name_pieces, $ifNotExists, $temporary, $newColumns);
+                return new Queries\CreateTable($this, $table_name_pieces, $ifNotExists, $temporary, $newColumns);
             } else {
                 $likeClause = isset($matches[4][0]) ? $matches[4][0] : '';
                 $likeTablePieces = $this->parse_relation_name($matches[3][0]);
@@ -646,7 +639,7 @@ class Environment
                     return false;
                 }
 
-                return new Statements\CreateTableLike($this, $table_name_pieces, $ifNotExists, $temporary, $likeTablePieces, $likeOptions);
+                return new Queries\CreateTableLike($this, $table_name_pieces, $ifNotExists, $temporary, $likeTablePieces, $likeOptions);
             }
         } else {
             return $this->set_error('Invalid CREATE TABLE query');
@@ -936,7 +929,7 @@ class Environment
             $Data[] = $NewRow;
         }
 
-        $insert = new Statements\Insert($this, $table_name_pieces, $Data, $mode);
+        $insert = new Queries\Insert($this, $table_name_pieces, $Data, $mode);
         $result = $insert->execute();
         $this->affected = $insert->affectedRows();
         $this->insert_id = $insert->insertId();
@@ -1027,7 +1020,7 @@ class Environment
                 $updates[$colIndex] = $newValue;
             }
 
-            $update = new Statements\Update($this, $table_name_pieces, $updates, $where, $ignore);
+            $update = new Queries\Update($this, $table_name_pieces, $updates, $where, $ignore);
             $result = $update->execute();
             $this->affected = $update->affectedRows();
             return $result;
@@ -1174,7 +1167,7 @@ class Environment
                 $matches_clause = trim($matches_clause);
             }
 
-            $statement = new Statements\Merge($this, $dest_table_name_pieces, $src_table_name_pieces, $matchedClauses, $unmatchedClauses, $join_function);
+            $statement = new Queries\Merge($this, $dest_table_name_pieces, $src_table_name_pieces, $matchedClauses, $unmatchedClauses, $join_function);
             return $statement->execute();
         } else {
             return $this->set_error('Invalid MERGE query');
@@ -1443,7 +1436,7 @@ class Environment
             $singleRow = true;
         }
 
-        $select = new Statements\Select($this, $selectedInfo, $joins, $joined_info, $where, $groupList, $having, $orderBy, $limit, $distinct, $isGrouping, $singleRow);
+        $select = new Queries\Select($this, $selectedInfo, $joins, $joined_info, $where, $groupList, $having, $orderBy, $limit, $distinct, $isGrouping, $singleRow);
         return $select->execute();
     }
 
@@ -1822,7 +1815,7 @@ class Environment
                     return $this->set_error('Invalid WHERE clause: '.$this->error_msg);
                 }
             }
-            $delete = new Statements\Delete($this, $table_name_pieces, $where);
+            $delete = new Queries\Delete($this, $table_name_pieces, $where);
             $result = $delete->execute();
             $this->affected = $delete->affectedRows();
         } else {
@@ -1850,7 +1843,7 @@ class Environment
         if (preg_match("/\A(`?(?:[^\W\d]\w*`?\.`?){0,2}[^\W\d]\w*`?)\s+(.+?)\s*[;]?\Z/is", $definition, $matches)) {
             list(, $fullSequenceName, $valuesList) = $matches;
             $seqNamePieces = $this->parse_relation_name($fullSequenceName);
-            $alter = new Statements\AlterSequence($this, $seqNamePieces, $ifExists, $valuesList);
+            $alter = new Queries\AlterSequence($this, $seqNamePieces, $ifExists, $valuesList);
             return $alter->execute();
         } else {
             return $this->set_error('Invalid ALTER SEQUENCE query');
@@ -1947,9 +1940,9 @@ class Environment
                         $key = 'n';
                     }
 
-                    $actions[] = new Statements\AlterTableActions\AddColumn($this, $tableNamePieces, $name, $type, $auto, $default, $key, $null, $restraint);
+                    $actions[] = new Queries\AlterTableActions\AddColumn($this, $tableNamePieces, $name, $type, $auto, $default, $key, $null, $restraint);
                 } elseif (preg_match("/ADD\s+(?:CONSTRAINT\s+`?[^\W\d]\w*`?\s+)?PRIMARY\s+KEY\s*\((.+?)\)/Ais", $definition, $matches, 0, $currentPos)) {
-                    $actions[] = new Statements\AlterTableActions\AddPrimaryKey($this, $tableNamePieces, $matches[1]);
+                    $actions[] = new Queries\AlterTableActions\AddPrimaryKey($this, $tableNamePieces, $matches[1]);
                 } elseif (preg_match("/ALTER(?:\s+(?:COLUMN))?\s+`?([^\W\d]\w*)`?\s+(.+?)(?:,|;|\Z)/Ais", $definition, $matches, 0, $currentPos)) {
                     list(, $columnName, $the_rest) = $matches;
                     if (!isset($columns[$columnName])) {
@@ -1959,33 +1952,33 @@ class Environment
                     $columnDef = $columns[$columnName];
                     if (preg_match("/SET\s+DATA\s+TYPE\s+({$typeRegex})(\s+UNSIGNED)?/is", $the_rest, $types)) {
                         $type = Types::getTypeCode($types[1]);
-                        $actions[] = new Statements\AlterTableActions\SetDataType($this, $tableNamePieces, $columnName, $type, $this->functions);
+                        $actions[] = new Queries\AlterTableActions\SetDataType($this, $tableNamePieces, $columnName, $type, $this->functions);
                     } else if (preg_match("/(?:SET\s+DEFAULT\s+((?:[\+\-]\s*)?\d+(?:\.\d+)?|NULL|'.*?(?<!\\\\)')|DROP\s+DEFAULT)/is", $the_rest, $defaults)) {
                         if(!empty($defaults[1])) {
-                            $actions[] = new Statements\AlterTableActions\SetDefault($this, $tableNamePieces, $columnName, $defaults[1]);
+                            $actions[] = new Queries\AlterTableActions\SetDefault($this, $tableNamePieces, $columnName, $defaults[1]);
                         } else {
-                            $actions[] = new Statements\AlterTableActions\DropDefault($this, $tableNamePieces, $columnName);
+                            $actions[] = new Queries\AlterTableActions\DropDefault($this, $tableNamePieces, $columnName);
                         }
                     } elseif (preg_match("/\ADROP\s+IDENTITY/is", $the_rest, $defaults)) {
-                        $actions[] = new Statements\AlterTableActions\DropIdentity($this, $tableNamePieces, $columnName);
+                        $actions[] = new Queries\AlterTableActions\DropIdentity($this, $tableNamePieces, $columnName);
                     } else {
                         $parsed = $this->parse_sequence_options($the_rest, true);
                         if ($parsed === false) {
                             return false;
                         } elseif (!empty($parsed)) {
-                            $actions[] = new Statements\AlterTableActions\AlterIdentity($this, $tableNamePieces, $columnName, $parsed);
+                            $actions[] = new Queries\AlterTableActions\AlterIdentity($this, $tableNamePieces, $columnName, $parsed);
                         }
                     }
                 } elseif (preg_match("/DROP\s+(?:COLUMN\s+)?`?([^\W\d]\w*)`?\s*(?:,|;|\Z)/Ais", $definition, $matches, 0, $currentPos)) {
-                    $actions[] = new Statements\AlterTableActions\DropColumn($this, $tableNamePieces, $matches[1]);
+                    $actions[] = new Queries\AlterTableActions\DropColumn($this, $tableNamePieces, $matches[1]);
                 } elseif (preg_match("/DROP\s+PRIMARY\s+KEY/Ais", $definition, $matches, 0, $currentPos)) {
-                    $actions[] = new Statements\AlterTableActions\DropPrimaryKey($this, $tableNamePieces);
+                    $actions[] = new Queries\AlterTableActions\DropPrimaryKey($this, $tableNamePieces);
                 } elseif (preg_match("/RENAME\s+(?:TO\s+)?(`?(?:[^\W\d]\w*`?\.`?){0,2}[^\W\d]\w*`?)/Ais", $definition, $matches, 0, $currentPos)) {
                     $newTableNamePieces = $this->parse_relation_name($matches[1]);
                     if ($newTableNamePieces === false) {
                         return false;
                     }
-                    $actions[] = new Statements\RenameTable($this, $tableNamePieces, $newTableNamePieces);
+                    $actions[] = new Queries\RenameTable($this, $tableNamePieces, $newTableNamePieces);
                 } else {
                     return $this->set_error('Invalid ALTER TABLE query');
                 }
@@ -1993,7 +1986,7 @@ class Environment
                 $currentPos += strlen($colmatches[0]);
             }
 
-            $statement = new Statements\AlterTable($this, $tableNamePieces, $actions);
+            $statement = new Queries\AlterTable($this, $tableNamePieces, $actions);
             return $statement->execute();
         } else {
             return $this->set_error('Invalid ALTER TABLE query');
@@ -2064,7 +2057,7 @@ class Environment
                     return $this->set_error('Parse error in table listing');
                 }
 
-                $statement = new Statements\RenameTable($this, $oldTablePieces, $newTablePieces);
+                $statement = new Queries\RenameTable($this, $oldTablePieces, $newTablePieces);
                 $result = $statement->execute();
                 if(!$result) {
                     return false;
@@ -2105,7 +2098,7 @@ class Environment
     {
         if (preg_match("/\A(`?(?:[^\W\d]\w*`?\.`?){0,2}[^\W\d]\w*`?)\Z/is", $name, $matches)) {
             $tableNamePieces = $this->parse_relation_name($matches[1]);
-            $drop = new Statements\DropTable($this, $tableNamePieces, $ifExists);
+            $drop = new Queries\DropTable($this, $tableNamePieces, $ifExists);
             return $drop->execute();
         } else {
             return $this->set_error('Parse error in table listing');
@@ -2116,7 +2109,7 @@ class Environment
     {
         if (preg_match("/\A`?([^\W\d]\w*)`?\Z/is", $name, $matches)) {
             $dbName = $matches[1];
-            $drop = new Statements\DropDatabase($this, [$dbName], $ifExists);
+            $drop = new Queries\DropDatabase($this, [$dbName], $ifExists);
             return $drop->execute();
         } else {
             return $this->set_error('Parse error in databse listing');
@@ -2127,7 +2120,7 @@ class Environment
     {
         if (preg_match("/\A(?:`?([^\W\d]\w*)`?\.)?`?([^\W\d]\w*)`?\Z/is", $name, $matches)) {
             list(, $dbName, $schemaName) = $matches;
-            $drop = new Statements\DropSchema($this, [$dbName, $schemaName], $ifExists);
+            $drop = new Queries\DropSchema($this, [$dbName, $schemaName], $ifExists);
             return $drop->execute();
         } else {
             return $this->set_error('Parse error in schema listing');
@@ -2138,7 +2131,7 @@ class Environment
     {
         if (preg_match("/\A(`?(?:[^\W\d]\w*`?\.`?){0,2}[^\W\d]\w*`?)\Z/is", $name, $matches)) {
             $seqNamePieces = $this->parse_relation_name($matches[1]);
-            $drop = new Statements\DropSequence($this, $seqNamePieces, $ifExists);
+            $drop = new Queries\DropSequence($this, $seqNamePieces, $ifExists);
             return $drop->execute();
         } else {
             return $this->set_error('Parse error in sequence listing');
@@ -2150,7 +2143,7 @@ class Environment
         if (preg_match("/\ATRUNCATE\s+TABLE\s+(`?(?:[^\W\d]\w*`?\.`?){0,2}[^\W\d]\w*`?)(?:\s+(CONTINUE|RESTART)\s+IDENTITY)?\s*[;]?\Z/is", $query, $matches)) {
             $tableName = $this->parse_relation_name($matches[1]);
             $restart = isset($matches[2]) && !strcasecmp($matches[2], 'RESTART');
-            $statement = new Statements\Truncate($this, $tableName, $restart);
+            $statement = new Queries\Truncate($this, $tableName, $restart);
             return $statement->execute();
         } else {
             return $this->set_error('Invalid TRUNCATE query');
@@ -2165,16 +2158,16 @@ class Environment
             $full = !empty($matches[1]);
             $dbName = isset($matches[2]) ? $matches[2] : false;
             $schemaName = isset($matches[3]) ? $matches[3] : false;
-            $show = new Statements\ShowTables($this, $dbName, $schemaName, $full);
+            $show = new Queries\ShowTables($this, $dbName, $schemaName, $full);
             return $show->execute();
         } elseif (preg_match("/\ASHOW\s+DATABASES\s*[;]?\s*\Z/is", $query, $matches)) {
-            $show = new Statements\ShowDatabases($this);
+            $show = new Queries\ShowDatabases($this);
             return $show->execute();
         } elseif (preg_match('/\ASHOW\s+(FULL\s+)?COLUMNS\s+(?:FROM|IN)\s+(`?(?:[^\W\d]\w*`?\.`?){0,2}[^\W\d]\w*`?)?\s*[;]?\s*\Z/is', $query, $matches)) {
             $full = !empty($matches[1]);
             $fullTableName = $matches[2];
             $pieces = $this->parse_relation_name($fullTableName);
-            $show = new Statements\ShowColumns($this, $pieces, $full);
+            $show = new Queries\ShowColumns($this, $pieces, $full);
             return $show->execute();
         } else {
             return $this->set_error('Invalid SHOW query');
@@ -2185,7 +2178,7 @@ class Environment
     {
         if (preg_match("/\ADESC(?:RIBE)?\s+(`?(?:[^\W\d]\w*`?\.`?){0,2}[^\W\d]\w*`?)\s*[;]?\Z/is", $query, $matches)) {
             $pieces = $this->parse_relation_name($matches[1]);
-            $show = new Statements\ShowColumns($this, $pieces, false);
+            $show = new Queries\ShowColumns($this, $pieces, false);
             return $show->execute();
         } else {
             return $this->set_error('Invalid DESCRIBE query');
@@ -2195,7 +2188,7 @@ class Environment
     private function query_use($query)
     {
         if (preg_match("/\AUSE\s+`?([^\W\d]\w*)`?\s*[;]?\Z/is", $query, $matches)) {
-            $statement = new Statements\SetDatabase($this, $matches[1]);
+            $statement = new Queries\SetDatabase($this, $matches[1]);
             return $statement->execute();
         } else {
             return $this->set_error('Invalid USE query');
@@ -2213,7 +2206,7 @@ class Environment
                 $isRead = !strncasecmp($rules[2][$r], 'READ', 4);
                 $locks[] = [$tableName, $isRead];
             }
-            $statement = new Statements\Lock($this, $locks);
+            $statement = new Queries\Lock($this, $locks);
             return $statement->execute();
         } else {
             return $this->set_error('Invalid LOCK query');
@@ -2222,7 +2215,7 @@ class Environment
 
     private function query_unlock($query)
     {
-        return $this->query_basic($query, 'UNLOCK', '/\AUNLOCK\s+TABLES\s*[;]?\Z/is', function () { $statement = new Statements\Unlock($this);
+        return $this->query_basic($query, 'UNLOCK', '/\AUNLOCK\s+TABLES\s*[;]?\Z/is', function () { $statement = new Queries\Unlock($this);
             return $statement->execute(); });
     }
 
