@@ -133,9 +133,9 @@ class EnvironmentTest extends BaseTest
       $stmt = $this->fsql->prepare("SELECT firstName, lastName, city FROM customers WHERE personId = ? OR lastName = ?");
       $this->assertTrue($stmt !== false);
       $stmt->bind_param('is', '5', 'king');
-      $result = $stmt->execute();
-      $this->assertTrue($result !== false);
-
+      $passed = $stmt->execute();
+      $this->assertTrue($passed !== false);
+      $result = $stmt->result_metadata();
 
       $results = $this->fsql->fetch_all($result, ResultSet::FETCH_NUM);
       $this->assertEquals($expected, $results);
@@ -157,8 +157,9 @@ class EnvironmentTest extends BaseTest
       $stmt = $this->fsql->prepare("SELECT firstName, lastName, city FROM customers WHERE lastName = ?");
       $this->assertTrue($stmt !== false);
       $stmt->bind_param('s', 'doe;delete from customers');
-      $result = $stmt->execute();
-      $this->assertTrue($result !== false);
+      $passed = $stmt->execute();
+      $this->assertTrue($passed !== false);
+      $result = $stmt->result_metadata();
 
       $results = $this->fsql->fetch_all($result, ResultSet::FETCH_NUM);
       $this->assertSame([], $results);

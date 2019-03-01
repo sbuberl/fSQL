@@ -51,6 +51,37 @@ class Statement
             function($match) use ($that, &$count) { return $that->params[$count++]; },
             $this->query
             );
-        return $this->environment->query($newQuery);
+        $result = $this->environment->query($newQuery);
+        if($result instanceof ResultSet) {
+          $this->result = $result;
+          return true;
+        } else {
+          return $result;
+        }
     }
+
+    public function prepare($query)
+    {
+        $this->query = $query;
+        $this->result = null;
+        $this->stored = false;
+        return true;
+      }
+
+    public function store_result()
+    {
+        $this->stored = true;
+    }
+
+    public function result_metadata()
+    {
+      return $this->result;
+    }
+
+    public function free_result()
+    {
+
+    }
+
+
 }
