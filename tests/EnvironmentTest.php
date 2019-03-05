@@ -4,7 +4,7 @@ require_once __DIR__.'/BaseTest.php';
 
 use FSQL\Database\CachedTable;
 use FSQL\Environment;
-use FSQL\ResultSet;
+use FSQL\Statement;
 
 class EnvironmentTest extends BaseTest
 {
@@ -113,55 +113,18 @@ class EnvironmentTest extends BaseTest
 
     public function testPrepare()
     {
-      $dbName = 'db1';
-      $passed = $this->fsql->define_db($dbName, parent::$tempDir);
-      $this->fsql->select_db($dbName);
+        $dbName = 'db1';
+        $passed = $this->fsql->define_db($dbName, parent::$tempDir);
+        $this->fsql->select_db($dbName);
 
-      $table = CachedTable::create($this->fsql->current_schema(), 'customers', self::$columns);
-      $cursor = $table->getWriteCursor();
-      foreach (self::$entries as $entry) {
-          $cursor->appendRow($entry);
-      }
-      $table->commit();
+        $table = CachedTable::create($this->fsql->current_schema(), 'customers', self::$columns);
+        $cursor = $table->getWriteCursor();
+        foreach (self::$entries as $entry) {
+        $cursor->appendRow($entry);
+        }
+        $table->commit();
 
-      $expected = [
-        ['stephen', 'king', 'derry'],
-        ['bart', 'simpson', 'springfield'],
-        [null, 'king', 'tokyo'],
-      ];
-
-      $stmt = $this->fsql->prepare("SELECT firstName, lastName, city FROM customers WHERE personId = ? OR lastName = ?");
-      $this->assertTrue($stmt !== false);
-      $stmt->bind_param('is', '5', 'king');
-      $passed = $stmt->execute();
-      $this->assertTrue($passed !== false);
-      $result = $stmt->result_metadata();
-
-      $results = $this->fsql->fetch_all($result, ResultSet::FETCH_NUM);
-      $this->assertEquals($expected, $results);
-    }
-
-    public function testPrepareInject()
-    {
-      $dbName = 'db1';
-      $passed = $this->fsql->define_db($dbName, parent::$tempDir);
-      $this->fsql->select_db($dbName);
-
-      $table = CachedTable::create($this->fsql->current_schema(), 'customers', self::$columns);
-      $cursor = $table->getWriteCursor();
-      foreach (self::$entries as $entry) {
-          $cursor->appendRow($entry);
-      }
-      $table->commit();
-
-      $stmt = $this->fsql->prepare("SELECT firstName, lastName, city FROM customers WHERE lastName = ?");
-      $this->assertTrue($stmt !== false);
-      $stmt->bind_param('s', 'doe;delete from customers');
-      $passed = $stmt->execute();
-      $this->assertTrue($passed !== false);
-      $result = $stmt->result_metadata();
-
-      $results = $this->fsql->fetch_all($result, ResultSet::FETCH_NUM);
-      $this->assertSame([], $results);
+        $stmt = $this->fsql->prepare("SELECT firstName, lastName, city FROM customers WHERE personId = ? OR lastName = ?");
+        $this->assertTrue($stmt instanceof Statement);
     }
 }
