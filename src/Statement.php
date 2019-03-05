@@ -43,7 +43,7 @@ class Statement
 
         for($i = 0; $i < $length; ++$i, $param = next($params)) {
             $type = $types[$i];
-            if($type == null) {
+            if($param == null) {
                 $this->params[] = 'NULL';
             } else {
                 switch($type) {
