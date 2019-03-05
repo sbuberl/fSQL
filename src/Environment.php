@@ -365,7 +365,7 @@ class Environment
             $this->transaction = null;
             return $success;
         } else {
-            return $this->set_error('Can commit because not inside a transaction');
+            return $this->set_error('Can not commit because not inside a transaction');
         }
     }
 
@@ -376,7 +376,7 @@ class Environment
             $this->transaction = null;
             return $success;
         } else {
-            return $this->set_error('Can rollback because not inside a transaction');
+            return $this->set_error('Can not rollback because not inside a transaction');
         }
     }
 
