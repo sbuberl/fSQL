@@ -10,6 +10,7 @@ class Statement
     private $query;
     private $params;
     private $result;
+    private $metadata;
     private $stored;
     private $error;
 
@@ -80,9 +81,12 @@ class Statement
         $result = $this->environment->query($newQuery);
         if($result instanceof ResultSet) {
             $this->result = $result;
+            $this->metadata = $result->createMetadata();
             return true;
+        } else if($result === false) {
+            return $this->set_error(trim($this->environment->error()));
         } else {
-            return $result;
+            return true;
         }
     }
 
@@ -91,6 +95,7 @@ class Statement
         $this->query = $query;
         $this->params = [];
         $this->result = null;
+        $this->metadata = null;
         $this->stored = false;
         return true;
       }
@@ -120,12 +125,12 @@ class Statement
             return $this->set_error("Unable to perform a result_metadata without a prepare");
         }
 
-        return $this->result;
+        return $this->metadata;
     }
 
     public function free_result()
     {
-
+        $this->result = null;
     }
 
 }

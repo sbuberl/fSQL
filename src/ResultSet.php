@@ -23,6 +23,11 @@ class ResultSet
         $this->dataCursor = new TableCursor($data);
     }
 
+    public function createMetadata()
+    {
+        return new ResultSet($this->columnNames, []);
+    }
+
     public function fetchAll($type = self::FETCH_ASSOC)
     {
         if ($type === self::FETCH_NUM) {

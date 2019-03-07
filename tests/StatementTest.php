@@ -82,6 +82,30 @@ class StatementTest extends BaseTest
         $this->assertEquals($statement->error(), "Unable to perform an execute without a prepare");
     }
 
+    public function testExecuteDMLError()
+    {
+        $statement = new Statement($this->fsql);
+        $statement->prepare("INSERT INTO customers (personId, firstName, lastName, city) VALUES (1, 'John', 'Smith', 3.6, 'Los Angelos')");
+        $passed = $statement->execute();
+        $this->assertTrue($passed === false);
+        $this->assertEquals($statement->error(), "Table db1.public.customers does not exist");
+    }
+
+    public function testExecuteDML()
+    {
+        $table = CachedTable::create($this->fsql->current_schema(), 'customers', self::$columns);
+        $cursor = $table->getWriteCursor();
+        foreach (self::$entries as $entry) {
+            $cursor->appendRow($entry);
+        }
+        $table->commit();
+
+        $statement = new Statement($this->fsql);
+        $statement->prepare("INSERT INTO customers (personId, firstName, lastName, city, zip) VALUES (1, 'John', 'Smith', 'Los Angelos', 75677)");
+        $passed = $statement->execute();
+        $this->assertTrue($passed === true);
+    }
+
     public function testExecuteNoParams()
     {
         $table = CachedTable::create($this->fsql->current_schema(), 'customers', self::$columns);
@@ -160,6 +184,47 @@ class StatementTest extends BaseTest
         $statement->execute();
         $result = $statement->get_result();
         $this->assertTrue($result instanceof ResultSet);
+    }
+
+    public function testResultMetadataNoPrepare()
+    {
+        $statement = new Statement($this->fsql);
+        $passed = $statement->result_metadata();
+        $this->assertTrue($passed === false);
+        $this->assertEquals($statement->error(), "Unable to perform a result_metadata without a prepare");
+    }
+
+    public function testResultMetadata()
+    {
+        $table = CachedTable::create($this->fsql->current_schema(), 'customers', self::$columns);
+        $cursor = $table->getWriteCursor();
+        foreach (self::$entries as $entry) {
+            $cursor->appendRow($entry);
+        }
+        $table->commit();
+
+        $statement = new Statement($this->fsql);
+        $statement->prepare("SELECT firstName, lastName, city FROM customers WHERE personId = 5");
+        $statement->execute();
+        $result = $statement->result_metadata();
+        $this->assertTrue($result instanceof ResultSet);
+    }
+
+    public function testFreeResult()
+    {
+        $table = CachedTable::create($this->fsql->current_schema(), 'customers', self::$columns);
+        $cursor = $table->getWriteCursor();
+        foreach (self::$entries as $entry) {
+            $cursor->appendRow($entry);
+        }
+        $table->commit();
+
+        $statement = new Statement($this->fsql);
+        $statement->prepare("SELECT firstName, lastName, city FROM customers WHERE personId = 5");
+        $statement->execute();
+        $statement->free_result();
+        $result = $statement->get_result();
+        $this->assertTrue($result == null);
     }
 
     // public function testEnvPrepare()
