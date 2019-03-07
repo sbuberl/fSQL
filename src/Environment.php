@@ -385,6 +385,11 @@ class Environment
         return new Statement($this, $query);
     }
 
+    public function stmt_init()
+    {
+        return new Statement($this);
+    }
+
     public function query($query)
     {
         $query = trim($query);

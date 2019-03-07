@@ -113,18 +113,13 @@ class EnvironmentTest extends BaseTest
 
     public function testPrepare()
     {
-        $dbName = 'db1';
-        $passed = $this->fsql->define_db($dbName, parent::$tempDir);
-        $this->fsql->select_db($dbName);
-
-        $table = CachedTable::create($this->fsql->current_schema(), 'customers', self::$columns);
-        $cursor = $table->getWriteCursor();
-        foreach (self::$entries as $entry) {
-        $cursor->appendRow($entry);
-        }
-        $table->commit();
-
         $stmt = $this->fsql->prepare("SELECT firstName, lastName, city FROM customers WHERE personId = ? OR lastName = ?");
+        $this->assertTrue($stmt instanceof Statement);
+    }
+
+    public function testStmtInit()
+    {
+        $stmt = $this->fsql->stmt_init();
         $this->assertTrue($stmt instanceof Statement);
     }
 }
