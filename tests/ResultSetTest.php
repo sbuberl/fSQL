@@ -53,7 +53,7 @@ class ResultSetTest extends BaseTest
         $results = new ResultSet(self::$columns, self::$entries);
 
         $i = 0;
-        while (($row = $results->fetchAssoc()) !== false) {
+        while (($row = $results->fetchAssoc()) !== null) {
             $this->assertEquals(array_combine(self::$columns, self::$entries[$i++]), $row);
         }
         $this->assertEquals(count(self::$entries), $i);
@@ -64,7 +64,7 @@ class ResultSetTest extends BaseTest
         $results = new ResultSet(self::$columns, self::$entries);
 
         $i = 0;
-        while (($row = $results->fetchRow()) !== false) {
+        while (($row = $results->fetchRow()) !== null) {
             $this->assertEquals(self::$entries[$i++], $row);
         }
         $this->assertEquals(count(self::$entries), $i);
@@ -75,7 +75,7 @@ class ResultSetTest extends BaseTest
         $results = new ResultSet(self::$columns, self::$entries);
 
         $i = 0;
-        while (($row = $results->fetchBoth()) !== false) {
+        while (($row = $results->fetchBoth()) !== null) {
             $entry = self::$entries[$i++];
             $this->assertEquals(array_merge($entry, array_combine(self::$columns, $entry)), $row);
         }
@@ -85,7 +85,7 @@ class ResultSetTest extends BaseTest
     public function testFetchSingleEmpty()
     {
         $results = new ResultSet(self::$columns, array());
-        $this->assertFalse($results->fetchSingle(5));
+        $this->assertnull($results->fetchSingle(5));
     }
 
     public function testFetchSingleIndex()
@@ -105,7 +105,7 @@ class ResultSetTest extends BaseTest
         $results = new ResultSet(self::$columns, self::$entries);
 
         $i = 0;
-        while (($row = $results->fetchObject()) !== false) {
+        while (($row = $results->fetchObject()) !== null) {
             $this->assertEquals((object) array_combine(self::$columns, self::$entries[$i++]), $row);
         }
         $this->assertEquals(count(self::$entries), $i);
@@ -124,7 +124,7 @@ class ResultSetTest extends BaseTest
         $results = new ResultSet(self::$columns, self::$entries);
 
         $success = $results->dataSeek(7);
-        $this->assertTrue($success !== false);
+        $this->assertTrue($success !== null);
 
         $row = $results->fetchRow();
         $this->assertEquals(self::$entries[7], $row);

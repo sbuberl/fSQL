@@ -52,7 +52,7 @@ class ResultSet
     public function fetchArray($type = self::FETCH_ASSOC)
     {
         if (!$this->dataCursor->valid()) {
-            return false;
+            return null;
         }
 
         $entry = $this->dataCursor->current();
@@ -86,14 +86,14 @@ class ResultSet
         $type = is_numeric($column) ? self::FETCH_NUM : self::FETCH_ASSOC;
         $row = $this->fetchArray($type);
 
-        return $row !== false && array_key_exists($column, $row) ? $row[$column] : false;
+        return $row !== null && array_key_exists($column, $row) ? $row[$column] : null;
     }
 
     public function fetchObject()
     {
         $row = $this->fetchAssoc();
-        if ($row === false) {
-            return false;
+        if ($row === null) {
+            return null;
         }
 
         return (object) $row;

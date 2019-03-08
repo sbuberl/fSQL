@@ -879,7 +879,7 @@ class Environment
                 return $this->set_error('Invalid INSERT Query ');
             $result = $this->query_select($the_rest);
             $dataRows = [];
-            while (($values = $result->fetchRow()) !== false) {
+            while (($values = $result->fetchRow()) !== null) {
                 $row = array_map(
                     function ($value) {
                         if (is_string($value)) $value = "'$value'";

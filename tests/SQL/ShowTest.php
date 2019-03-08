@@ -39,7 +39,7 @@ class ShowTest extends BaseTest
         $this->assertTrue($result !== false);
 
         $result = $this->fsql->fetch_row($result);
-        $this->assertEquals(false, $result);
+        $this->assertEquals(null, $result);
     }
 
     public function testShowDatabases()
@@ -65,7 +65,7 @@ class ShowTest extends BaseTest
         $this->assertTrue($result !== false);
 
         $result = $this->fsql->fetch_row($result);
-        $this->assertEquals(false, $result);
+        $this->assertEquals(null, $result);
     }
 
     public function testShowTables()
