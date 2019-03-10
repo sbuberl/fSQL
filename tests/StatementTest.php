@@ -137,6 +137,102 @@ class StatementTest extends BaseTest
         $this->assertTrue($passed === true);
     }
 
+    public function testBindResultNoPrepare()
+    {
+        $statement = new Statement($this->fsql);
+        $passed = $statement->bind_result($column1, $column2);
+        $this->assertTrue($passed === false);
+        $this->assertEquals($statement->error(), "Unable to perform a bind_result without a prepare");
+    }
+
+    public function testBindParamNoResult()
+    {
+        $table = CachedTable::create($this->fsql->current_schema(), 'customers', self::$columns);
+        $cursor = $table->getWriteCursor();
+        foreach (self::$entries as $entry) {
+            $cursor->appendRow($entry);
+        }
+        $table->commit();
+
+        $statement = new Statement($this->fsql);
+        $statement->prepare("SELECT firstName, lastName, city FROM customers WHERE personId = ? OR lastName = ? OR zip = ?");
+        $statement->bind_param('isd', '5', 'king', null);
+        $passed = $statement->bind_result($firstName, $lastName, $city);
+        $this->assertTrue($passed === false);
+        $this->assertEquals($statement->error(), "No result set found for bind_result");
+    }
+
+    public function testBindResult()
+    {
+        $table = CachedTable::create($this->fsql->current_schema(), 'customers', self::$columns);
+        $cursor = $table->getWriteCursor();
+        foreach (self::$entries as $entry) {
+            $cursor->appendRow($entry);
+        }
+        $table->commit();
+
+        $statement = new Statement($this->fsql);
+        $statement->prepare("SELECT firstName, lastName, city FROM customers WHERE personId = ? OR lastName = ? OR zip = ?");
+        $statement->bind_param('isd', '5', 'king', null);
+        $statement->execute();
+        $passed = $statement->bind_result($firstName, $lastName, $city);
+        $this->assertTrue($passed === true);
+    }
+
+    public function testFetchNoPrepare()
+    {
+        $statement = new Statement($this->fsql);
+        $passed = $statement->fetch();
+        $this->assertTrue($passed === false);
+        $this->assertEquals($statement->error(), "Unable to perform a fetch without a prepare");
+    }
+
+    public function testFetchNoBindResult()
+    {
+        $table = CachedTable::create($this->fsql->current_schema(), 'customers', self::$columns);
+        $cursor = $table->getWriteCursor();
+        foreach (self::$entries as $entry) {
+            $cursor->appendRow($entry);
+        }
+        $table->commit();
+
+        $statement = new Statement($this->fsql);
+        $statement->prepare("SELECT firstName, lastName, city FROM customers WHERE personId = ? OR lastName = ? OR zip = ?");
+        $statement->bind_param('isd', '5', 'king', null);
+        $statement->execute();
+        $passed = $statement->fetch();
+        $this->assertTrue($passed === false);
+        $this->assertEquals($statement->error(), "Unable to perform a fetch without a bind_result");
+    }
+
+    public function testFetch()
+    {
+        $table = CachedTable::create($this->fsql->current_schema(), 'customers', self::$columns);
+        $cursor = $table->getWriteCursor();
+        foreach (self::$entries as $entry) {
+            $cursor->appendRow($entry);
+        }
+        $table->commit();
+
+        $statement = new Statement($this->fsql);
+        $statement->prepare("SELECT firstName, lastName, city FROM customers WHERE personId = ? OR lastName = ? OR zip = ?");
+        $statement->bind_param('isd', '5', 'king', null);
+        $statement->execute();
+        $statement->bind_result($firstName, $lastName, $city);
+        $i = 0;
+        $expected = [
+           ['stephen', 'king', 'derry'],
+           ['bart', 'simpson', 'springfield'],
+           [null, 'king', 'tokyo'],
+        ];
+        while($statement->fetch()) {
+            $this->assertEquals($firstName, $expected[$i][0]);
+            $this->assertEquals($lastName, $expected[$i][1]);
+            $this->assertEquals($city, $expected[$i][2]);
+            $i++;
+        }
+    }
+
     public function testStoreResultNoPrepare()
     {
         $statement = new Statement($this->fsql);

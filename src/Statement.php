@@ -11,6 +11,7 @@ class Statement
     private $params;
     private $result;
     private $metadata;
+    private $bound;
     private $stored;
     private $error;
 
@@ -36,7 +37,7 @@ class Statement
         $length = strlen($types);
         if($this->query === null) {
             return $this->set_error("Unable to perform a bind_param without a prepare");
-        } if($length != count($params)) {
+        } elseif($length != count($params)) {
             return $this->set_error("bind_param's number of types in the string doesn't match number of parameters passed in");
         }
 
@@ -65,6 +66,18 @@ class Statement
         return true;
     }
 
+    public function bind_result(&...$variables)
+    {
+        if($this->query === null) {
+            return $this->set_error("Unable to perform a bind_result without a prepare");
+        } elseif($this->result === null) {
+            return $this->set_error("No result set found for bind_result");
+        }
+
+        $this->bound = $variables;
+        return true;
+    }
+
     public function execute()
     {
         if($this->query === null) {
@@ -90,12 +103,34 @@ class Statement
         }
     }
 
+    public function fetch()
+    {
+        if($this->query === null) {
+            return $this->set_error("Unable to perform a fetch without a prepare");
+        } elseif($this->bound === null) {
+            return $this->set_error("Unable to perform a fetch without a bind_result");
+        } elseif($this->result === null) {
+            return $this->set_error("No result set found for fetch");
+        }
+
+        $result = $this->result->fetchRow();
+        if($result !== null) {
+            $i = 0;
+            foreach ($result as $value) {
+                $this->bound[$i++] = $value;
+            }
+            return true;
+        }
+        return null;
+    }
+
     public function prepare($query)
     {
         $this->query = $query;
         $this->params = [];
         $this->result = null;
         $this->metadata = null;
+        $this->bound = null;
         $this->stored = false;
         return true;
       }
