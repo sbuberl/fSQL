@@ -109,8 +109,6 @@ class Statement
             return $this->set_error("Unable to perform a fetch without a prepare");
         } elseif($this->bound === null) {
             return $this->set_error("Unable to perform a fetch without a bind_result");
-        } elseif($this->result === null) {
-            return $this->set_error("No result set found for fetch");
         }
 
         $result = $this->result->fetchRow();
