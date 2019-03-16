@@ -831,10 +831,10 @@ class Environment
         $mode = Insert::ERROR;
 
         // All INSERT/REPLACE queries are the same until after the table name
-        if (preg_match("/\A(INSERT(?:\s+(IGNORE))?|REPLACE)\s+INTO\s+(`?(?:[^\W\d]\w*`?\.`?){0,2}[^\W\d]\w*`?)\s+(.+?)\s*[;]?\Z/is", $query, $matches)) {
+        if (preg_match("/\A(INSERT(?:\s+(IGNORE))?|REPLACE)\s+INTO\s+(`?(?:[^\W\d]\w*`?\.`?){0,2}[^\W\d]\w*`?)\s*(.+?)\s*[;]?\Z/is", $query, $matches)) {
             list(, $command, $ignore, $full_table_name, $the_rest) = $matches;
         } else {
-            return $this->set_error('Invalid Query');
+            return $this->set_error('Invalid INSERT Query');
         }
 
         $table_name_pieces = $this->parse_relation_name($full_table_name);
