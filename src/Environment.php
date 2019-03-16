@@ -13,7 +13,23 @@ if (!defined('PHP_INT_MIN')) {
 
 define('FSQL_INCLUDE_PATH', __DIR__);
 
-require dirname(__DIR__).'/vendor/autoload.php';
+function includeIfExists($file)
+{
+    if (file_exists($file))
+    {
+        return include $file;
+    }
+}
+
+if (
+    (!$classLoader = includeIfExists(__DIR__.'/../vendor/autoload.php')) &&
+    (!$classLoader = includeIfExists(__DIR__.'/../../../autoload.php'))
+) {
+    echo 'You must set up the project dependencies, run the following commands:'.PHP_EOL.
+        'curl -sS https://getcomposer.org/installer | php'.PHP_EOL.
+        'php composer.phar install'.PHP_EOL;
+    exit(1);
+}
 
 use FSQL\Database\Database;
 use FSQL\Database\Sequence;
@@ -21,6 +37,8 @@ use FSQL\Database\Table;
 use FSQL\Database\Transaction;
 use FSQL\Queries\CreateTableLike;
 use FSQL\Queries\Insert;
+
+
 
 class Environment
 {
