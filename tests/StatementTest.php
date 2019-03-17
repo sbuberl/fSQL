@@ -147,9 +147,6 @@ class StatementTest extends BaseTest
         $passed = $statement->execute();
         $this->assertTrue($passed === true);
     }
-        $passed = $statement->execute();
-        $this->assertTrue($passed === true);
-    }
 
     public function testBindResultNoPrepare()
     {
