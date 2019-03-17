@@ -52,7 +52,10 @@ class StatementTest extends BaseTest
     public function testBindParamNoPrepare()
     {
         $statement = new Statement($this->fsql);
-        $passed = $statement->bind_param('isd', '5', 'king', 99999);
+        $id = 5;
+        $lastName = 'king';
+        $zip = 99999;
+        $passed = $statement->bind_param('isd', $id, $lastName, $zip);
         $this->assertTrue($passed === false);
         $this->assertEquals($statement->error(), "Unable to perform a bind_param without a prepare");
     }
@@ -61,7 +64,9 @@ class StatementTest extends BaseTest
     {
         $statement = new Statement($this->fsql);
         $statement->prepare("SELECT firstName, lastName, city FROM customers WHERE personId = ? OR lastName = ? OR zip = ?");
-        $passed = $statement->bind_param('isd', '5', 'king');
+        $id = 5;
+        $lastName = 'king';
+        $passed = $statement->bind_param('isd', $id, $lastName);
         $this->assertTrue($passed === false);
         $this->assertEquals($statement->error(), "bind_param's number of types in the string doesn't match number of parameters passed in");
     }
@@ -70,7 +75,10 @@ class StatementTest extends BaseTest
     {
         $statement = new Statement($this->fsql);
         $statement->prepare("SELECT firstName, lastName, city FROM customers WHERE personId = ? OR lastName = ? OR zip = ?");
-        $passed = $statement->bind_param('isd', '5', 'king', 99999);
+        $id = 5;
+        $lastName = 'king';
+        $zip = 99999;
+        $passed = $statement->bind_param('isd', $id, $lastName, $zip);
         $this->assertTrue($passed === true);
     }
 
@@ -132,7 +140,13 @@ class StatementTest extends BaseTest
 
         $statement = new Statement($this->fsql);
         $statement->prepare("SELECT firstName, lastName, city FROM customers WHERE personId = ? OR lastName = ? OR zip = ?");
-        $statement->bind_param('isd', '5', 'king', 99999);
+        $id = 5;
+        $lastName = 'king';
+        $zip = 99999;
+        $statement->bind_param('isd', $id, $lastName, $zip);
+        $passed = $statement->execute();
+        $this->assertTrue($passed === true);
+    }
         $passed = $statement->execute();
         $this->assertTrue($passed === true);
     }
@@ -145,7 +159,7 @@ class StatementTest extends BaseTest
         $this->assertEquals($statement->error(), "Unable to perform a bind_result without a prepare");
     }
 
-    public function testBindParamNoResult()
+    public function testBindResultNoResult()
     {
         $table = CachedTable::create($this->fsql->current_schema(), 'customers', self::$columns);
         $cursor = $table->getWriteCursor();
@@ -156,7 +170,10 @@ class StatementTest extends BaseTest
 
         $statement = new Statement($this->fsql);
         $statement->prepare("SELECT firstName, lastName, city FROM customers WHERE personId = ? OR lastName = ? OR zip = ?");
-        $statement->bind_param('isd', '5', 'king', null);
+        $id = 5;
+        $last = 'king';
+        $zip = 99999;
+        $statement->bind_param('isd', $id, $last, $zip);
         $passed = $statement->bind_result($firstName, $lastName, $city);
         $this->assertTrue($passed === false);
         $this->assertEquals($statement->error(), "No result set found for bind_result");
@@ -173,7 +190,10 @@ class StatementTest extends BaseTest
 
         $statement = new Statement($this->fsql);
         $statement->prepare("SELECT firstName, lastName, city FROM customers WHERE personId = ? OR lastName = ? OR zip = ?");
-        $statement->bind_param('isd', '5', 'king', null);
+        $id = 5;
+        $last = 'king';
+        $zip = 99999;
+        $statement->bind_param('isd', $id, $last, $zip);
         $statement->execute();
         $passed = $statement->bind_result($firstName, $lastName, $city);
         $this->assertTrue($passed === true);
@@ -198,7 +218,10 @@ class StatementTest extends BaseTest
 
         $statement = new Statement($this->fsql);
         $statement->prepare("SELECT firstName, lastName, city FROM customers WHERE personId = ? OR lastName = ? OR zip = ?");
-        $statement->bind_param('isd', '5', 'king', null);
+        $id = 5;
+        $last = 'king';
+        $zip = 99999;
+        $statement->bind_param('isd', $id, $last, $zip);
         $statement->execute();
         $passed = $statement->fetch();
         $this->assertTrue($passed === false);
@@ -216,13 +239,17 @@ class StatementTest extends BaseTest
 
         $statement = new Statement($this->fsql);
         $statement->prepare("SELECT firstName, lastName, city FROM customers WHERE personId = ? OR lastName = ? OR zip = ?");
-        $statement->bind_param('isd', '5', 'king', null);
+        $id = 5;
+        $last = 'king';
+        $zip = 99999;
+        $statement->bind_param('isd', $id, $last, $zip);
         $statement->execute();
         $statement->bind_result($firstName, $lastName, $city);
         $i = 0;
         $expected = [
            ['stephen', 'king', 'derry'],
            ['bart', 'simpson', 'springfield'],
+           ['douglas', 'adams', 'london'],
            [null, 'king', 'tokyo'],
         ];
         while($statement->fetch()) {
@@ -252,7 +279,10 @@ class StatementTest extends BaseTest
 
         $statement = new Statement($this->fsql);
         $statement->prepare("SELECT firstName, lastName, city FROM customers WHERE personId = ? OR lastName = ? OR zip = ?");
-        $statement->bind_param('isd', '5', 'king', null);
+        $id = 5;
+        $last = 'king';
+        $zip = 99999;
+        $statement->bind_param('isd', $id, $last, $zip);
         $statement->execute();
         $passed = $statement->store_result();
         $this->assertTrue($passed === true);

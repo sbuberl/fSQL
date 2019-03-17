@@ -11,7 +11,9 @@ class Statement
     private $params;
     private $result;
     private $metadata;
-    private $bound;
+    private $types;
+    private $boundParams;
+    private $boundResults;
     private $stored;
     private $error;
 
@@ -32,7 +34,7 @@ class Statement
         return false;
     }
 
-    public function bind_param($types, ...$params)
+    public function bind_param($types, &...$params)
     {
         $length = strlen($types);
         if($this->query === null) {
@@ -41,27 +43,8 @@ class Statement
             return $this->set_error("bind_param's number of types in the string doesn't match number of parameters passed in");
         }
 
-        $param = current($params);
-
-        for($i = 0; $i < $length; ++$i, $param = next($params)) {
-            $type = $types[$i];
-            if($param == null) {
-                $this->params[] = 'NULL';
-            } else {
-                switch($type) {
-                case 'i':
-                    $this->params[] = (int) $param;
-                    break;
-                case 'd':
-                    $this->params[] = (float) $param;
-                    break;
-                case 's':
-                case 'o':
-                    $this->params[] = "'". addslashes((string) $param) . "'";
-                    break;
-                }
-            }
-        }
+        $this->boundParams = $params;
+        $this->types = $types;
 
         return true;
     }
@@ -74,7 +57,7 @@ class Statement
             return $this->set_error("No result set found for bind_result");
         }
 
-        $this->bound = $variables;
+        $this->boundResults = $variables;
         return true;
     }
 
@@ -84,14 +67,42 @@ class Statement
             return $this->set_error("Unable to perform an execute without a prepare");
         }
 
-        $that = $this;
-        $count = 0;
-        $newQuery = preg_replace_callback(
-            "/\?(?=[^']*(?:'[^']*'[^']*)*$)/",
-            function($match) use ($that, &$count) { return $that->params[$count++]; },
-            $this->query
-            );
-        $result = $this->environment->query($newQuery);
+        if($this->boundParams !== null) {
+            $length = strlen($this->types);
+            $param = current($this->boundParams);
+
+            $params = [];
+            for($i = 0; $i < $length; ++$i, $param = next($this->boundParams)) {
+                $type = $this->types[$i];
+                if($param == null) {
+                    $params[] = 'NULL';
+                } else {
+                    switch($type) {
+                    case 'i':
+                        $params[] = (int) $param;
+                        break;
+                    case 'd':
+                        $params[] = (float) $param;
+                        break;
+                    case 's':
+                    case 'o':
+                        $params[] = "'". addslashes((string) $param) . "'";
+                        break;
+                    }
+                }
+            }
+            $parameters = $params;
+            $count = 0;
+            $realQuery = preg_replace_callback(
+                "/\?(?=[^']*(?:'[^']*'[^']*)*$)/",
+                function($match) use ($parameters, &$count) { return $parameters[$count++]; },
+                $this->query
+                );
+        } else {
+            $realQuery = $this->query;
+        }
+
+        $result = $this->environment->query($realQuery);
         if($result instanceof ResultSet) {
             $this->result = $result;
             $this->metadata = $result->createMetadata();
@@ -107,7 +118,7 @@ class Statement
     {
         if($this->query === null) {
             return $this->set_error("Unable to perform a fetch without a prepare");
-        } elseif($this->bound === null) {
+        } elseif($this->boundResults === null) {
             return $this->set_error("Unable to perform a fetch without a bind_result");
         }
 
@@ -115,7 +126,7 @@ class Statement
         if($result !== null) {
             $i = 0;
             foreach ($result as $value) {
-                $this->bound[$i++] = $value;
+                $this->boundResults[$i++] = $value;
             }
             return true;
         }
@@ -128,7 +139,9 @@ class Statement
         $this->params = [];
         $this->result = null;
         $this->metadata = null;
-        $this->bound = null;
+        $this->types = null;
+        $this->boundParams = null;
+        $this->boundResults = null;
         $this->stored = false;
         return true;
       }
