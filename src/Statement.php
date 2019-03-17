@@ -69,7 +69,7 @@ class Statement
 
         if($this->boundParams !== null) {
             $length = strlen($this->types);
-            $param = current($this->boundParams);
+            $param = reset($this->boundParams);
 
             $params = [];
             for($i = 0; $i < $length; ++$i, $param = next($this->boundParams)) {

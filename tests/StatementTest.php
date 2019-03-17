@@ -148,6 +148,30 @@ class StatementTest extends BaseTest
         $this->assertTrue($passed === true);
     }
 
+    public function testMultipleExecuteParams()
+    {
+        $table = CachedTable::create($this->fsql->current_schema(), 'customers', self::$columns);
+        $cursor = $table->getWriteCursor();
+        foreach (self::$entries as $entry) {
+            $cursor->appendRow($entry);
+        }
+        $table->commit();
+
+        $statement = new Statement($this->fsql);
+        $statement->prepare("SELECT firstName, lastName, city FROM customers WHERE personId = ? OR lastName = ? OR zip = ?");
+        $id = 5;
+        $lastName = 'king';
+        $zip = 99999;
+        $statement->bind_param('isd', $id, $lastName, $zip);
+        $passed = $statement->execute();
+        $this->assertTrue($passed === true);
+        $id = 1;
+        $lastName = 'adams';
+        $zip = null;
+        $passed = $statement->execute();
+        $this->assertTrue($passed === true);
+    }
+
     public function testBindResultNoPrepare()
     {
         $statement = new Statement($this->fsql);
