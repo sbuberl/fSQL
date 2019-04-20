@@ -34,6 +34,29 @@ class Statement
         return false;
     }
 
+    public function close()
+    {
+        $this->query = null;
+        $this->params = null;
+        $this->result = null;
+        $this->metadata = null;
+        $this->types = null;
+        $this->boundParams = null;
+        $this->boundResults = null;
+        $this->stored = null;
+        $this->error = null;
+        return true;
+    }
+
+    public function reset()
+    {
+        if($this->stored === false) {
+            $this->result = null;
+        }
+        $this->error = null;
+        return true;
+    }
+
     public function data_seek($offset)
     {
         if($this->query === null) {

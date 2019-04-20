@@ -419,6 +419,59 @@ class StatementTest extends BaseTest
         $this->assertEquals($expected, $result->fetchRow());
     }
 
+    public function testClose()
+    {
+        $table = CachedTable::create($this->fsql->current_schema(), 'customers', self::$columns);
+        $cursor = $table->getWriteCursor();
+        foreach (self::$entries as $entry) {
+            $cursor->appendRow($entry);
+        }
+        $table->commit();
+
+        $statement = new Statement($this->fsql);
+        $statement->prepare("SELECT firstName, lastName, city FROM customers");
+        $statement->execute();
+        $statement->store_result();
+        $passed = $statement->close();
+        $expected = ['stephen', 'king', 'derry'];
+        $result = $statement->get_result();
+        $this->assertTrue($passed === true);
+    }
+
+    public function testResetStored()
+    {
+        $table = CachedTable::create($this->fsql->current_schema(), 'customers', self::$columns);
+        $cursor = $table->getWriteCursor();
+        foreach (self::$entries as $entry) {
+            $cursor->appendRow($entry);
+        }
+        $table->commit();
+
+        $statement = new Statement($this->fsql);
+        $statement->prepare("SELECT firstName, lastName, city FROM customers");
+        $statement->execute();
+        $statement->store_result();
+        $passed = $statement->reset();
+        $this->assertTrue($passed === true);
+    }
+
+    public function testResetNotStored()
+    {
+        $table = CachedTable::create($this->fsql->current_schema(), 'customers', self::$columns);
+        $cursor = $table->getWriteCursor();
+        foreach (self::$entries as $entry) {
+            $cursor->appendRow($entry);
+        }
+        $table->commit();
+
+        $statement = new Statement($this->fsql);
+        $statement->prepare("SELECT firstName, lastName, city FROM customers");
+        $statement->execute();
+        $passed = $statement->reset();
+        $this->assertTrue($passed === true);
+    }
+
+
     public function testNumRowsNoPrepare()
     {
         $statement = new Statement($this->fsql);
