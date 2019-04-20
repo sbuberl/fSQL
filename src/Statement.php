@@ -34,6 +34,29 @@ class Statement
         return false;
     }
 
+    public function data_seek($offset)
+    {
+        if($this->query === null) {
+            return $this->set_error("Unable to perform a data_seek without a prepare");
+        } elseif($this->stored === false) {
+            return $this->set_error("Unable to perform a data_seek without a store_result");
+        }
+
+        $result = $this->result->dataSeek($offset);
+        return $result !== false;
+    }
+
+    public function num_rows()
+    {
+        if($this->query === null) {
+            return $this->set_error("Unable to perform a num_rows without a prepare");
+        } elseif($this->stored === false) {
+            return $this->set_error("Unable to perform a num_rows without a store_result");
+        }
+
+        return $this->result->numRows();
+    }
+
     public function bind_param($types, &...$params)
     {
         $length = strlen($types);

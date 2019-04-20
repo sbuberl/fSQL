@@ -374,6 +374,93 @@ class StatementTest extends BaseTest
         $this->assertTrue($result == null);
     }
 
+    public function testDataSeekNoPrepare()
+    {
+        $statement = new Statement($this->fsql);
+        $passed = $statement->data_seek(3);
+        $this->assertTrue($passed === false);
+        $this->assertEquals($statement->error(), "Unable to perform a data_seek without a prepare");
+    }
+
+    public function testDataSeekNoStore()
+    {
+        $table = CachedTable::create($this->fsql->current_schema(), 'customers', self::$columns);
+        $cursor = $table->getWriteCursor();
+        foreach (self::$entries as $entry) {
+            $cursor->appendRow($entry);
+        }
+        $table->commit();
+
+        $statement = new Statement($this->fsql);
+        $statement->prepare("SELECT firstName, lastName, city FROM customers");
+        $statement->execute();
+        $passed = $statement->data_seek(3);
+        $this->assertTrue($passed === false);
+        $this->assertEquals($statement->error(), "Unable to perform a data_seek without a store_result");
+    }
+
+    public function testDataSeek()
+    {
+        $table = CachedTable::create($this->fsql->current_schema(), 'customers', self::$columns);
+        $cursor = $table->getWriteCursor();
+        foreach (self::$entries as $entry) {
+            $cursor->appendRow($entry);
+        }
+        $table->commit();
+
+        $statement = new Statement($this->fsql);
+        $statement->prepare("SELECT firstName, lastName, city FROM customers");
+        $statement->execute();
+        $statement->store_result();
+        $passed = $statement->data_seek(3);
+        $expected = ['stephen', 'king', 'derry'];
+        $result = $statement->get_result();
+        $this->assertTrue($passed === true);
+        $this->assertEquals($expected, $result->fetchRow());
+    }
+
+    public function testNumRowsNoPrepare()
+    {
+        $statement = new Statement($this->fsql);
+        $passed = $statement->num_rows();
+        $this->assertTrue($passed === false);
+        $this->assertEquals($statement->error(), "Unable to perform a num_rows without a prepare");
+    }
+
+    public function testNumRowsNoStore()
+    {
+        $table = CachedTable::create($this->fsql->current_schema(), 'customers', self::$columns);
+        $cursor = $table->getWriteCursor();
+        foreach (self::$entries as $entry) {
+            $cursor->appendRow($entry);
+        }
+        $table->commit();
+
+        $statement = new Statement($this->fsql);
+        $statement->prepare("SELECT firstName, lastName, city FROM customers");
+        $statement->execute();
+        $passed = $statement->num_rows();
+        $this->assertTrue($passed === false);
+        $this->assertEquals($statement->error(), "Unable to perform a num_rows without a store_result");
+    }
+
+    public function testNumRows()
+    {
+        $table = CachedTable::create($this->fsql->current_schema(), 'customers', self::$columns);
+        $cursor = $table->getWriteCursor();
+        foreach (self::$entries as $entry) {
+            $cursor->appendRow($entry);
+        }
+        $table->commit();
+
+        $statement = new Statement($this->fsql);
+        $statement->prepare("SELECT firstName, lastName, city FROM customers");
+        $statement->execute();
+        $statement->store_result();
+        $result = $statement->num_rows();
+        $this->assertEquals(12, $result);
+    }
+
     // public function testEnvPrepare()
     // {
     //     $dbName = 'db1';
