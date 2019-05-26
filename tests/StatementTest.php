@@ -12,7 +12,7 @@ class StatementTest extends BaseTest
     private $fsql;
 
     private static $columns = [
-        'personId' => ['type' => 'i', 'auto' => 0, 'default' => 0, 'key' => 'n', 'null' => 1, 'restraint' => []],
+        'personId' => ['type' => 'i', 'auto' => 1, 'default' => 0, 'key' => 'p', 'null' => 0, 'restraint' => [3, 0, 1, 1, 1, 10000, 0]],
         'firstName' => ['type' => 's', 'auto' => 0, 'default' => '', 'key' => 'n', 'null' => 1, 'restraint' => []],
         'lastName' => ['type' => 's', 'auto' => 0, 'default' => '', 'key' => 'n', 'null' => 1, 'restraint' => []],
         'city' => ['type' => 's', 'auto' => 0, 'default' => '', 'key' => 'n', 'null' => 1, 'restraint' => []],
@@ -102,12 +102,6 @@ class StatementTest extends BaseTest
     public function testExecuteDML()
     {
         $table = CachedTable::create($this->fsql->current_schema(), 'customers', self::$columns);
-        $cursor = $table->getWriteCursor();
-        foreach (self::$entries as $entry) {
-            $cursor->appendRow($entry);
-        }
-        $table->commit();
-
         $statement = new Statement($this->fsql);
         $statement->prepare("INSERT INTO customers (personId, firstName, lastName, city, zip) VALUES (1, 'John', 'Smith', 'Los Angelos', 75677)");
         $passed = $statement->execute();
@@ -512,6 +506,79 @@ class StatementTest extends BaseTest
         $statement->store_result();
         $result = $statement->num_rows();
         $this->assertEquals(12, $result);
+    }
+
+    public function testParamCountNoParams()
+    {
+        $table = CachedTable::create($this->fsql->current_schema(), 'customers', self::$columns);
+        $cursor = $table->getWriteCursor();
+        foreach (self::$entries as $entry) {
+            $cursor->appendRow($entry);
+        }
+        $table->commit();
+
+        $statement = new Statement($this->fsql);
+        $statement->prepare("SELECT firstName, lastName, city FROM customers");
+        $result = $statement->param_count();
+        $this->assertEquals(0, $result);
+    }
+
+    public function testParamCount()
+    {
+        $table = CachedTable::create($this->fsql->current_schema(), 'customers', self::$columns);
+        $cursor = $table->getWriteCursor();
+        foreach (self::$entries as $entry) {
+            $cursor->appendRow($entry);
+        }
+        $table->commit();
+
+        $statement = new Statement($this->fsql);
+        $statement->prepare("SELECT firstName, lastName, city FROM customers WHERE personId = ? OR lastName = ? OR zip = ?");
+        $result = $statement->param_count();
+        $this->assertEquals(3, $result);
+    }
+
+    public function testAffectedRows()
+    {
+        $table = CachedTable::create($this->fsql->current_schema(), 'customers', self::$columns);
+        $statement = new Statement($this->fsql);
+        $statement->prepare("INSERT INTO customers (personId, firstName, lastName, city, zip) VALUES (1, 'John', 'Smith', 'Los Angelos', 75677)");
+        $passed = $statement->execute();
+        $affectedRows = $statement->affected_rows();
+        $this->assertTrue($affectedRows === 1);
+    }
+
+    public function testInsertId()
+    {
+        $table = CachedTable::create($this->fsql->current_schema(), 'customers', self::$columns);
+        $statement = new Statement($this->fsql);
+        $statement->prepare("INSERT INTO customers (firstName, lastName, city, zip) VALUES ('John', 'Smith', 'Los Angelos', 75677)");
+        $passed = $statement->execute();
+        $insertId = $statement->insert_id();
+        $this->assertTrue($insertId === 3);
+    }
+
+    public function testFieldCountNoPrepare()
+    {
+        $table = CachedTable::create($this->fsql->current_schema(), 'customers', self::$columns);
+        $statement = new Statement($this->fsql);
+        $passed = $statement->field_count();
+        $this->assertTrue($passed === false);
+        $this->assertEquals($statement->error(), "Unable to perform a field_count without a prepare");
+    }
+
+    public function testFieldCount()
+    {
+        $table = CachedTable::create($this->fsql->current_schema(), 'customers', self::$columns);
+        $statement = new Statement($this->fsql);
+        $statement->prepare("SELECT firstName, lastName, city, zip FROM customers WHERE personId = ? OR lastName = ? OR zip = ?");
+        $id = 5;
+        $last = 'king';
+        $zip = 99999;
+        $statement->bind_param('isd', $id, $last, $zip);
+        $results = $statement->execute();
+        $fieldCount = $statement->field_count();
+        $this->assertTrue($fieldCount === 4);
     }
 
     // public function testEnvPrepare()
