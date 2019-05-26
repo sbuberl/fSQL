@@ -21,28 +21,28 @@ class ResultSetTest extends BaseTest
         array(10, 'jon', 'doe', 'new york'),
     );
 
-    public function testFetchAllEmpty()
+    public function testfetch_allEmpty()
     {
         $empty = array();
         $results = new ResultSet(array('myColumn'), $empty);
 
-        $this->assertEquals($empty, $results->fetchAll(ResultSet::FETCH_NUM));
-        $this->assertEquals($empty, $results->fetchAll(ResultSet::FETCH_ASSOC));
-        $this->assertEquals($empty, $results->fetchAll(ResultSet::FETCH_BOTH));
+        $this->assertEquals($empty, $results->fetch_all(ResultSet::FETCH_NUM));
+        $this->assertEquals($empty, $results->fetch_all(ResultSet::FETCH_ASSOC));
+        $this->assertEquals($empty, $results->fetch_all(ResultSet::FETCH_BOTH));
     }
 
-    public function testFetchAll()
+    public function testfetch_all()
     {
         $results = new ResultSet(self::$columns, self::$entries);
 
-        $this->assertEquals(self::$entries, $results->fetchAll(ResultSet::FETCH_NUM));
+        $this->assertEquals(self::$entries, $results->fetch_all(ResultSet::FETCH_NUM));
 
-        $assocResult = $results->fetchAll(ResultSet::FETCH_ASSOC);
+        $assocResult = $results->fetch_all(ResultSet::FETCH_ASSOC);
         foreach ($assocResult as $entry) {
             $this->assertEquals(array_combine(self::$columns, $entry), $entry);
         }
 
-        $bothResult = $results->fetchAll(ResultSet::FETCH_BOTH);
+        $bothResult = $results->fetch_all(ResultSet::FETCH_BOTH);
         foreach ($assocResult as $entry) {
             $this->assertEquals(array_merge($entry, array_combine(self::$columns, $entry)), $entry);
         }
@@ -53,7 +53,7 @@ class ResultSetTest extends BaseTest
         $results = new ResultSet(self::$columns, self::$entries);
 
         $i = 0;
-        while (($row = $results->fetchAssoc()) !== null) {
+        while (($row = $results->fetch_assoc()) !== null) {
             $this->assertEquals(array_combine(self::$columns, self::$entries[$i++]), $row);
         }
         $this->assertEquals(count(self::$entries), $i);
@@ -64,7 +64,7 @@ class ResultSetTest extends BaseTest
         $results = new ResultSet(self::$columns, self::$entries);
 
         $i = 0;
-        while (($row = $results->fetchRow()) !== null) {
+        while (($row = $results->fetch_row()) !== null) {
             $this->assertEquals(self::$entries[$i++], $row);
         }
         $this->assertEquals(count(self::$entries), $i);
@@ -75,7 +75,7 @@ class ResultSetTest extends BaseTest
         $results = new ResultSet(self::$columns, self::$entries);
 
         $i = 0;
-        while (($row = $results->fetchBoth()) !== null) {
+        while (($row = $results->fetch_both()) !== null) {
             $entry = self::$entries[$i++];
             $this->assertEquals(array_merge($entry, array_combine(self::$columns, $entry)), $row);
         }
@@ -105,7 +105,7 @@ class ResultSetTest extends BaseTest
         $results = new ResultSet(self::$columns, self::$entries);
 
         $i = 0;
-        while (($row = $results->fetchObject()) !== null) {
+        while (($row = $results->fetch_object()) !== null) {
             $this->assertEquals((object) array_combine(self::$columns, self::$entries[$i++]), $row);
         }
         $this->assertEquals(count(self::$entries), $i);
@@ -115,34 +115,34 @@ class ResultSetTest extends BaseTest
     {
         $results = new ResultSet(self::$columns, self::$entries);
 
-        $this->assertFalse($results->dataSeek(-1));
-        $this->assertFalse($results->dataSeek(count(self::$entries)));
+        $this->assertFalse($results->data_seek(-1));
+        $this->assertFalse($results->data_seek(count(self::$entries)));
     }
 
     public function testDataSeek()
     {
         $results = new ResultSet(self::$columns, self::$entries);
 
-        $success = $results->dataSeek(7);
+        $success = $results->data_seek(7);
         $this->assertTrue($success !== null);
 
-        $row = $results->fetchRow();
+        $row = $results->fetch_row();
         $this->assertEquals(self::$entries[7], $row);
     }
 
     public function testNumRows()
     {
         $emptySet = new ResultSet(self::$columns, array());
-        $this->assertEquals(0, $emptySet->numRows());
+        $this->assertEquals(0, $emptySet->num_rows());
 
         $set = new ResultSet(self::$columns, self::$entries);
-        $this->assertEquals(count(self::$entries), $set->numRows());
+        $this->assertEquals(count(self::$entries), $set->num_rows());
     }
 
     public function testNumFields()
     {
         $set = new ResultSet(self::$columns, self::$entries);
-        $this->assertEquals(count(self::$columns), $set->numFields());
+        $this->assertEquals(count(self::$columns), $set->field_count());
     }
 
     public function testFetchField()
@@ -150,7 +150,7 @@ class ResultSetTest extends BaseTest
         $results = new ResultSet(self::$columns, self::$entries);
 
         $i = 0;
-        while (($field = $results->fetchField()) !== false) {
+        while (($field = $results->fetch_field()) !== false) {
             $this->assertTrue(is_object($field));
             $this->assertEquals(self::$columns[$i++], $field->name);
         }
@@ -161,18 +161,18 @@ class ResultSetTest extends BaseTest
     {
         $results = new ResultSet(self::$columns, self::$entries);
 
-        $this->assertFalse($results->fieldSeek(-1));
-        $this->assertFalse($results->fieldSeek(count(self::$columns)));
+        $this->assertFalse($results->field_seek(-1));
+        $this->assertFalse($results->field_seek(count(self::$columns)));
     }
 
     public function testFieldSeek()
     {
         $results = new ResultSet(self::$columns, self::$entries);
 
-        $success = $results->fieldSeek(2);
+        $success = $results->field_seek(2);
         $this->assertTrue($success !== false);
 
-        $field = $results->fetchField();
+        $field = $results->fetch_field();
         $this->assertEquals(self::$columns[2], $field->name);
     }
 }

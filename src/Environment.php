@@ -897,7 +897,7 @@ class Environment
                 return $this->set_error('Invalid INSERT Query ');
             $result = $this->query_select($the_rest);
             $dataRows = [];
-            while (($values = $result->fetchRow()) !== null) {
+            while (($values = $result->fetch_row()) !== null) {
                 $row = array_map(
                     function ($value) {
                         if (is_string($value)) $value = "'$value'";
@@ -2427,27 +2427,27 @@ class Environment
 
     public function fetch_all(ResultSet $results, $type = ResultSet::FETCH_ASSOC)
     {
-        return $results->fetchAll($type);
+        return $results->fetch_all($type);
     }
 
     public function fetch_array(ResultSet $results, $type = ResultSet::FETCH_ASSOC)
     {
-        return $results->fetchArray($type);
+        return $results->fetch_array($type);
     }
 
     public function fetch_assoc(ResultSet $results)
     {
-        return $results->fetchAssoc();
+        return $results->fetch_assoc();
     }
 
     public function fetch_row(ResultSet $results)
     {
-        return $results->fetchRow();
+        return $results->fetch_row();
     }
 
     public function fetch_both(ResultSet $results)
     {
-        return $results->fetchBoth();
+        return $results->fetch_both();
     }
 
     public function fetch_single(ResultSet $results, $column = 0)
@@ -2457,32 +2457,32 @@ class Environment
 
     public function fetch_object(ResultSet $results)
     {
-        return $results->fetchObject();
+        return $results->fetch_object();
     }
 
     public function data_seek(ResultSet $results, $i)
     {
-        return $results->dataSeek($i);
+        return $results->data_seek($i);
     }
 
     public function num_rows(ResultSet $results)
     {
-        return $results->numRows();
+        return $results->num_rows();
     }
 
     public function num_fields(ResultSet $results)
     {
-        return $results->numFields();
+        return $results->field_count();
     }
 
     public function fetch_field(ResultSet $results)
     {
-        return $results->fetchField();
+        return $results->fetch_field();
     }
 
     public function field_seek(ResultSet $results, $i)
     {
-        return $results->fieldSeek($i);
+        return $results->field_seek($i);
     }
 
     public function free_result(ResultSet $results)

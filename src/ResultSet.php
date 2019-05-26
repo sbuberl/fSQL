@@ -23,12 +23,12 @@ class ResultSet
         $this->dataCursor = new TableCursor($data);
     }
 
-    public function createMetadata()
+    public function create_metadata()
     {
         return new ResultSet($this->columnNames, []);
     }
 
-    public function fetchAll($type = self::FETCH_ASSOC)
+    public function fetch_all($type = self::FETCH_ASSOC)
     {
         if ($type === self::FETCH_NUM) {
             return $this->data;
@@ -49,7 +49,7 @@ class ResultSet
         return $result_array;
     }
 
-    public function fetchArray($type = self::FETCH_ASSOC)
+    public function fetch_array($type = self::FETCH_ASSOC)
     {
         if (!$this->dataCursor->valid()) {
             return null;
@@ -66,32 +66,32 @@ class ResultSet
         }
     }
 
-    public function fetchAssoc()
+    public function fetch_assoc()
     {
-        return $this->fetchArray(self::FETCH_ASSOC);
+        return $this->fetch_array(self::FETCH_ASSOC);
     }
 
-    public function fetchRow()
+    public function fetch_row()
     {
-        return $this->fetchArray(self::FETCH_NUM);
+        return $this->fetch_array(self::FETCH_NUM);
     }
 
-    public function fetchBoth()
+    public function fetch_both()
     {
-        return $this->fetchArray(self::FETCH_BOTH);
+        return $this->fetch_array(self::FETCH_BOTH);
     }
 
     public function fetchSingle($column = 0)
     {
         $type = is_numeric($column) ? self::FETCH_NUM : self::FETCH_ASSOC;
-        $row = $this->fetchArray($type);
+        $row = $this->fetch_array($type);
 
         return $row !== null && array_key_exists($column, $row) ? $row[$column] : null;
     }
 
-    public function fetchObject()
+    public function fetch_object()
     {
-        $row = $this->fetchAssoc();
+        $row = $this->fetch_assoc();
         if ($row === null) {
             return null;
         }
@@ -99,22 +99,22 @@ class ResultSet
         return (object) $row;
     }
 
-    public function dataSeek($i)
+    public function data_seek($i)
     {
         return $this->dataCursor->seek($i);
     }
 
-    public function numRows()
+    public function num_rows()
     {
         return $this->dataCursor->count();
     }
 
-    public function numFields()
+    public function field_count()
     {
         return count($this->columnNames);
     }
 
-    public function fetchField()
+    public function fetch_field()
     {
         $pos = $this->columnsIndex;
         if (!isset($this->columnNames[$pos])) {
@@ -127,7 +127,7 @@ class ResultSet
         return $field;
     }
 
-    public function fieldSeek($i)
+    public function field_seek($i)
     {
         if (!isset($this->columnNames[$i])) {
             return false;

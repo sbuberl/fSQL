@@ -84,7 +84,7 @@ class Statement
             return $this->set_error("Unable to perform a field_count without a prepare");
         }
 
-        return $this->result->numFields();
+        return $this->result->field_count();
     }
 
     public function data_seek($offset)
@@ -95,7 +95,7 @@ class Statement
             return $this->set_error("Unable to perform a data_seek without a store_result");
         }
 
-        $result = $this->result->dataSeek($offset);
+        $result = $this->result->data_seek($offset);
         return $result !== false;
     }
 
@@ -107,7 +107,7 @@ class Statement
             return $this->set_error("Unable to perform a num_rows without a store_result");
         }
 
-        return $this->result->numRows();
+        return $this->result->num_rows();
     }
 
     public function bind_param($types, &...$params)
@@ -187,7 +187,7 @@ class Statement
         $result = $this->environment->query($realQuery);
         if($result instanceof ResultSet) {
             $this->result = $result;
-            $this->metadata = $result->createMetadata();
+            $this->metadata = $result->create_metadata();
             return true;
         } else if($result === false) {
             return $this->set_error(trim($this->environment->error()));
@@ -206,7 +206,7 @@ class Statement
             return $this->set_error("Unable to perform a fetch without a bind_result");
         }
 
-        $result = $this->result->fetchRow();
+        $result = $this->result->fetch_row();
         if($result !== null) {
             $i = 0;
             foreach ($result as $value) {

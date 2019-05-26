@@ -438,7 +438,7 @@ class StatementTest extends BaseTest
         $expected = ['stephen', 'king', 'derry'];
         $result = $statement->get_result();
         $this->assertTrue($passed === true);
-        $this->assertEquals($expected, $result->fetchRow());
+        $this->assertEquals($expected, $result->fetch_row());
     }
 
     public function testClose()
