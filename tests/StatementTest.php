@@ -71,6 +71,18 @@ class StatementTest extends BaseTest
         $this->assertEquals($statement->error(), "bind_param's number of types in the string doesn't match number of parameters passed in");
     }
 
+    public function testBindParamTCountMismatch()
+    {
+        $statement = new Statement($this->fsql);
+        $statement->prepare("SELECT firstName, lastName, city FROM customers WHERE personId = ? OR lastName = ? OR zip = ?");
+        $id = 5;
+        $lastName = 'king';
+        $passed = $statement->bind_param('id', $id, $lastName);
+        $this->assertTrue($passed === false);
+        $this->assertEquals($statement->error(), "bind_param's number of params doesn't match number of params found in the query");
+    }
+
+
     public function testBindParam()
     {
         $statement = new Statement($this->fsql);
@@ -121,6 +133,22 @@ class StatementTest extends BaseTest
         $statement->prepare("SELECT firstName, lastName, city FROM customers WHERE personId = 5");
         $passed = $statement->execute();
         $this->assertTrue($passed === true);
+    }
+
+    public function testExecuteNoBindParam()
+    {
+        $table = CachedTable::create($this->fsql->current_schema(), 'customers', self::$columns);
+        $cursor = $table->getWriteCursor();
+        foreach (self::$entries as $entry) {
+            $cursor->appendRow($entry);
+        }
+        $table->commit();
+
+        $statement = new Statement($this->fsql);
+        $statement->prepare("SELECT firstName, lastName, city FROM customers WHERE personId = ? OR lastName = ? OR zip = ?");
+        $passed = $statement->execute();
+        $this->assertTrue($passed === false);
+        $this->assertEquals($statement->error(), "Found parameters the in query without a calling bind_param");
     }
 
     public function testExecuteParams()

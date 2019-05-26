@@ -113,10 +113,13 @@ class Statement
     public function bind_param($types, &...$params)
     {
         $length = strlen($types);
+        $count = count($params);
         if($this->query === null) {
             return $this->set_error("Unable to perform a bind_param without a prepare");
-        } elseif($length != count($params)) {
+        } elseif($length != $count) {
             return $this->set_error("bind_param's number of types in the string doesn't match number of parameters passed in");
+        } elseif($this->paramCount != $count) {
+            return $this->set_error("bind_param's number of params doesn't match number of params found in the query");
         }
 
         $this->boundParams = $params;
@@ -141,6 +144,9 @@ class Statement
     {
         if($this->query === null) {
             return $this->set_error("Unable to perform an execute without a prepare");
+        }
+        elseif($this->paramCount != 0 && $this->boundParams === null) {
+            return $this->set_error("Found parameters the in query without a calling bind_param");
         }
 
         if($this->boundParams !== null) {
