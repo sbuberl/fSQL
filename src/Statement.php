@@ -15,6 +15,9 @@ class Statement
     private $boundParams;
     private $boundResults;
     private $stored;
+    private $paramCount;
+    private $affectedRows;
+    private $insertId;
     private $error;
 
     public function __construct(Environment $environment, $query = null)
@@ -44,6 +47,9 @@ class Statement
         $this->boundParams = null;
         $this->boundResults = null;
         $this->stored = null;
+        $this->paramCount = null;
+        $this->affectedRows = null;
+        $this->insertId = null;
         $this->error = null;
         return true;
     }
@@ -55,6 +61,30 @@ class Statement
         }
         $this->error = null;
         return true;
+    }
+
+    public function param_count()
+    {
+        return $this->paramCount;
+    }
+
+    public function affected_rows()
+    {
+        return $this->affectedRows;
+    }
+
+    public function insert_id()
+    {
+        return $this->insertId;
+    }
+
+    public function field_count()
+    {
+        if($this->query === null) {
+            return $this->set_error("Unable to perform a field_count without a prepare");
+        }
+
+        return $this->result->numFields();
     }
 
     public function data_seek($offset)
@@ -156,6 +186,8 @@ class Statement
         } else if($result === false) {
             return $this->set_error(trim($this->environment->error()));
         } else {
+            $this->affectedRows = $this->environment->affected_rows();
+            $this->insertId = $this->environment->insert_id();
             return true;
         }
     }
@@ -182,12 +214,19 @@ class Statement
     public function prepare($query)
     {
         $this->query = $query;
+        if($query !== null && preg_match_all("/\?(?=[^']*(?:'[^']*'[^']*)*$)/", $query, $params)) {
+            $this->paramCount = count($params[0]);
+        } else {
+            $this->paramCount = 0;
+        }
         $this->params = [];
         $this->result = null;
         $this->metadata = null;
         $this->types = null;
         $this->boundParams = null;
         $this->boundResults = null;
+        $this->affectedRows = 0;
+        $this->insertId = 0;
         $this->stored = false;
         return true;
       }
