@@ -39,25 +39,17 @@ class Statement
 
     public function close()
     {
-        $this->query = null;
-        $this->params = null;
-        $this->result = null;
-        $this->metadata = null;
-        $this->types = null;
-        $this->boundParams = null;
-        $this->boundResults = null;
-        $this->stored = null;
-        $this->paramCount = null;
-        $this->affectedRows = null;
-        $this->insertId = null;
-        $this->error = null;
+        $this->free_result();
+        foreach ($this as &$value) {
+            $value = null;
+        }
         return true;
     }
 
     public function reset()
     {
         if($this->stored === false) {
-            $this->result = null;
+            $this->free_result();
         }
         $this->error = null;
         return true;
@@ -267,7 +259,10 @@ class Statement
 
     public function free_result()
     {
-        $this->result = null;
+        if($this->result !== null) {
+            $this->result->free();
+            $this->result = null;
+        }
     }
 
 }

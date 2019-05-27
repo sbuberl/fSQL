@@ -28,6 +28,13 @@ class ResultSet
         return new ResultSet($this->columnNames, []);
     }
 
+    public function free()
+    {
+        foreach ($this as &$value) {
+            $value = null;
+        }
+    }
+
     public function fetch_all($type = self::FETCH_ASSOC)
     {
         if ($type === self::FETCH_NUM) {

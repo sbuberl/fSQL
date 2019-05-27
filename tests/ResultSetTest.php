@@ -6,24 +6,30 @@ use FSQL\ResultSet;
 
 class ResultSetTest extends BaseTest
 {
-    private static $columns = array('id', 'firstName', 'lastName', 'city');
+    private static $columns = ['id', 'firstName', 'lastName', 'city'];
 
-    private static $entries = array(
-        array(1, 'bill', 'smith', 'chicago'),
-        array(2, 'jon', 'doe', 'baltimore'),
-        array(3, 'mary', 'shelley', 'seattle'),
-        array(4, 'stephen', 'king', 'derry'),
-        array(5, 'bart', 'simpson', 'springfield'),
-        array(6, 'jane', 'doe', 'seattle'),
-        array(7, 'bram', 'stoker', 'new york'),
-        array(8, 'douglas', 'adams', 'london'),
-        array(9, 'bill', 'johnson', 'derry'),
-        array(10, 'jon', 'doe', 'new york'),
-    );
+    private static $entries = [
+        [1, 'bill', 'smith', 'chicago'],
+        [2, 'jon', 'doe', 'baltimore'],
+        [3, 'mary', 'shelley', 'seattle'],
+        [4, 'stephen', 'king', 'derry'],
+        [5, 'bart', 'simpson', 'springfield'],
+        [6, 'jane', 'doe', 'seattle'],
+        [7, 'bram', 'stoker', 'new york'],
+        [8, 'douglas', 'adams', 'london'],
+        [9, 'bill', 'johnson', 'derry'],
+        [10, 'jon', 'doe', 'new york'],
+    ];
 
-    public function testfetch_allEmpty()
+    public function testFree()
     {
-        $empty = array();
+        $results = new ResultSet(self::$columns, self::$entries);
+        $results->free();
+    }
+
+    public function testFetchAllEmpty()
+    {
+        $empty = [];
         $results = new ResultSet(array('myColumn'), $empty);
 
         $this->assertEquals($empty, $results->fetch_all(ResultSet::FETCH_NUM));
@@ -31,7 +37,7 @@ class ResultSetTest extends BaseTest
         $this->assertEquals($empty, $results->fetch_all(ResultSet::FETCH_BOTH));
     }
 
-    public function testfetch_all()
+    public function testFetchAll()
     {
         $results = new ResultSet(self::$columns, self::$entries);
 
