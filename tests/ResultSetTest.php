@@ -139,7 +139,7 @@ class ResultSetTest extends BaseTest
         $this->assertEquals(count(self::$entries), $set->num_rows());
     }
 
-    public function testNumFields()
+    public function testFieldCount()
     {
         $set = new ResultSet(self::$columns, self::$entries);
         $this->assertEquals(count(self::$columns), $set->field_count());
@@ -155,6 +155,38 @@ class ResultSetTest extends BaseTest
             $this->assertEquals(self::$columns[$i++], $field->name);
         }
         $this->assertEquals(count(self::$columns), $i);
+    }
+
+    public function testFetchFieldDirect()
+    {
+        $results = new ResultSet(self::$columns, self::$entries);
+
+        $field = $results->fetch_field_direct(2);
+        $this->assertTrue(is_object($field));
+        $this->assertEquals(self::$columns[2], $field->name);
+    }
+
+    public function testFetchFields()
+    {
+        $results = new ResultSet(self::$columns, self::$entries);
+
+        $fields = $results->fetch_fields();
+
+        $expected = [];
+        while (($field = $results->fetch_field()) !== false) {
+            $expected[] = $field;
+        }
+        $this->assertEquals($expected, $fields);
+    }
+
+    public function testCurrentField()
+    {
+        $results = new ResultSet(self::$columns, self::$entries);
+
+        $i = 1;
+        while (($field = $results->fetch_field()) !== false) {
+            $this->assertEquals($i++, $results->current_field());
+        }
     }
 
     public function testFieldSeekBad()

@@ -114,6 +114,11 @@ class ResultSet
         return count($this->columnNames);
     }
 
+    public function current_field()
+    {
+        return $this->columnsIndex;
+    }
+
     public function fetch_field()
     {
         $pos = $this->columnsIndex;
@@ -125,6 +130,27 @@ class ResultSet
         ++$this->columnsIndex;
 
         return $field;
+    }
+
+    public function fetch_field_direct($fieldPos)
+    {
+        if (!isset($this->columnNames[$fieldPos])) {
+            return false;
+        }
+        $field = new \stdClass();
+        $field->name = $this->columnNames[$fieldPos];
+        return $field;
+    }
+
+    public function fetch_fields()
+    {
+        $fields = [];
+        foreach ($this->columnNames as $fieldName) {
+            $field = new \stdClass();
+            $field->name = $fieldName;
+            $fields[] = $field;
+        }
+        return $fields;
     }
 
     public function field_seek($i)
