@@ -27,7 +27,7 @@ class SetDefault extends BaseAction
 
         $columns = $table->getColumns();
         $column = $columns[$this->columnName];
-        $default = $this->environment->parseDefault($this->default, $column['type'], $column['null'], $column['restraint']);
+        $default = $this->environment->parser()->parseDefault($this->default, $column['type'], $column['null'], $column['restraint']);
 
         $columns[$this->columnName]['default'] = $default;
         $table->setColumns($columns);

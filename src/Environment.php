@@ -59,15 +59,22 @@ class Environment
     private $insert_id = 0;
     private $auto = true;
     private $functions;
+    private $parser;
 
     public function __construct()
     {
+        $this->parser = new Parser($this);
         $this->functions = new Functions($this);
     }
 
     public function __destruct()
     {
         $this->unlock_tables();
+    }
+
+    public function parser()
+    {
+        return $this->parser;
     }
 
     public function get_functions()
@@ -421,17 +428,25 @@ class Environment
         ++$this->query_count;
         $this->error_msg = null;
         switch (strtoupper($function)) {
-            case 'CREATE':      return $this->query_create($query);
+            case 'ALTER':
+            case 'BEGIN':
+            case 'COMMIT':
+            case 'CREATE':
+            case 'ROLLBACK':
+            case 'START':
+            case 'UNLOCK':
+                $parsedQuery = $this->parser->parse($query);
+                if(is_bool($parsedQuery) === false) {
+                    return $parsedQuery->execute();
+                } else {
+                    return $parsedQuery;
+                }
+
             case 'SELECT':      return $this->query_select($query);
             case 'INSERT':
             case 'REPLACE':     return $this->query_insert($query);
             case 'UPDATE':      return $this->query_update($query);
-            case 'ALTER':       return $this->query_alter($query);
             case 'DELETE':      return $this->query_delete($query);
-            case 'BEGIN':       return $this->query_begin($query);
-            case 'START':       return $this->query_start($query);
-            case 'COMMIT':      return $this->query_commit($query);
-            case 'ROLLBACK':    return $this->query_rollback($query);
             case 'RENAME':      return $this->query_rename($query);
             case 'TRUNCATE':    return $this->query_truncate($query);
             case 'DROP':        return $this->query_drop($query);
@@ -446,229 +461,6 @@ class Environment
         }
     }
 
-
-    private function query_basic($query, $name, $pattern, $action)
-    {
-        if (preg_match($pattern, $query)) {
-            return $action();
-        } else {
-            return $this->set_error('Invalid '. $name . ' query');
-        }
-    }
-
-    private function query_begin($query)
-    {
-        return $this->query_basic($query, 'BEGIN', '/\ABEGIN(?:\s+WORK)?\s*[;]?\Z/is', function () { $statement = new Queries\Begin($this); return $statement->execute(); });
-    }
-
-    private function query_start($query)
-    {
-        return $this->query_basic($query, 'START', '/\ASTART\s+TRANSACTION\s*[;]?\Z/is', function () { $statement = new Queries\Begin($this); return $statement->execute(); });
-    }
-
-    private function query_commit($query)
-    {
-        return $this->query_basic($query, 'COMMIT', '/\ACOMMIT(?:\s+WORK)?\s*[;]?\Z/is', function () { $statement = new Queries\Commit($this); return $statement->execute(); });
-    }
-
-    private function query_rollback($query)
-    {
-        return $this->query_basic($query, 'ROLLBACK', '/\AROLLBACK(?:\s+WORK)?\s*[;]?\Z/is', function () { $statement = new Queries\Rollback($this); return $statement->execute(); });
-    }
-
-    private function query_create($query)
-    {
-        if (preg_match("/\ACREATE\s+((?:TEMPORARY\s+)?TABLE|(?:S(?:CHEMA|EQUENCE)))\s+(?:(IF\s+NOT\s+EXISTS)\s+)?(.+?)\s*[;]?\Z/is", $query, $matches)) {
-            list(, $type, $ifNotExists, $definition) = $matches;
-            $type = strtoupper($type);
-            $ifNotExists = !empty($ifNotExists);
-            if (substr($type, -5) === 'TABLE') {
-                $temp = !strncmp($type, 'TEMPORARY', 9);
-
-                $query = $this->query_create_table($definition, $temp, $ifNotExists);
-            } elseif ($type === 'SCHEMA') {
-                $query = $this->query_create_schema($definition, $ifNotExists);
-            } else {
-                $query = $this->query_create_sequence($definition, $ifNotExists);
-            }
-
-            if ($query !== false) {
-                return $query->execute();
-            } else {
-                return false;
-            }
-        } else {
-            return $this->set_error('Invalid CREATE query');
-        }
-    }
-
-    private function query_create_schema($definition, $ifNotExists)
-    {
-        if (preg_match("/\A(?:`?([^\W\d]\w*)`?\.)?`?([^\W\d]\w*)`?\Z/is", $definition, $matches)) {
-            list(, $dbName, $schemaName) = $matches;
-
-            return new Queries\CreateSchema($this, array($dbName, $schemaName), $ifNotExists);
-        } else {
-            return $this->set_error('Invalid CREATE SCHEMA query');
-        }
-    }
-
-    private function query_create_sequence($definition, $ifNotExists)
-    {
-        if (preg_match("/\A(`?(?:[^\W\d]\w*`?\.`?){0,2}[^\W\d]\w*`?)\s+(?:AS\s+[^\W\d]\w*\s*)?(.+)\Z/is", $definition, $matches)) {
-            list(, $fullSequenceName, $valuesList) = $matches;
-            $seqNamePieces = $this->parse_relation_name($fullSequenceName);
-            if ($seqNamePieces === false) {
-                return false;
-            }
-
-            $parsed = $this->parse_sequence_options($valuesList);
-            if ($parsed === false) {
-                return false;
-            }
-
-            $initialValues = $this->load_create_sequence($parsed);
-
-            return new Queries\CreateSequence($this, $seqNamePieces, $ifNotExists, $initialValues);
-        } else {
-            return $this->set_error('Invalid CREATE SEQUENCE query');
-        }
-    }
-
-    private function query_create_table($definition, $temporary, $ifNotExists)
-    {
-        if (preg_match("/\A(`?(?:[^\W\d]\w*`?\.`?){0,2}[^\W\d]\w*`?)(?:\s*\((.+)\)|\s+LIKE\s+(`?(?:[^\W\d]\w*`?\.`?){0,2}[^\W\d]\w*`?)(?:\s+([\w\s}]+))?)\s*[;]?/is", $definition, $matches, PREG_OFFSET_CAPTURE)) {
-            $full_table_name = $matches[1][0];
-            $column_list = $matches[2][0];
-
-            $table_name_pieces = $this->parse_relation_name($full_table_name);
-            if ($table_name_pieces === false) {
-                return false;
-            }
-
-            $typeRegex = $this->getTypeParseRegex();
-
-            $currentPos = $matches[2][1];
-
-            if (!isset($matches[3])) {
-                $newColumns = [];
-                $hasIdentity = false;
-                $queryLength = strlen($definition);
-                while ($currentPos < $queryLength) {
-                    if (preg_match("/(?:(?:CONSTRAINT\s+(?:`?[^\W\d]\w*`?\s+)?)?(KEY|INDEX|PRIMARY\s+KEY|UNIQUE)(?:\s+`?([^\W\d]\w*)`?)?\s*\(`?(.+?)`?\))(?:\s*,\s*|\)|$)/Ais", $definition, $columns, 0, $currentPos)) {
-                        $currentPos += strlen($columns[0]);
-
-                        if (!$columns[3]) {
-                            return $this->set_error("Parse Error: Excepted column name in \"{$columns[1]}\"");
-                        }
-
-                        $keyType = strtolower($columns[1]);
-                        if ($keyType === 'index') {
-                            $keyType = 'key';
-                        }
-                        $keyColumns = explode(',', $columns[3]);
-                        foreach ($keyColumns as $keyColumn) {
-                            $newColumns[trim($keyColumn)]['key'] = $keyType[0];
-                        }
-                    } else if (preg_match("/(?:`?([^\W\d]\w*?)`?(?:\s+({$typeRegex})(?:\((.+?)\))?)\s*(UNSIGNED\s+)?(?:GENERATED\s+(BY\s+DEFAULT|ALWAYS)\s+AS\s+IDENTITY(?:\s*\((.*?)\))?)?(.*?)?(?:\s*,\s*|\)|$))/Ais", $definition, $columns, 0, $currentPos)) {
-                        $currentPos += strlen($columns[0]);
-
-                        $name = $columns[1];
-                        $typeName = $columns[2];
-                        $options = $columns[7];
-
-                        if (isset($newColumns[$name])) {
-                            return $this->set_error("Column '{$name}' redefined");
-                        }
-
-                        $type = Types::getTypeCode($typeName);
-                        if( $type === false)
-                            return $this->set_error("Column '{$name}' has unknown type '{$typeName}'");
-
-                        if (preg_match("/\bnot\s+null\b/i", $options)) {
-                            $null = 0;
-                        } else {
-                            $null = 1;
-                        }
-
-                        $auto = 0;
-                        $restraint = null;
-                        if (!empty($columns[5])) {
-                            $auto = 1;
-                            $always = (int) !strcasecmp($columns[5], 'ALWAYS');
-                            $parsed = $this->parse_sequence_options($columns[6]);
-                            if ($parsed === false) {
-                                return false;
-                            }
-
-                            $restraint = $this->load_create_sequence($parsed);
-                            $start = $restraint[0];
-                            array_unshift($restraint, $start, $always);
-
-                            $null = 0;
-                        } elseif (preg_match('/\bAUTO_?INCREMENT\b/i', $options)) {
-                            $auto = 1;
-                            $restraint = array(1, 0, 1, 1, 1, PHP_INT_MAX, 0);
-                        }
-
-                        if ($auto) {
-                            if ($type !== Types::INTEGER && $type !== Types::FLOAT) {
-                                return $this->set_error('Identity columns and autoincrement only allowed on numeric columns');
-                            } elseif ($hasIdentity) {
-                                return $this->set_error('A table can only have one identity column.');
-                            }
-                            $hasIdentity = true;
-                        }
-
-                        if ($type === Types::ENUM) {
-                            $enumList = substr($columns[3], 1, -1);
-                            $restraint = preg_split("/'\s*,\s*'/", $enumList);
-                        }
-
-                        if (preg_match("/DEFAULT\s+((?:[\+\-]\s*)?\d+(?:\.\d+)?|NULL|'.*?(?<!\\\\)')/is", $options, $matches)) {
-                            if ($auto) {
-                                return $this->set_error('Can not specify a default value for an identity column');
-                            }
-
-                            $default = $this->parseDefault($matches[1], $type, $null, $restraint);
-                        } else {
-                            $default = $this->get_type_default_value($type, $null);
-                        }
-
-                        if (preg_match('/(PRIMARY\s+KEY|UNIQUE(?:\s+KEY)?)/is', $options, $keyMatches)) {
-                            $keyType = strtolower($keyMatches[1]);
-                            $key = $keyType{0};
-                        } else {
-                            $key = 'n';
-                        }
-
-                        $newColumns[$name] = ['type' => $type, 'auto' => $auto, 'default' => $default, 'key' => $key, 'null' => $null, 'restraint' => $restraint];
-                    }
-                    else {
-                        return $this->set_error('Parsing error in CREATE TABLE query');
-                    }
-                }
-
-                return new Queries\CreateTable($this, $table_name_pieces, $ifNotExists, $temporary, $newColumns);
-            } else {
-                $likeClause = isset($matches[4][0]) ? $matches[4][0] : '';
-                $likeTablePieces = $this->parse_relation_name($matches[3][0]);
-                if ($likeTablePieces === false) {
-                    return false;
-                }
-
-                $likeOptions = $this->parse_table_like_clause($likeClause);
-                if ($likeOptions === false) {
-                    return false;
-                }
-
-                return new Queries\CreateTableLike($this, $table_name_pieces, $ifNotExists, $temporary, $likeTablePieces, $likeOptions);
-            }
-        } else {
-            return $this->set_error('Invalid CREATE TABLE query');
-        }
-    }
-
     public function get_type_default_value($type, $null)
     {
         if ($null) {
@@ -680,62 +472,6 @@ class Environment
         } else {
             return 0;
         }
-    }
-
-    private function parse_table_like_clause($likeClause)
-    {
-        $results = array(CreateTableLike::IDENTITY => false, CreateTableLike::DEFAULTS => false);
-        $optionsWords = preg_split('/\s+/', strtoupper($likeClause), -1, PREG_SPLIT_NO_EMPTY);
-        $wordCount = count($optionsWords);
-        for ($i = 0; $i < $wordCount; ++$i) {
-            $firstWord = $optionsWords[$i];
-            if ($firstWord === 'INCLUDING') {
-                $including = true;
-            } elseif ($firstWord === 'EXCLUDING') {
-                $including = false;
-            } else {
-                return $this->set_error('Unexpected token in LIKE clause: '.$firstWord);
-            }
-
-            $word = $optionsWords[++$i];
-            if ($word === 'IDENTITY') {
-                $type = CreateTableLike::IDENTITY;
-            } elseif ($word === 'DEFAULTS') {
-                $type = CreateTableLike::DEFAULTS;
-            } else {
-                return $this->set_error('Unknown option after '.$firstWord.': '.$word);
-            }
-
-            $results[$type] = $including;
-        }
-
-        return $results;
-    }
-
-    private function load_create_sequence($parsed)
-    {
-        $increment = isset($parsed['INCREMENT']) ? (int) $parsed['INCREMENT'] : 1;
-        if ($increment === 0) {
-            return $this->set_error('Increment of zero in identity column defintion is not allowed');
-        }
-
-        $climbing = $increment > 0;
-        $min = isset($parsed['MINVALUE']) ? (int) $parsed['MINVALUE'] : ($climbing ? 1 : PHP_INT_MIN);
-        $max = isset($parsed['MAXVALUE']) ? (int) $parsed['MAXVALUE'] : ($climbing ? PHP_INT_MAX : -1);
-        $cycle = isset($parsed['CYCLE']) ? (int) $parsed['CYCLE'] : 0;
-
-        if (isset($parsed['START'])) {
-            $start = (int) $parsed['START'];
-            if ($start < $min || $start > $max) {
-                return $this->set_error('Identity column start value not inside valid range');
-            }
-        } elseif ($climbing) {
-            $start = $min;
-        } else {
-            $start = $max;
-        }
-
-        return array($start, $increment, $min, $max, $cycle);
     }
 
     public function parse_sequence_options($options, $isAlter = false)
@@ -2234,12 +1970,6 @@ class Environment
         } else {
             return $this->set_error('Invalid LOCK query');
         }
-    }
-
-    private function query_unlock($query)
-    {
-        return $this->query_basic($query, 'UNLOCK', '/\AUNLOCK\s+TABLES\s*[;]?\Z/is', function () { $statement = new Queries\Unlock($this);
-            return $statement->execute(); });
     }
 
     public function parse_value($columnDef, $value)
