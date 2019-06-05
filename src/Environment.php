@@ -1577,6 +1577,7 @@ class Environment
             $delete = new Queries\Delete($this, $table_name_pieces, $where);
             $result = $delete->execute();
             $this->affected = $delete->affectedRows();
+            return $result;
         } else {
             return $this->set_error('Invalid DELETE query');
         }
